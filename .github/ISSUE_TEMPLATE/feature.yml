@@ -1,0 +1,44 @@
+name: Feature Request
+description: 提出新功能或功能改進
+title: "[Feature] "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: 請描述要新增的功能，以及為什麼需要它。
+      placeholder: |
+        使用者希望可以查看自己已報名的活動。
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: 列出完成此功能需要符合的條件。
+      placeholder: |
+        - [ ] 可以查看所有已報名活動
+        - [ ] 顯示活動名稱、時間與地點
+        - [ ] 沒有資料時顯示空狀態
+    validations:
+      required: true
+
+  - type: textarea
+    id: tasks
+    attributes:
+      label: Tasks
+      description: 可以拆成哪些實作工作。
+      placeholder: |
+        - [ ] 建立 API
+        - [ ] 建立資料庫查詢
+        - [ ] 建立前端畫面
+        - [ ] 撰寫測試
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: 補充相關設計、限制、文件或其他 Issue。
