@@ -1,0 +1,57 @@
+name: Bug Report
+description: 回報系統錯誤或異常行為
+title: "[Bug] "
+labels:
+  - bug
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: 請描述發生了什麼問題。
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: 請列出如何重現問題。
+      placeholder: |
+        1. 登入系統
+        2. 進入活動頁面
+        3. 點擊報名
+        4. 發生錯誤
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: 原本預期應該發生什麼？
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: 實際發生了什麼？
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: |
+        Browser:
+        OS:
+        Version:
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Additional Information
+      description: Screenshot、log 或其他相關資訊。
