@@ -1,0 +1,40 @@
+name: Task
+description: 一般開發、維護或技術工作
+title: "[Task] "
+labels:
+  - task
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: 請描述這個 Task 要完成什麼。
+    validations:
+      required: true
+
+  - type: textarea
+    id: tasks
+    attributes:
+      label: Tasks
+      placeholder: |
+        - [ ] Task 1
+        - [ ] Task 2
+        - [ ] Task 3
+    validations:
+      required: true
+
+  - type: textarea
+    id: done
+    attributes:
+      label: Definition of Done
+      description: 什麼條件下可以把這個 Issue 關掉？
+      placeholder: |
+        - [ ] 功能完成
+        - [ ] 測試通過
+        - [ ] Code Review 完成
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: 相關文件、Issue、PR 或技術備註。
