@@ -15,6 +15,7 @@
     "build": "npm run build --workspaces",
     "lint": "eslint .",
     "typecheck": "npm run typecheck --workspaces",
+    "test": "npm run test --workspaces --if-present",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

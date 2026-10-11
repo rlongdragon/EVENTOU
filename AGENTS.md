@@ -43,6 +43,8 @@ eslint.config.js        # 前後端共用的 ESLint flat config
 
 - `frontend/` 只負責畫面與呼叫 `/api`；dev server 會把 `/api` proxy 到後端。
 - `backend/` 負責 API、資料存取與背景擷取排程，所有 API 都掛在 `/api` 底下。
+- 資料庫為 SQLite（Node 內建 `node:sqlite`），連線與 migration 在 `backend/src/db/`；要變更 schema 請在 `db/migrations/index.ts` 新增一筆 migration，不要修改已存在的。
+- 帳號與權限：角色統一定義在 `backend/src/modules/auth/roles.ts`；需登入的 API 掛 `requireAuth`、管理員 API 掛 `requireRole('admin')`，前端頁面用 `<RequireAuth>` 包起來（只是體驗，權限以後端為準）。
 - 新功能放進對應的 `features/<模組>/` 與 `modules/<模組>/`；各模組對應的 User Story 與負責人見 `README.md` 與 `docs/user-story-分工.md`。
 
 ## 常用指令
@@ -56,12 +58,13 @@ eslint.config.js        # 前後端共用的 ESLint flat config
 | `npm run dev:frontend` / `npm run dev:backend` | 只啟動其中一邊                       |
 | `npm run lint`                                 | ESLint 檢查前後端                    |
 | `npm run typecheck`                            | TypeScript 型別檢查                  |
+| `npm test`                                     | 執行測試（Node 內建 test runner）    |
 | `npm run build`                                | 建置前後端（輸出到各自的 `dist/`）   |
 | `npm run format` / `npm run format:check`      | Prettier 格式化／檢查                |
 
 - 啟動後可用 `curl localhost:5173/api/health` 確認前後端已串接。
-- 目前**尚未設定測試框架**，沒有 `npm test`；加入測試時請同步更新本節。
-- 提交前請確認 `npm run lint`、`npm run typecheck`、`npm run build`、`npm run format:check` 都通過。
+- 測試使用 Node 內建的 `node:test`（以 `tsx` 執行 TypeScript），檔名為 `*.test.ts`，與被測程式放在同一個模組資料夾；後端測試設 `DATABASE_PATH=:memory:` 使用記憶體資料庫。
+- 提交前請確認 `npm run lint`、`npm run typecheck`、`npm run build`、`npm test`、`npm run format:check` 都通過。
 
 ## 程式碼慣例
 

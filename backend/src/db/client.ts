@@ -3,7 +3,8 @@ import { dirname, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
 // SQLite 連線（Node 內建 node:sqlite，不需額外套件）
-// 路徑由環境變數 DATABASE_PATH 指定，預設為 backend/data/eventou.db
+// 路徑由環境變數 DATABASE_PATH 指定，預設為 backend/data/eventou.db；
+// 設為 :memory: 則使用記憶體資料庫（測試用）
 
 const DEFAULT_DATABASE_PATH = 'data/eventou.db';
 
@@ -14,10 +15,14 @@ let db: DatabaseSync | undefined;
  */
 export function getDb(): DatabaseSync {
   if (!db) {
-    const path = resolve(process.env.DATABASE_PATH ?? DEFAULT_DATABASE_PATH);
-    mkdirSync(dirname(path), { recursive: true });
-
-    db = new DatabaseSync(path);
+    const path = process.env.DATABASE_PATH ?? DEFAULT_DATABASE_PATH;
+    if (path === ':memory:') {
+      db = new DatabaseSync(path);
+    } else {
+      const absolutePath = resolve(path);
+      mkdirSync(dirname(absolutePath), { recursive: true });
+      db = new DatabaseSync(absolutePath);
+    }
     db.exec('PRAGMA journal_mode = WAL;');
     db.exec('PRAGMA foreign_keys = ON;');
   }
