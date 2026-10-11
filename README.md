@@ -92,6 +92,13 @@ npm run user:set-role -w backend -- someone@example.com admin
 
 資料庫為 SQLite（`backend/data/eventou.db`，可用 `DATABASE_PATH` 調整），後端啟動時會自動執行 migration。
 
+## 來源提交（US-13）
+
+- 後端 API：`POST /api/sources`（需登入，提交來源）、`GET /api/sources/mine`（需登入，自己提交的來源與審核狀態）、`GET /api/sources`（訪客與一般使用者只看到已核准的來源，管理員看全部）。
+- 提交欄位：`name`（最長 100 字）、`url`（http／https，不可含帳號密碼）、`type`（`school_site`、`department_site`、`club_site`、`social_media`、`other`，定義在 `backend/src/modules/sources/sourceTypes.ts`）。
+- 新提交的來源審核狀態一律為 `pending`，並記錄提交者與提交時間；審核狀態（`pending`／`approved`／`rejected`）與啟用狀態（`enabled`）是兩個獨立欄位，只有「已核准且啟用中」的來源會被擷取。US-14、US-16 沿用同一個 `sources` 資料表。
+- 前端頁面 `/sources/new`（需登入）：提交表單，以及「我提交的來源」與其審核狀態。
+
 ## 功能入口與 TODO
 
 US-19 已提供 Event 資料格式、migration、公告清理與轉換、日期解析、驗證及冪等 upsert，供搜尋、行事曆與通知共用。使用 `processAnnouncement` 接合擷取結果。欄位、RawAnnouncement 契約、範例及來源 FK 的接合限制見 [`docs/event-schema.md`](docs/event-schema.md)。擷取排程及各功能 API 仍由各自模組實作。

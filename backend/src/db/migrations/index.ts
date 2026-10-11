@@ -63,4 +63,26 @@ export const migrations: Migration[] = [
       CREATE VIEW published_events AS SELECT * FROM events WHERE status = 'published';
     `,
   },
+  {
+    id: 3,
+    name: 'create_sources',
+    // review_status：待審核 pending／已核准 approved／已退回 rejected（值與 modules/sources/sourceTypes.ts 一致）
+    // enabled 與審核狀態獨立，只有「已核准且啟用中」的來源會被擷取；type 的可用值只在應用程式端檢查，方便日後新增類型
+    up: `
+      CREATE TABLE sources (
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        url TEXT NOT NULL,
+        type TEXT NOT NULL,
+        review_status TEXT NOT NULL DEFAULT 'pending'
+          CHECK (review_status IN ('pending', 'approved', 'rejected')),
+        enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+        submitted_by INTEGER NOT NULL REFERENCES users (id),
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      CREATE INDEX sources_submitted_by ON sources (submitted_by);
+      CREATE INDEX sources_review_status ON sources (review_status);
+    `,
+  },
 ];
