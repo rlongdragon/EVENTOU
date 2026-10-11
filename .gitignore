@@ -20,3 +20,8 @@ npm-debug.log*
 .idea/
 .DS_Store
 Thumbs.db
+
+# sqlite
+*.db
+*.db-shm
+*.db-wal
