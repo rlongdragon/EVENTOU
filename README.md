@@ -44,6 +44,7 @@ npm run dev
 | `npm run dev:frontend` / `npm run dev:backend` | 只啟動其中一邊                     |
 | `npm run lint`                                 | ESLint 檢查前後端                  |
 | `npm run typecheck`                            | TypeScript 型別檢查                |
+| `npm test`                                     | 執行測試（Node 內建 test runner）  |
 | `npm run build`                                | 建置前後端（輸出到各自的 `dist/`） |
 | `npm run format` / `npm run format:check`      | Prettier 格式化／檢查              |
 
@@ -75,6 +76,21 @@ backend/src/
 │   └── map/            # /api/map           US-04
 └── shared/
 ```
+
+## 帳號與權限（US-06）
+
+- 後端 API：`POST /api/auth/register`、`POST /api/auth/login`、`POST /api/auth/logout`、`GET /api/auth/me`。
+- 登入狀態以 httpOnly cookie（`eventou_session`）保存，session 存在 SQLite，有效期 7 天；密碼以 scrypt 雜湊。
+- 角色統一定義在 `backend/src/modules/auth/roles.ts`：`user`（一般使用者）、`admin`（管理員）；訪客就是未登入。
+- 需登入的 API 掛 `requireAuth`，管理員 API 掛 `requireRole('admin')`（`backend/src/modules/auth/auth.middleware.ts`），handler 內用 `req.user` 取得目前使用者。
+- 前端用 `useAuth()` 取得登入狀態，需登入的頁面包在 `<RequireAuth>`（管理員頁面用 `<RequireAuth role="admin">`）。
+- 註冊的帳號預設為一般使用者，設為管理員：
+
+```bash
+npm run user:set-role -w backend -- someone@example.com admin
+```
+
+資料庫為 SQLite（`backend/data/eventou.db`，可用 `DATABASE_PATH` 調整），後端啟動時會自動執行 migration。
 
 ## 功能入口與 TODO
 

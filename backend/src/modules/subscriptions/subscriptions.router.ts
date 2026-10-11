@@ -1,8 +1,11 @@
 import { Router } from 'express';
 import { notImplemented } from '../../shared/notImplemented.js';
+import { requireAuth } from '../auth/auth.middleware.js';
 
 // 訂閱與通知
 export const subscriptionsRouter = Router();
+
+subscriptionsRouter.use(requireAuth);
 
 // TODO(#9): US-07 列出／新增／取消訂閱的活動類別（需登入）
 subscriptionsRouter.get('/', notImplemented('#9'));

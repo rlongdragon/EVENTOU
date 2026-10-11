@@ -1,5 +1,6 @@
 import { createBrowserRouter } from 'react-router';
 import { LoginPage } from '../features/auth/LoginPage';
+import { RequireAuth } from '../features/auth/RequireAuth';
 import { CalendarsPage } from '../features/calendars/CalendarsPage';
 import { EventDetailPage } from '../features/events/EventDetailPage';
 import { EventSearchPage } from '../features/events/EventSearchPage';
@@ -18,10 +19,31 @@ export const router = createBrowserRouter([
       { path: 'events/:eventId', element: <EventDetailPage /> },
       { path: 'map', element: <CampusMapPage /> },
       { path: 'login', element: <LoginPage /> },
-      { path: 'subscriptions', element: <SubscriptionsPage /> },
+      {
+        path: 'subscriptions',
+        element: (
+          <RequireAuth>
+            <SubscriptionsPage />
+          </RequireAuth>
+        ),
+      },
       { path: 'calendars', element: <CalendarsPage /> },
-      { path: 'sources/new', element: <SubmitSourcePage /> },
-      { path: 'admin/sources', element: <AdminSourcesPage /> },
+      {
+        path: 'sources/new',
+        element: (
+          <RequireAuth>
+            <SubmitSourcePage />
+          </RequireAuth>
+        ),
+      },
+      {
+        path: 'admin/sources',
+        element: (
+          <RequireAuth role="admin">
+            <AdminSourcesPage />
+          </RequireAuth>
+        ),
+      },
     ],
   },
 ]);

@@ -1,4 +1,5 @@
 import express from 'express';
+import { authenticate } from './modules/auth/auth.middleware.js';
 import { authRouter } from './modules/auth/auth.router.js';
 import { calendarsRouter } from './modules/calendars/calendars.router.js';
 import { eventsRouter } from './modules/events/events.router.js';
@@ -11,6 +12,7 @@ export function createApp() {
   const app = express();
 
   app.use(express.json());
+  app.use(authenticate);
 
   app.use('/api/health', healthRouter);
   app.use('/api/auth', authRouter);
