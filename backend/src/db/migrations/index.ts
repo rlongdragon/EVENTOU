@@ -63,4 +63,77 @@ export const migrations: Migration[] = [
       CREATE VIEW published_events AS SELECT * FROM events WHERE status = 'published';
     `,
   },
+  {
+    id: 3,
+    name: 'create_sources',
+    // review_status：待審核 pending／已核准 approved／已退回 rejected（值與 modules/sources/sourceTypes.ts 一致）
+    // enabled 與審核狀態獨立，只有「已核准且啟用中」的來源會被擷取；type 的可用值只在應用程式端檢查，方便日後新增類型
+    up: `
+      CREATE TABLE sources (
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        url TEXT NOT NULL,
+        type TEXT NOT NULL,
+        review_status TEXT NOT NULL DEFAULT 'pending'
+          CHECK (review_status IN ('pending', 'approved', 'rejected')),
+        enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+        submitted_by INTEGER NOT NULL REFERENCES users (id),
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      CREATE INDEX sources_submitted_by ON sources (submitted_by);
+      CREATE INDEX sources_review_status ON sources (review_status);
+    `,
+  },
+  {
+    id: 4,
+    name: 'add_events_source_foreign_key',
+    // SQLite 不能用 ALTER TABLE 加外鍵，所以重建 events：欄位、約束、index 與 published_events view 與 migration 2 相同，
+    // 只有 source_id 多了 REFERENCES sources (id)。外鍵啟用時，若既有 events 的 source_id 在 sources 找不到，
+    // INSERT 會失敗、整個 migration 回復，請先補上來源或清除這些 events 再重新啟動。
+    up: `
+      DROP VIEW published_events;
+
+      CREATE TABLE events_new (
+        id INTEGER PRIMARY KEY,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        category TEXT,
+        tags TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(tags) AND json_type(tags) = 'array'),
+        start_time TEXT,
+        end_time TEXT,
+        all_day INTEGER NOT NULL CHECK (all_day IN (0, 1)),
+        location TEXT,
+        organizer TEXT,
+        registration_url TEXT,
+        source_id INTEGER NOT NULL CHECK (source_id > 0) REFERENCES sources (id),
+        original_url TEXT NOT NULL CHECK (length(trim(original_url)) > 0),
+        status TEXT NOT NULL CHECK (status IN ('published', 'needs_review')),
+        review_reasons TEXT NOT NULL DEFAULT '[]'
+          CHECK (json_valid(review_reasons) AND json_type(review_reasons) = 'array'),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE (source_id, original_url),
+        CHECK (status != 'published' OR (
+          length(trim(title)) > 0 AND category IS NOT NULL AND start_time IS NOT NULL
+          AND json_array_length(review_reasons) = 0
+        ))
+      );
+
+      INSERT INTO events_new (
+        id, title, description, category, tags, start_time, end_time, all_day, location, organizer,
+        registration_url, source_id, original_url, status, review_reasons, created_at, updated_at
+      )
+      SELECT
+        id, title, description, category, tags, start_time, end_time, all_day, location, organizer,
+        registration_url, source_id, original_url, status, review_reasons, created_at, updated_at
+      FROM events;
+
+      DROP TABLE events;
+      ALTER TABLE events_new RENAME TO events;
+
+      CREATE INDEX events_status_category_start ON events (status, category, start_time);
+      CREATE VIEW published_events AS SELECT * FROM events WHERE status = 'published';
+    `,
+  },
 ];

@@ -44,7 +44,7 @@ published_at 與 fetched_at 須為帶時區的 ISO 8601（如 `2026-10-01T09:00:
 | location         | location        | TEXT／string 或 null        | 否       | 地點原文；此版無經緯度        |
 | organizer        | organizer       | TEXT／string 或 null        | 否       | 主辦單位                      |
 | registration_url | registrationUrl | TEXT／string 或 null        | 否       | 報名連結                      |
-| source_id        | sourceId        | INTEGER／number             | 是       | 正整數來源識別碼，目前待補 FK |
+| source_id        | sourceId        | INTEGER／number             | 是       | 正整數來源識別碼，外鍵指向 `sources(id)` |
 | original_url     | originalUrl     | TEXT／string                | 是       | 原始公告網址，必須可追溯      |
 | status           | status          | TEXT／EventStatus           | 是       | published 或 needs_review     |
 | review_reasons   | reviewReasons   | JSON TEXT／string[]         | 是       | 待審原因，發布時為 []         |
@@ -75,7 +75,7 @@ published_at 與 fetched_at 須為帶時區的 ISO 8601（如 `2026-10-01T09:00:
 - `status` 與 `all_day` 有值域約束（category 由程式驗證），tags 與 review_reasons 須為合法 JSON array。
 - published 活動須有非空標題、類別與開始時間，且沒有待審原因。
 - `published_events` view 只提供 published 活動；搜尋、行事曆與通知應從此 view 或加上相同狀態條件查詢。
-- 來源模組尚未有 `sources` 表，`source_id` 目前只有正整數約束，**尚無 FK**。來源主鍵定案後，由接合者新增 migration 補上 `REFERENCES sources(id)` 並檢查既有資料。
+- `source_id` 是指向 `sources(id)` 的外鍵，由 migration 4 `add_events_source_foreign_key` 補上（SQLite 不能用 `ALTER TABLE` 加外鍵，所以重建 `events`，欄位、index 與 `published_events` view 不變）。`db/client.ts` 開啟 `PRAGMA foreign_keys = ON`，寫入 Event 前來源必須已存在；升級時若既有 Event 的 `source_id` 對不到來源，migration 會失敗並回復，需先補上來源或清除這些 Event。測試可用 `sources.testHelpers.ts` 的 `seedSources(db)` 建立來源。
 
 後端既有啟動流程會呼叫 migrate()；亦可在 repo 根目錄執行 `npm run db:migrate -w backend`。
 
