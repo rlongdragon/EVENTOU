@@ -1,8 +1,13 @@
-import type { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync, SQLOutputValue } from 'node:sqlite';
 import { httpUrl } from './events.cleaner.js';
 import { validateEvent } from './events.converter.js';
 import { taipeiNow } from './events.dates.js';
-import type { ConvertedAnnouncement, Event } from './events.types.js';
+import type {
+  ConvertedAnnouncement,
+  Event,
+  EventCategory,
+  PublishedEvent,
+} from './events.types.js';
 
 /** 只接受具備真實追溯鍵的公告；缺鍵資料須保留在擷取端待人工修正。 */
 export function upsertEvent(
@@ -90,4 +95,31 @@ export function upsertEvent(
   if (status === 'published' && input.category && input.startTime)
     return { ...fields, status, category: input.category, startTime: input.startTime };
   return { ...fields, status: 'needs_review' };
+}
+
+/** US-02：依 id 讀取已發布活動；不存在或待審（needs_review）時回傳 undefined。 */
+export function findPublishedEventById(db: DatabaseSync, id: number): PublishedEvent | undefined {
+  const row = db.prepare('SELECT * FROM published_events WHERE id = ?').get(id);
+  if (!row) return undefined;
+  const text = (value: SQLOutputValue) => (value === null ? null : String(value));
+  // published_events 只含已發布活動，schema 已保證 category、start_time 不為 null
+  return {
+    id: Number(row.id),
+    title: String(row.title),
+    description: String(row.description),
+    category: String(row.category) as EventCategory,
+    tags: JSON.parse(String(row.tags)) as string[],
+    startTime: String(row.start_time),
+    endTime: text(row.end_time),
+    allDay: Number(row.all_day) === 1,
+    location: text(row.location),
+    organizer: text(row.organizer),
+    registrationUrl: text(row.registration_url),
+    sourceId: Number(row.source_id),
+    originalUrl: String(row.original_url),
+    status: 'published',
+    reviewReasons: JSON.parse(String(row.review_reasons)) as string[],
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
 }
