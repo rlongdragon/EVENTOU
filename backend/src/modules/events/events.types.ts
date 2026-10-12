@@ -1,6 +1,14 @@
 export const EVENT_CATEGORIES = ['lecture', 'workshop', 'exhibition', 'sports', 'welfare'] as const;
 
 export type EventCategory = (typeof EVENT_CATEGORIES)[number];
+/** 類別顯示名稱；前端與各 API 共用此對照，不要各自寫死。 */
+export const EVENT_CATEGORY_LABELS: Record<EventCategory, string> = {
+  lecture: '講座',
+  workshop: '工作坊／研習',
+  exhibition: '展覽',
+  sports: '運動',
+  welfare: '餐飲／福利',
+};
 export type EventStatus = 'published' | 'needs_review';
 
 /** US-17 接合介面；缺失值明確傳入 null。 */

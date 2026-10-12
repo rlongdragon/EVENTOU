@@ -55,7 +55,7 @@ published_at 與 fetched_at 須為帶時區的 ISO 8601（如 `2026-10-01T09:00:
 
 `source_id` 與 `original_url` 是儲存時必填的追溯鍵。缺少這兩個欄位的原始公告須由後續流程保留供人工檢查；不能用假來源或假網址建立 Event。
 
-### 類別提案
+### 類別
 
 | 代碼       | 顯示名稱     |
 | ---------- | ------------ |
@@ -65,14 +65,14 @@ published_at 與 fetched_at 須為帶時區的 ISO 8601（如 `2026-10-01T09:00:
 | sports     | 運動         |
 | welfare    | 餐飲／福利   |
 
-SRD 尚未列出完整清單，本清單需與搜尋、訂閱及行事曆負責人確認。若新增類別，須同步更新型別並新增 migration 修改資料庫 CHECK 約束。分類先以標題關鍵字，再以內文關鍵字覆寫來源預設類別；內文比對時略過地點、主辦等欄位行，避免「地點：體育館」被分成運動。皆未命中且未提供來源預設類別時標記待審。
+代碼定義在 `EVENT_CATEGORIES`，顯示名稱以 `EVENT_CATEGORY_LABELS` 為準（皆在 `events.types.ts`），各功能共用、不要各自寫死。一個活動只有一個類別，細分用 tags。資料庫不對 category 設 CHECK，值域由程式驗證；增減類別只需修改這兩個常數（要自動分類時再到 `events.categories.ts` 加關鍵字），不必新增 migration。分類先以標題關鍵字，再以內文關鍵字覆寫來源預設類別；內文比對時略過地點、主辦等欄位行，避免「地點：體育館」被分成運動。皆未命中且未提供來源預設類別時標記待審。
 
 ## Migration 與資料庫約束
 
 在 `backend/src/db/migrations/index.ts` 新增 `2_create_events`，既有 migration 1 保持原樣。
 
 - `(source_id, original_url)` 為唯一鍵，`upsertEvent` 使用 `ON CONFLICT DO UPDATE`，保留 id 與 created_at，更新其餘內容及 updated_at；內容與既有資料完全相同時不寫入，updated_at 不變。
-- `status`、`category` 與 `all_day` 有值域約束，tags 與 review_reasons 須為合法 JSON array。
+- `status` 與 `all_day` 有值域約束（category 由程式驗證），tags 與 review_reasons 須為合法 JSON array。
 - published 活動須有非空標題、類別與開始時間，且沒有待審原因。
 - `published_events` view 只提供 published 活動；搜尋、行事曆與通知應從此 view 或加上相同狀態條件查詢。
 - 來源模組尚未有 `sources` 表，`source_id` 目前只有正整數約束，**尚無 FK**。來源主鍵定案後，由接合者新增 migration 補上 `REFERENCES sources(id)` 並檢查既有資料。

@@ -31,12 +31,13 @@ export const migrations: Migration[] = [
     id: 2,
     name: 'create_events',
     // Source 尚未有資料表；來源模組定案後須以新 migration 補上外鍵。
+    // category 值域由程式 EVENT_CATEGORIES 驗證，不設 CHECK，增減類別不必重建資料表。
     up: `
       CREATE TABLE events (
         id INTEGER PRIMARY KEY,
         title TEXT NOT NULL,
         description TEXT NOT NULL DEFAULT '',
-        category TEXT CHECK (category IN ('lecture', 'workshop', 'exhibition', 'sports', 'welfare')),
+        category TEXT,
         tags TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(tags) AND json_type(tags) = 'array'),
         start_time TEXT,
         end_time TEXT,
