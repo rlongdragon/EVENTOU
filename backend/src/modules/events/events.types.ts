@@ -59,6 +59,16 @@ export interface ConvertedAnnouncement extends Omit<
   status: EventStatus;
 }
 
+/**
+ * upsert 結果。US-08 判斷「新發布活動」用 event.status === 'published' 且
+ * previousStatus !== 'published'；unchanged 表示內容相同，未寫入也未更新 updatedAt。
+ */
+export interface UpsertResult {
+  event: Event;
+  change: 'created' | 'updated' | 'unchanged';
+  previousStatus: EventStatus | null;
+}
+
 export interface ConversionOptions {
   defaultCategory?: EventCategory | null;
   tags?: string[];

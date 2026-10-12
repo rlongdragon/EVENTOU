@@ -1,5 +1,5 @@
 import { classifyEvent } from './events.categories.js';
-import { cleanAnnouncement, httpUrl, isNtouUrl, normalizeText } from './events.cleaner.js';
+import { cleanAnnouncement, httpUrl, normalizeText } from './events.cleaner.js';
 import { isTaipeiTimestamp, parseEventDates } from './events.dates.js';
 import { extractField } from './events.fields.js';
 import { EVENT_CATEGORIES } from './events.types.js';
@@ -18,7 +18,6 @@ export function validateEvent(event: ConvertedAnnouncement): string[] {
   if (!Number.isSafeInteger(event.sourceId) || (event.sourceId ?? 0) <= 0)
     reasons.push('缺少有效來源');
   if (!httpUrl(event.originalUrl)) reasons.push('缺少有效原始連結');
-  if (!isNtouUrl(event.originalUrl)) reasons.push('原始公告不屬於海大網域');
   if (/校外公告|轉知|轉發|代轉|協助公告|外校活動/.test(event.title))
     reasons.push('轉載公告需確認活動歸屬');
   if (/(?:^|\n)\s*[【[]?(?:轉知|轉發|代轉|校外公告|外校活動)/.test(event.description))
@@ -26,7 +25,7 @@ export function validateEvent(event: ConvertedAnnouncement): string[] {
   if (
     event.organizer &&
     /大[學学]/.test(event.organizer) &&
-    !/國立[臺台]灣海洋大學|海大|NTOU/i.test(event.organizer)
+    !/[臺台]灣海洋大學|^海洋大學|海大|NTOU/i.test(event.organizer)
   )
     reasons.push('主辦單位可能為外校');
   return [...new Set(reasons)];
@@ -38,14 +37,25 @@ export function convertAnnouncement(
 ): ConvertedAnnouncement {
   const cleaned = cleanAnnouncement(raw.rawContent);
   const title = cleanAnnouncement(raw.title ?? '').text.replace(/\s+/g, ' ');
-  let dates = parseEventDates(cleaned.text, raw.publishedAt ?? raw.fetchedAt);
+  let dates = parseEventDates(cleaned.text, raw.publishedAt, raw.fetchedAt);
   if (dates.reasons[0] === '找不到活動日期')
-    dates = parseEventDates(title, raw.publishedAt ?? raw.fetchedAt);
+    dates = parseEventDates(title, raw.publishedAt, raw.fetchedAt);
   const originalUrl = httpUrl(raw.url);
-  const registration = cleaned.links.find((link) => /報名|註冊|register/i.test(link.text));
   const plainRegistration = cleaned.text.match(
     /(?:報名(?:網址|連結)?)[\s:：]*(https?:\/\/[^\s<>]+)/,
   )?.[1];
+  // 指回公告頁本身的錨點（如 href="#"）不算報名連結，改看下一個候選。
+  const withoutHash = (url: string) => url.replace(/#.*$/, '');
+  const registrationUrl =
+    [
+      ...cleaned.links
+        .filter((link) => /報名|註冊|register/i.test(link.text))
+        .map((link) => link.href),
+      plainRegistration ?? null,
+    ]
+      .map((href) => httpUrl(href, originalUrl))
+      .find((url) => url && (!originalUrl || withoutHash(url) !== withoutHash(originalUrl))) ??
+    null;
   const event: ConvertedAnnouncement = {
     title,
     description: cleaned.text,
@@ -56,7 +66,7 @@ export function convertAnnouncement(
     allDay: dates.allDay,
     location: extractField(cleaned.text, '活動地點|演講地點|地點|場地'),
     organizer: extractField(cleaned.text, '主辦單位|主辦'),
-    registrationUrl: httpUrl(registration?.href ?? plainRegistration ?? null, originalUrl),
+    registrationUrl,
     sourceId: raw.sourceId,
     originalUrl,
     status: 'needs_review',

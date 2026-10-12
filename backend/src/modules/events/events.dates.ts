@@ -12,11 +12,12 @@ interface DateResult {
   reasons: string[];
 }
 const datePattern =
-  /(?<![\d/.])(?<!\d:)(?:民國\s*)?(?:(\d{1,4})\s*(?:年|[/.-])\s*)?(\d{1,2})\s*(?:月|[/.-])\s*(\d{1,2})\s*日?(?![\d:])/g;
+  /(?<![\d/.])(?<!\d:)(?:民國\s*)?(?:(\d{3,4}(?=\s*[/.-])|\d{1,4}(?=\s*年))\s*(?:年|[/.-])\s*)?(\d{1,2})\s*(?:月|[/.-])\s*(\d{1,2})\s*日?(?![\d:])/g;
 const timePattern =
   /(?<![\d/:])(?:(上午|下午|中午|晚上|凌晨|AM|PM)\s*)?(\d{1,2})(?:\s*:\s*(\d{2})|\s*[時點](?:(\d{1,2})分?|(半))?)\s*(AM|PM)?(?![\d:])/gi;
 const rangePattern = /^\s*(?:[-–—~～]|[~～]?\s*[至到])\s*$/;
 const pad = (value: number) => String(value).padStart(2, '0');
+const DAY_MS = 86400000;
 function validDay(value: Day): boolean {
   const date = new Date(Date.UTC(value.year, value.month - 1, value.day));
   return (
@@ -43,7 +44,17 @@ export function isTaipeiTimestamp(value: string): boolean {
     Number(match[6]) < 60
   );
 }
-function parseCandidate(text: string, year: number): DateResult {
+/** 未寫年份時取落在公告日前 90 天至後 275 天的年份，避免年底公告的一月活動落到過去。 */
+function inferYear(month: number, day: number, reference: Day): number {
+  const base = Date.UTC(reference.year, reference.month - 1, reference.day);
+  return (
+    [reference.year, reference.year + 1, reference.year - 1].find((year) => {
+      const offset = (Date.UTC(year, month - 1, day) - base) / DAY_MS;
+      return offset >= -90 && offset < 276;
+    }) ?? reference.year
+  );
+}
+function parseCandidate(text: string, reference: Day | null): DateResult {
   const fail = (reason: string): DateResult => ({
     startTime: null,
     endTime: null,
@@ -58,12 +69,16 @@ function parseCandidate(text: string, year: number): DateResult {
   const days: Day[] = [];
   for (const match of matches) {
     const explicit = match[1];
-    let candidateYear = explicit
-      ? Number(explicit) + (explicit.length <= 3 ? 1911 : 0)
-      : (days[0]?.year ?? year);
-    if (!explicit && days[0] && Number(match[2]) < days[0].month) candidateYear++;
-    const day = { year: candidateYear, month: Number(match[2]), day: Number(match[3]) };
+    const month = Number(match[2]);
+    let candidateYear: number;
+    if (explicit) candidateYear = Number(explicit) + (explicit.length <= 3 ? 1911 : 0);
+    else if (days[0]) candidateYear = days[0].year + (month < days[0].month ? 1 : 0);
+    else if (reference) candidateYear = inferYear(month, Number(match[3]), reference);
+    else return fail('缺少可判斷年份的公告時間');
+    const day = { year: candidateYear, month, day: Number(match[3]) };
     if (!validDay(day)) return fail('無效的活動日期');
+    if (reference && Math.abs(day.year - reference.year) > 1)
+      return fail('活動年份與公告時間差距過大');
     days.push(day);
   }
   const times = [...cleaned.matchAll(timePattern)];
@@ -89,6 +104,7 @@ function parseCandidate(text: string, year: number): DateResult {
     const minute = Number(match[3] ?? match[4] ?? (match[5] ? 30 : 0));
     if (hour > 23 || minute > 59 || (['上午', '凌晨', 'AM'].includes(meridiem) && hour > 12))
       return fail('無效的活動時間');
+    if (meridiem === '晚上' && hour === 12) return fail('午夜時間需人工確認');
     if (['下午', '晚上', '中午', 'PM'].includes(meridiem) && hour < 12) hour += 12;
     if (['上午', '凌晨', 'AM'].includes(meridiem) && hour === 12) hour = 0;
     clocks.push({ hour, minute });
@@ -125,14 +141,22 @@ function parseCandidate(text: string, year: number): DateResult {
   if (end && end <= start) return fail('結束時間必須晚於開始時間');
   return { startTime: start, endTime: end, allDay: !times.length, reasons: [] };
 }
-export function parseEventDates(content: string, reference: string): DateResult {
-  const normalizedReference = /^\d{4}-\d{2}-\d{2}$/.test(reference)
-    ? reference + 'T00:00:00+08:00'
-    : reference;
-  const referenceDate = /(?:Z|[+-]\d{2}:\d{2})$/.test(normalizedReference)
-    ? new Date(normalizedReference)
-    : new Date(NaN);
-  const year = new Date(referenceDate.getTime() + 8 * 3600000).getUTCFullYear();
+/** 公告時間須帶時區，或為台北日期 YYYY-MM-DD；無法解析時回傳 null。 */
+function referenceDay(value: string | null): Day | null {
+  if (!value) return null;
+  const normalized = /^\d{4}-\d{2}-\d{2}$/.test(value) ? value + 'T00:00:00+08:00' : value;
+  const time = /(?:Z|[+-]\d{2}:\d{2})$/.test(normalized) ? new Date(normalized).getTime() : NaN;
+  if (!Number.isFinite(time)) return null;
+  const taipei = new Date(time + 8 * 3600000);
+  return {
+    year: taipei.getUTCFullYear(),
+    month: taipei.getUTCMonth() + 1,
+    day: taipei.getUTCDate(),
+  };
+}
+/** references 依序取第一個可解析的時間（發布時間、擷取時間）作為推論年份的基準。 */
+export function parseEventDates(content: string, ...references: (string | null)[]): DateResult {
+  const reference = references.map(referenceDay).find((day) => day !== null) ?? null;
   const lines = normalizeText(content)
     .split('\n')
     .map((line) => line.replace(/^[。•●\s]+/, ''))
@@ -156,7 +180,7 @@ export function parseEventDates(content: string, reference: string): DateResult 
       !new RegExp(datePattern.source).test(next)
         ? line + ' ' + next.replace(activityLabel, '')
         : line;
-    results.push(parseCandidate(candidate, year));
+    results.push(parseCandidate(candidate, reference));
   }
   if (!results.length)
     return { startTime: null, endTime: null, allDay: false, reasons: ['找不到活動日期'] };

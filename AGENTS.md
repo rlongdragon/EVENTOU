@@ -21,7 +21,7 @@ Source（已核准且啟用中）
 
 搜尋、行事曆、通知都讀同一份 Event，不要各自另存一份活動資料。
 
-專案只處理國立臺灣海洋大學的活動。接合擷取、搜尋、行事曆、通知或去重時，先讀 [`docs/event-schema.md`](docs/event-schema.md)；Event 欄位、`published_events` view 與來源 FK 的接合限制亦見該文件。
+接合擷取、搜尋、行事曆、通知或去重時，先讀 [`docs/event-schema.md`](docs/event-schema.md)；Event 欄位、`published_events` view、upsert 回傳的變動狀態與來源 FK 的接合限制皆見該文件。活動歸屬由來源審核把關，Event 不以原始網址網域判斷。
 
 ## 目錄結構
 

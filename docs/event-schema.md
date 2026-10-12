@@ -2,7 +2,7 @@
 
 這次交付包含 **Event 型別、SQLite schema／migration、公告轉換、驗證、upsert 與測試**，讓搜尋、行事曆與通知共用同一份活動資料。US-17 擷取排程及搜尋、行事曆、通知 API 由各自負責人接合。
 
-專案只處理國立臺灣海洋大學的活動。轉換及儲存會檢查原始網址是否為 `ntou.edu.tw` 或其子網域；轉知標題或明確外校主辦單位會標記待審。這些規則無法完整理解公告語意，來源審核與擷取流程仍須確認活動歸屬。海大活動可使用外部報名表單；外校來賓也不代表活動屬於外校。
+活動歸屬由來源審核（US-14）把關；轉換不以原始網址網域判斷，Instagram、社團網站等非 `ntou.edu.tw` 來源核准後一樣可發布。轉知標題或明確外校主辦單位會標記待審；這些規則無法完整理解公告語意，來源審核與擷取流程仍須確認活動歸屬。海大活動可使用外部報名表單；外校來賓也不代表活動屬於外校。
 
 ## 共用介面
 
@@ -18,12 +18,14 @@
 
 | 原始欄位     | TypeScript 欄位 | 型別           | 說明                                      |
 | ------------ | --------------- | -------------- | ----------------------------------------- |
-| source_id    | sourceId        | number 或 null | 海大公告來源的正整數識別碼；null 表示缺漏 |
+| source_id    | sourceId        | number 或 null | 公告來源的正整數識別碼；null 表示缺漏     |
 | url          | url             | string 或 null | 原始公告網址                              |
 | title        | title           | string 或 null | 原始標題                                  |
 | raw_content  | rawContent      | string         | 原始 HTML 或純文字內文                    |
 | published_at | publishedAt     | string 或 null | 公告發布時間，未知則 null                 |
 | fetched_at   | fetchedAt       | string         | 擷取時間                                  |
+
+published_at 與 fetched_at 須為帶時區的 ISO 8601（如 `2026-10-01T09:00:00+08:00`、`...Z`），或台北日期 `YYYY-MM-DD`；`2026/10/01 09:00` 這類不帶時區的字串視為無法解析，published_at 無法解析時改用 fetched_at 推論年份。
 
 這是待與 US-17 負責人確認的契約，尚未完成排程接合。活動開始時間不能由擷取時間代替。
 
@@ -65,13 +67,13 @@
 | sports     | 運動         |
 | welfare    | 餐飲／福利   |
 
-SRD 尚未列出完整清單，本清單需與搜尋、訂閱及行事曆負責人確認。若新增類別，須同步更新型別並新增 migration 修改資料庫 CHECK 約束。分類先以標題關鍵字，再以內文關鍵字覆寫來源預設類別；皆未命中且未提供來源預設類別時標記待審。
+SRD 尚未列出完整清單，本清單需與搜尋、訂閱及行事曆負責人確認。若新增類別，須同步更新型別並新增 migration 修改資料庫 CHECK 約束。分類先以標題關鍵字，再以內文關鍵字覆寫來源預設類別；內文比對時略過地點、主辦等欄位行，避免「地點：體育館」被分成運動。皆未命中且未提供來源預設類別時標記待審。
 
 ## Migration 與資料庫約束
 
 在 `backend/src/db/migrations/index.ts` 新增 `2_create_events`，既有 migration 1 保持原樣。
 
-- `(source_id, original_url)` 為唯一鍵，`upsertEvent` 使用 `ON CONFLICT DO UPDATE`，保留 id 與 created_at，更新其餘內容及 updated_at。
+- `(source_id, original_url)` 為唯一鍵，`upsertEvent` 使用 `ON CONFLICT DO UPDATE`，保留 id 與 created_at，更新其餘內容及 updated_at；內容與既有資料完全相同時不寫入，updated_at 不變。
 - `status`、`category` 與 `all_day` 有值域約束，tags 與 review_reasons 須為合法 JSON array。
 - published 活動須有非空標題、類別與開始時間，且沒有待審原因。
 - `published_events` view 只提供 published 活動；搜尋、行事曆與通知應從此 view 或加上相同狀態條件查詢。
@@ -112,7 +114,7 @@ SRD 尚未列出完整清單，本清單需與搜尋、訂閱及行事曆負責�
 ```ts
 import { processAnnouncement } from './modules/events/events.service.js';
 
-const event = processAnnouncement(db, {
+const { event, change, previousStatus } = processAnnouncement(db, {
   sourceId: 1,
   url: 'https://www.ntou.edu.tw/announcements/example',
   title: '海大 AI 講座',
@@ -126,19 +128,21 @@ const event = processAnnouncement(db, {
 
 - `convertAnnouncement`：HTML 轉純文字、移除 script/style、全形轉半形、合併空白、擷取欄位及分類，不寫入資料庫。
 - `processAnnouncement`：轉換後 upsert；`upsertEvent` 在寫入前再次驗證必填欄位、日期與活動範圍。
+- 回傳 `UpsertResult`：`change` 為 `created`／`updated`／`unchanged`，`previousStatus` 為寫入前的狀態（新建時為 null）。US-08 以 `event.status === 'published' && previousStatus !== 'published'` 判斷新發布活動，重跑擷取時內容未變為 `unchanged`，不會重複觸發。
 - 缺少來源／原始網址：轉換結果為 needs_review；無法建立唯一追溯鍵，因此儲存函式拋錯，US-17 須保留 RawAnnouncement 並送人工修正，不產生假來源或假網址。
 - 其他缺必填欄位：可寫入 needs_review，公開 view 不會回傳。原始資料修正後重跑可更新為 published。
-- 報名連結支援 HTML anchor、純文字網址與相對路徑；僅接受 HTTP(S)，不接受帳密網址或 javascript 連結。
+- 報名連結支援 HTML anchor、純文字網址與相對路徑；僅接受 HTTP(S)，不接受帳密網址或 javascript 連結；指回公告頁本身的錨點（如 `href="#"`）不算報名連結。
 
 ## 日期規則
 
-支援西元／民國年、中文月日、括號星期、上午／下午／中午、AM／PM、時／點／半，以及時間區間、日期區間。所有輸出使用台北時區，避免依執行主機時區判斷。
+支援西元／民國年、中文月日、括號星期、上午／下午／中午、AM／PM、時／點／半，以及時間區間、日期區間（`10/12-10/14`、`10/12~10/14`、`10月12日至10月14日`）。所有輸出使用台北時區，避免依執行主機時區判斷。
 
-- 未寫年份時取公告發布時間的台北年份；發布時間缺漏時取擷取年份，絕不將擷取日期當作活動日期。
+- 未寫年份時以公告發布時間為基準（缺漏或無法解析時改用擷取時間），取落在基準日前 90 天至後 275 天內的年份，例如 12 月公告的 `1/5` 為隔年 1 月 5 日；兩者皆無法解析則待審。絕不將擷取日期當作活動日期。
+- 寫明的年份與基準年相差超過 1 年時待審；用分隔符號寫年份須為 3–4 位數（`115/10/07`、`2026-10-07`），避免 `10/12-10/14` 被讀成年月日。
 - 優先解析活動日期／演講日期等欄位，排除報名截止、發布、更新日期；內文沒有日期時才嘗試標題。
 - 只有日期：allDay 為 true，startTime 為當日午夜。單日且未寫結束時 endTime 為 null。
 - `10/7–10/9` 的 endTime 為 `10/10 00:00`，採行事曆常用的排他結束日期；無年份的跨年區間可遞增結束年份。
-- 不合法日期、時間倒置、多個未形成區間的日期或無法解析的時間，均標記待審。中文數字時間、模糊日期、隱含跨午夜時間目前需人工確認。
+- 不合法日期、時間倒置、多個未形成區間的日期或無法解析的時間，均標記待審。中文數字時間、模糊日期、隱含跨午夜時間（含「晚上12點」）目前需人工確認。
 
 ## 測試公告與驗收對照
 
@@ -156,4 +160,4 @@ const event = processAnnouncement(db, {
 | source_id 外鍵 | 待 sources 表建立後新增 migration 接合 |
 | schema PR review／merge | 待 GitHub PR 流程，不等同程式已合併 |
 
-建議先提交 schema/types/schema test 與欄位文件供其他組員 review，再提交轉換服務與測試。US-01、US-05、US-08 的 API 接合屬於各自 issue；本次不實作這些功能。
+US-01、US-05、US-08 的 API 接合屬於各自 issue；本次不實作這些功能。

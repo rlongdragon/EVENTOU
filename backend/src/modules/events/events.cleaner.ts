@@ -44,10 +44,3 @@ export function httpUrl(value: string | null, base?: string | null): string | nu
     return null;
   }
 }
-
-export function isNtouUrl(value: string | null): boolean {
-  const normalized = httpUrl(value);
-  if (!normalized) return false;
-  const hostname = new URL(normalized).hostname;
-  return hostname === 'ntou.edu.tw' || hostname.endsWith('.ntou.edu.tw');
-}

@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import { migrate } from '../../db/index.js';
-import { cleanAnnouncement, isNtouUrl } from './events.cleaner.js';
+import { cleanAnnouncement, httpUrl } from './events.cleaner.js';
 import { convertAnnouncement } from './events.converter.js';
 import { parseEventDates } from './events.dates.js';
 import { processAnnouncement } from './events.service.js';
@@ -27,8 +27,10 @@ const cases = [
   ['民國115年10月7日 下午2點半', '2026-10-07T14:30:00+08:00', null],
   ['10月7日（三） 上午10:00-中午12:00', '2026-10-07T10:00:00+08:00', '2026-10-07T12:00:00+08:00'],
   ['10/7–10/9', '2026-10-07T00:00:00+08:00', '2026-10-10T00:00:00+08:00'],
+  ['10/12-10/14', '2026-10-12T00:00:00+08:00', '2026-10-15T00:00:00+08:00'],
+  ['10.12-10.14', '2026-10-12T00:00:00+08:00', '2026-10-15T00:00:00+08:00'],
+  ['10/12 - 10/14', '2026-10-12T00:00:00+08:00', '2026-10-15T00:00:00+08:00'],
   ['2026/12/31-1/2', '2026-12-31T00:00:00+08:00', '2027-01-03T00:00:00+08:00'],
-  ['2024/2/29', '2024-02-29T00:00:00+08:00', null],
   ['2026/10/7 12:00 AM', '2026-10-07T00:00:00+08:00', null],
   ['2026/10/7 12:00 PM', '2026-10-07T12:00:00+08:00', null],
 ];
@@ -49,6 +51,9 @@ for (const content of [
   '2026/10/7 14:00-',
   '2026/10/7、10/9',
   '日期：待定',
+  '10/12-14',
+  '2026/10/7 晚上12點',
+  '1921/12/10',
 ])
   test(`不猜測無效日期：${content}`, () => {
     assert.equal(parseEventDates(content, reference).startTime, null);
@@ -78,8 +83,7 @@ test('缺必填、外校及轉知公告進入待審；外校來賓不影響海�
     { rawContent: '' },
     { sourceId: null },
     { url: null },
-    { url: 'https://ntu.edu.tw/1' },
-    { url: 'https://ntou.edu.tw.evil.com/1' },
+    { url: 'javascript:alert(1)' },
     { title: '轉知講座' },
     { rawContent: raw.rawContent + '\n主辦單位：國立臺灣大學' },
   ])
@@ -88,7 +92,23 @@ test('缺必填、外校及轉知公告進入待審；外校來賓不影響海�
     convertAnnouncement({ ...raw, rawContent: raw.rawContent + '\n講者：國立臺灣大學教授' }).status,
     'published',
   );
-  assert.equal(isNtouUrl('https://x.ntou.edu.tw/a'), true);
+});
+test('海大主辦單位的常見寫法不誤判為外校', () => {
+  for (const organizer of ['臺灣海洋大學', '海洋大學學務處', 'NTOU 學務處'])
+    assert.equal(
+      convertAnnouncement({ ...raw, rawContent: raw.rawContent + `\n主辦單位：${organizer}` })
+        .status,
+      'published',
+      organizer,
+    );
+  assert.equal(
+    convertAnnouncement({ ...raw, rawContent: raw.rawContent + '\n主辦單位：上海海洋大學' }).status,
+    'needs_review',
+  );
+});
+test('非 ntou.edu.tw 來源（如 Instagram）可發布，活動歸屬由來源審核把關', () => {
+  const event = convertAnnouncement({ ...raw, url: 'https://www.instagram.com/p/abc/' });
+  assert.equal(event.status, 'published', event.reviewReasons.join(';'));
 });
 test('標題規則覆寫來源分類，標籤去重', () => {
   const event = convertAnnouncement(
@@ -97,6 +117,26 @@ test('標題規則覆寫來源分類，標籤去重', () => {
   );
   assert.equal(event.category, 'workshop');
   assert.deepEqual(event.tags, ['AI']);
+});
+test('地點、主辦欄位不參與分類', () => {
+  const rawContent = raw.rawContent + '\n地點：體育館\n主辦單位：體育室';
+  assert.equal(convertAnnouncement({ ...raw, title: '專題', rawContent }).category, null);
+  assert.equal(
+    convertAnnouncement({ ...raw, title: '專題', rawContent }, { defaultCategory: 'lecture' })
+      .category,
+    'lecture',
+  );
+  assert.equal(
+    convertAnnouncement({ ...raw, title: '專題', rawContent: rawContent + '\n體育競賽' }).category,
+    'sports',
+  );
+});
+test('指回公告頁的報名錨點不取代純文字報名網址', () => {
+  const event = convertAnnouncement({
+    ...raw,
+    rawContent: raw.rawContent + '\n<a href="#">報名</a>\n報名連結：https://forms.gle/example',
+  });
+  assert.equal(event.registrationUrl, 'https://forms.gle/example');
 });
 interface Fixture {
   url: string;
@@ -110,6 +150,7 @@ interface Fixture {
 const fixtures: Fixture[] = JSON.parse(
   readFileSync(new URL('./fixtures/ntou-announcements.json', import.meta.url), 'utf8'),
 );
+const isNtouUrl = (url: string) => /(?:^|\.)ntou\.edu\.tw$/.test(new URL(url).hostname);
 test('20 則真實公告摘錄有不同原始網址與來源記錄', () => {
   assert.equal(fixtures.length, 20);
   assert.equal(new Set(fixtures.map((f) => f.url)).size, 20);
@@ -128,19 +169,40 @@ test('冪等更新保留 id 與建立時間，待審不出現在公開 view，�
   try {
     migrate(db);
     const first = processAnnouncement(db, raw, {}, new Date(reference));
+    assert.equal(first.change, 'created');
+    assert.equal(first.previousStatus, null);
     const second = processAnnouncement(
       db,
       { ...raw, title: '更新後海大講座' },
       {},
       new Date('2026-10-02T09:00:00+08:00'),
     );
-    assert.equal(first.id, second.id);
-    assert.equal(first.createdAt, second.createdAt);
-    assert.notEqual(first.updatedAt, second.updatedAt);
+    assert.equal(second.change, 'updated');
+    assert.equal(second.previousStatus, 'published');
+    assert.equal(first.event.id, second.event.id);
+    assert.equal(first.event.createdAt, second.event.createdAt);
+    assert.notEqual(first.event.updatedAt, second.event.updatedAt);
+    const rerun = processAnnouncement(
+      db,
+      { ...raw, title: '更新後海大講座' },
+      {},
+      new Date('2026-10-03T09:00:00+08:00'),
+    );
+    assert.equal(rerun.change, 'unchanged');
+    assert.equal(rerun.event.updatedAt, second.event.updatedAt);
+    assert.equal(
+      db.prepare('SELECT updated_at FROM events').get()?.updated_at,
+      second.event.updatedAt,
+    );
     assert.equal(db.prepare('SELECT count(*) AS n FROM events').get()?.n, 1);
     assert.equal(db.prepare('SELECT title FROM published_events').get()?.title, '更新後海大講座');
     const review = processAnnouncement(db, { ...raw, rawContent: '' });
-    assert.equal(review.status, 'needs_review');
+    assert.equal(review.event.status, 'needs_review');
+    assert.equal(review.previousStatus, 'published');
+    const republished = processAnnouncement(db, raw);
+    assert.equal(republished.event.status, 'published');
+    assert.equal(republished.previousStatus, 'needs_review');
+    processAnnouncement(db, { ...raw, rawContent: '' });
     assert.equal(db.prepare('SELECT count(*) AS n FROM published_events').get()?.n, 0);
     assert.throws(() => processAnnouncement(db, { ...raw, sourceId: null }), /追溯/);
     processAnnouncement(db, { ...raw, sourceId: 2 });
@@ -157,7 +219,7 @@ test('儲存再次驗證，不能自行指定 published 繞過日期或海大限
     const converted = convertAnnouncement(raw);
     for (const override of [
       { startTime: '2026-02-30T14:00:00+08:00' },
-      { originalUrl: 'https://ntu.edu.tw/1' },
+      { endTime: '2026-10-07T13:00:00+08:00' },
       { title: '' },
     ]) {
       const event = upsertEvent(db, {
@@ -166,7 +228,7 @@ test('儲存再次驗證，不能自行指定 published 繞過日期或海大限
         status: 'published',
         reviewReasons: [],
       });
-      assert.equal(event.status, 'needs_review');
+      assert.equal(event.event.status, 'needs_review');
     }
     assert.equal(db.prepare('SELECT count(*) AS n FROM published_events').get()?.n, 0);
   } finally {
@@ -174,13 +236,13 @@ test('儲存再次驗證，不能自行指定 published 繞過日期或海大限
   }
 });
 
-test('原始公告安全網域與正文轉知檢查，允許外部報名表', () => {
+test('正文轉知與外校主辦檢查、拒絕帳密網址，允許外部報名表', () => {
   for (const rawContent of [
     raw.rawContent + '\n主辦單位：中國海洋大學',
     '轉知校外公告\n' + raw.rawContent,
   ])
     assert.equal(convertAnnouncement({ ...raw, rawContent }).status, 'needs_review');
-  assert.equal(isNtouUrl('https://ntou.edu.tw@evil.com/1'), false);
+  assert.equal(httpUrl('https://ntou.edu.tw@evil.com/1'), null);
   const event = convertAnnouncement({
     ...raw,
     rawContent: raw.rawContent + '\n報名連結：https://forms.gle/example',
@@ -195,6 +257,35 @@ test('未寫年取台北參考年份，無參考年份不猜測', () => {
     '2026-01-01T00:00:00+08:00',
   );
   assert.equal(parseEventDates('1月1日', 'invalid').startTime, null);
+});
+
+test('未寫年份跨年時取最接近公告日的年份', () => {
+  assert.equal(
+    parseEventDates('1/5 14:00-16:00', '2026-12-20T09:00:00+08:00').startTime,
+    '2027-01-05T14:00:00+08:00',
+  );
+  assert.equal(
+    parseEventDates('12/28', '2027-01-05T09:00:00+08:00').startTime,
+    '2026-12-28T00:00:00+08:00',
+  );
+});
+
+test('寫明年份時須接近公告時間，閏日依該年份判斷', () => {
+  assert.equal(
+    parseEventDates('2024/2/29', '2024-01-10T09:00:00+08:00').startTime,
+    '2024-02-29T00:00:00+08:00',
+  );
+  assert.deepEqual(parseEventDates('2029/10/7', reference).reasons, ['活動年份與公告時間差距過大']);
+});
+
+test('發布時間無法解析時改用擷取時間推論年份', () => {
+  const event = convertAnnouncement({
+    ...raw,
+    rawContent: '活動日期：10月7日',
+    publishedAt: '2026/10/01 09:00',
+  });
+  assert.equal(event.startTime, '2026-10-07T00:00:00+08:00');
+  assert.deepEqual(parseEventDates('10月7日', null, null).reasons, ['缺少可判斷年份的公告時間']);
 });
 
 test('公告的多組活動日期與待定日期保留待審', () => {
