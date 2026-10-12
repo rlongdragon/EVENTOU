@@ -77,38 +77,15 @@ test('截止日不取代活動日期，分行時間及欄位可擷取', () => {
   assert.equal(event.organizer, '國立臺灣海洋大學');
   assert.equal(event.registrationUrl, 'https://www.ntou.edu.tw/register');
 });
-test('缺必填、外校及轉知公告進入待審；外校來賓不影響海大活動', () => {
+test('缺必填欄位或原始連結無效時進入待審', () => {
   for (const override of [
     { title: null },
     { rawContent: '' },
     { sourceId: null },
     { url: null },
     { url: 'javascript:alert(1)' },
-    { title: '轉知講座' },
-    { rawContent: raw.rawContent + '\n主辦單位：國立臺灣大學' },
   ])
     assert.equal(convertAnnouncement({ ...raw, ...override }).status, 'needs_review');
-  assert.equal(
-    convertAnnouncement({ ...raw, rawContent: raw.rawContent + '\n講者：國立臺灣大學教授' }).status,
-    'published',
-  );
-});
-test('海大主辦單位的常見寫法不誤判為外校', () => {
-  for (const organizer of ['臺灣海洋大學', '海洋大學學務處', 'NTOU 學務處'])
-    assert.equal(
-      convertAnnouncement({ ...raw, rawContent: raw.rawContent + `\n主辦單位：${organizer}` })
-        .status,
-      'published',
-      organizer,
-    );
-  assert.equal(
-    convertAnnouncement({ ...raw, rawContent: raw.rawContent + '\n主辦單位：上海海洋大學' }).status,
-    'needs_review',
-  );
-});
-test('非 ntou.edu.tw 來源（如 Instagram）可發布，活動歸屬由來源審核把關', () => {
-  const event = convertAnnouncement({ ...raw, url: 'https://www.instagram.com/p/abc/' });
-  assert.equal(event.status, 'published', event.reviewReasons.join(';'));
 });
 test('標題規則覆寫來源分類，標籤去重', () => {
   const event = convertAnnouncement(
@@ -169,40 +146,27 @@ test('冪等更新保留 id 與建立時間，待審不出現在公開 view，�
   try {
     migrate(db);
     const first = processAnnouncement(db, raw, {}, new Date(reference));
-    assert.equal(first.change, 'created');
-    assert.equal(first.previousStatus, null);
     const second = processAnnouncement(
       db,
       { ...raw, title: '更新後海大講座' },
       {},
       new Date('2026-10-02T09:00:00+08:00'),
     );
-    assert.equal(second.change, 'updated');
-    assert.equal(second.previousStatus, 'published');
-    assert.equal(first.event.id, second.event.id);
-    assert.equal(first.event.createdAt, second.event.createdAt);
-    assert.notEqual(first.event.updatedAt, second.event.updatedAt);
+    assert.equal(first.id, second.id);
+    assert.equal(first.createdAt, second.createdAt);
+    assert.notEqual(first.updatedAt, second.updatedAt);
     const rerun = processAnnouncement(
       db,
       { ...raw, title: '更新後海大講座' },
       {},
       new Date('2026-10-03T09:00:00+08:00'),
     );
-    assert.equal(rerun.change, 'unchanged');
-    assert.equal(rerun.event.updatedAt, second.event.updatedAt);
-    assert.equal(
-      db.prepare('SELECT updated_at FROM events').get()?.updated_at,
-      second.event.updatedAt,
-    );
+    assert.equal(rerun.updatedAt, second.updatedAt);
+    assert.equal(db.prepare('SELECT updated_at FROM events').get()?.updated_at, second.updatedAt);
     assert.equal(db.prepare('SELECT count(*) AS n FROM events').get()?.n, 1);
     assert.equal(db.prepare('SELECT title FROM published_events').get()?.title, '更新後海大講座');
     const review = processAnnouncement(db, { ...raw, rawContent: '' });
-    assert.equal(review.event.status, 'needs_review');
-    assert.equal(review.previousStatus, 'published');
-    const republished = processAnnouncement(db, raw);
-    assert.equal(republished.event.status, 'published');
-    assert.equal(republished.previousStatus, 'needs_review');
-    processAnnouncement(db, { ...raw, rawContent: '' });
+    assert.equal(review.status, 'needs_review');
     assert.equal(db.prepare('SELECT count(*) AS n FROM published_events').get()?.n, 0);
     assert.throws(() => processAnnouncement(db, { ...raw, sourceId: null }), /追溯/);
     processAnnouncement(db, { ...raw, sourceId: 2 });
@@ -212,7 +176,7 @@ test('冪等更新保留 id 與建立時間，待審不出現在公開 view，�
   }
 });
 
-test('儲存再次驗證，不能自行指定 published 繞過日期或海大限制', () => {
+test('儲存再次驗證，不能自行指定 published 繞過日期或必填檢查', () => {
   const db = new DatabaseSync(':memory:');
   try {
     migrate(db);
@@ -228,7 +192,7 @@ test('儲存再次驗證，不能自行指定 published 繞過日期或海大限
         status: 'published',
         reviewReasons: [],
       });
-      assert.equal(event.event.status, 'needs_review');
+      assert.equal(event.status, 'needs_review');
     }
     assert.equal(db.prepare('SELECT count(*) AS n FROM published_events').get()?.n, 0);
   } finally {
@@ -236,12 +200,7 @@ test('儲存再次驗證，不能自行指定 published 繞過日期或海大限
   }
 });
 
-test('正文轉知與外校主辦檢查、拒絕帳密網址，允許外部報名表', () => {
-  for (const rawContent of [
-    raw.rawContent + '\n主辦單位：中國海洋大學',
-    '轉知校外公告\n' + raw.rawContent,
-  ])
-    assert.equal(convertAnnouncement({ ...raw, rawContent }).status, 'needs_review');
+test('拒絕帳密網址，允許外部報名表', () => {
   assert.equal(httpUrl('https://ntou.edu.tw@evil.com/1'), null);
   const event = convertAnnouncement({
     ...raw,

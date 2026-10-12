@@ -2,14 +2,14 @@ import type { DatabaseSync } from 'node:sqlite';
 import { httpUrl } from './events.cleaner.js';
 import { validateEvent } from './events.converter.js';
 import { taipeiNow } from './events.dates.js';
-import type { ConvertedAnnouncement, EventStatus, UpsertResult } from './events.types.js';
+import type { ConvertedAnnouncement, Event } from './events.types.js';
 
 /** 只接受具備真實追溯鍵的公告；缺鍵資料須保留在擷取端待人工修正。 */
 export function upsertEvent(
   db: DatabaseSync,
   input: ConvertedAnnouncement,
   now = new Date(),
-): UpsertResult {
+): Event {
   const sourceId = input.sourceId;
   const originalUrl = httpUrl(input.originalUrl);
   if (!Number.isSafeInteger(sourceId) || sourceId === null || sourceId <= 0 || !originalUrl)
@@ -36,7 +36,6 @@ export function upsertEvent(
       FROM events WHERE source_id = ? AND original_url = ?`,
     )
     .get(sourceId, originalUrl);
-  const previousStatus = (previous?.status as EventStatus | undefined) ?? null;
   // 重跑擷取時內容相同就不寫入，updatedAt 才能代表活動真的有變動。
   const unchanged =
     previous !== undefined &&
@@ -88,12 +87,7 @@ export function upsertEvent(
     updatedAt,
     reviewReasons,
   };
-  const change = unchanged ? 'unchanged' : previous ? 'updated' : 'created';
   if (status === 'published' && input.category && input.startTime)
-    return {
-      event: { ...fields, status, category: input.category, startTime: input.startTime },
-      change,
-      previousStatus,
-    };
-  return { event: { ...fields, status: 'needs_review' }, change, previousStatus };
+    return { ...fields, status, category: input.category, startTime: input.startTime };
+  return { ...fields, status: 'needs_review' };
 }

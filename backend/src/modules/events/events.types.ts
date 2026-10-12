@@ -3,7 +3,7 @@ export const EVENT_CATEGORIES = ['lecture', 'workshop', 'exhibition', 'sports', 
 export type EventCategory = (typeof EVENT_CATEGORIES)[number];
 export type EventStatus = 'published' | 'needs_review';
 
-/** US-17 接合介面；活動限海大，缺失值明確傳入 null。 */
+/** US-17 接合介面；缺失值明確傳入 null。 */
 export interface RawAnnouncement {
   sourceId: number | null;
   url: string | null;
@@ -57,16 +57,6 @@ export interface ConvertedAnnouncement extends Omit<
   sourceId: number | null;
   originalUrl: string | null;
   status: EventStatus;
-}
-
-/**
- * upsert 結果。US-08 判斷「新發布活動」用 event.status === 'published' 且
- * previousStatus !== 'published'；unchanged 表示內容相同，未寫入也未更新 updatedAt。
- */
-export interface UpsertResult {
-  event: Event;
-  change: 'created' | 'updated' | 'unchanged';
-  previousStatus: EventStatus | null;
 }
 
 export interface ConversionOptions {

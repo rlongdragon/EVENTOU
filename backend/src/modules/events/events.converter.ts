@@ -18,16 +18,6 @@ export function validateEvent(event: ConvertedAnnouncement): string[] {
   if (!Number.isSafeInteger(event.sourceId) || (event.sourceId ?? 0) <= 0)
     reasons.push('缺少有效來源');
   if (!httpUrl(event.originalUrl)) reasons.push('缺少有效原始連結');
-  if (/校外公告|轉知|轉發|代轉|協助公告|外校活動/.test(event.title))
-    reasons.push('轉載公告需確認活動歸屬');
-  if (/(?:^|\n)\s*[【[]?(?:轉知|轉發|代轉|校外公告|外校活動)/.test(event.description))
-    reasons.push('轉載公告需確認活動歸屬');
-  if (
-    event.organizer &&
-    /大[學学]/.test(event.organizer) &&
-    !/[臺台]灣海洋大學|^海洋大學|海大|NTOU/i.test(event.organizer)
-  )
-    reasons.push('主辦單位可能為外校');
   return [...new Set(reasons)];
 }
 

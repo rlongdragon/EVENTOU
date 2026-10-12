@@ -1,8 +1,6 @@
 # US-19：海大活動 Event 資料格式
 
-這次交付包含 **Event 型別、SQLite schema／migration、公告轉換、驗證、upsert 與測試**，讓搜尋、行事曆與通知共用同一份活動資料。US-17 擷取排程及搜尋、行事曆、通知 API 由各自負責人接合。
-
-活動歸屬由來源審核（US-14）把關；轉換不以原始網址網域判斷，Instagram、社團網站等非 `ntou.edu.tw` 來源核准後一樣可發布。轉知標題或明確外校主辦單位會標記待審；這些規則無法完整理解公告語意，來源審核與擷取流程仍須確認活動歸屬。海大活動可使用外部報名表單；外校來賓也不代表活動屬於外校。
+Event 是搜尋、行事曆與通知共用的統一活動資料。本文件說明 Event 型別、SQLite schema、公告轉換與驗證規則。
 
 ## 共用介面
 
@@ -27,7 +25,7 @@
 
 published_at 與 fetched_at 須為帶時區的 ISO 8601（如 `2026-10-01T09:00:00+08:00`、`...Z`），或台北日期 `YYYY-MM-DD`；`2026/10/01 09:00` 這類不帶時區的字串視為無法解析，published_at 無法解析時改用 fetched_at 推論年份。
 
-這是待與 US-17 負責人確認的契約，尚未完成排程接合。活動開始時間不能由擷取時間代替。
+活動開始時間不能由擷取時間代替。
 
 ## Event 欄位
 
@@ -53,7 +51,7 @@ published_at 與 fetched_at 須為帶時區的 ISO 8601（如 `2026-10-01T09:00:
 | created_at       | createdAt       | TEXT／string                | 是       | 首次建立時間                  |
 | updated_at       | updatedAt       | TEXT／string                | 是       | 最後更新時間                  |
 
-時間格式為 `YYYY-MM-DDTHH:mm:ss+08:00`。SQLite 以 TEXT 儲存，轉換及儲存流程驗證日期、網址與活動範圍；直接寫 SQL 不會經過程式驗證，接合端應使用 `processAnnouncement`。
+時間格式為 `YYYY-MM-DDTHH:mm:ss+08:00`。SQLite 以 TEXT 儲存，轉換及儲存流程驗證日期與網址；直接寫 SQL 不會經過程式驗證，接合端應使用 `processAnnouncement`。
 
 `source_id` 與 `original_url` 是儲存時必填的追溯鍵。缺少這兩個欄位的原始公告須由後續流程保留供人工檢查；不能用假來源或假網址建立 Event。
 
@@ -79,7 +77,7 @@ SRD 尚未列出完整清單，本清單需與搜尋、訂閱及行事曆負責�
 - `published_events` view 只提供 published 活動；搜尋、行事曆與通知應從此 view 或加上相同狀態條件查詢。
 - 來源模組尚未有 `sources` 表，`source_id` 目前只有正整數約束，**尚無 FK**。來源主鍵定案後，由接合者新增 migration 補上 `REFERENCES sources(id)` 並檢查既有資料。
 
-後端既有啟動流程會呼叫 migrate()；亦可在 repo 根目錄執行 `npm run db:migrate -w backend`。這次驗證只使用記憶體資料庫，不寫入正式活動資料。
+後端既有啟動流程會呼叫 migrate()；亦可在 repo 根目錄執行 `npm run db:migrate -w backend`。
 
 ## Event 範例
 
@@ -114,7 +112,7 @@ SRD 尚未列出完整清單，本清單需與搜尋、訂閱及行事曆負責�
 ```ts
 import { processAnnouncement } from './modules/events/events.service.js';
 
-const { event, change, previousStatus } = processAnnouncement(db, {
+const event = processAnnouncement(db, {
   sourceId: 1,
   url: 'https://www.ntou.edu.tw/announcements/example',
   title: '海大 AI 講座',
@@ -124,11 +122,10 @@ const { event, change, previousStatus } = processAnnouncement(db, {
 }, { defaultCategory: 'lecture', tags: ['AI'] });
 ```
 
-此範例為合成資料。`db` 是已執行 migration 的 SQLite DatabaseSync。US-17 呼叫前須確認來源已核准、啟用且屬於海大。
+此範例為合成資料。`db` 是已執行 migration 的 SQLite DatabaseSync。US-17 呼叫前須確認來源已核准且啟用。
 
 - `convertAnnouncement`：HTML 轉純文字、移除 script/style、全形轉半形、合併空白、擷取欄位及分類，不寫入資料庫。
-- `processAnnouncement`：轉換後 upsert；`upsertEvent` 在寫入前再次驗證必填欄位、日期與活動範圍。
-- 回傳 `UpsertResult`：`change` 為 `created`／`updated`／`unchanged`，`previousStatus` 為寫入前的狀態（新建時為 null）。US-08 以 `event.status === 'published' && previousStatus !== 'published'` 判斷新發布活動，重跑擷取時內容未變為 `unchanged`，不會重複觸發。
+- `processAnnouncement`：轉換後 upsert；`upsertEvent` 在寫入前再次驗證必填欄位與日期。
 - 缺少來源／原始網址：轉換結果為 needs_review；無法建立唯一追溯鍵，因此儲存函式拋錯，US-17 須保留 RawAnnouncement 並送人工修正，不產生假來源或假網址。
 - 其他缺必填欄位：可寫入 needs_review，公開 view 不會回傳。原始資料修正後重跑可更新為 published。
 - 報名連結支援 HTML anchor、純文字網址與相對路徑；僅接受 HTTP(S)，不接受帳密網址或 javascript 連結；指回公告頁本身的錨點（如 `href="#"`）不算報名連結。
@@ -144,20 +141,8 @@ const { event, change, previousStatus } = processAnnouncement(db, {
 - `10/7–10/9` 的 endTime 為 `10/10 00:00`，採行事曆常用的排他結束日期；無年份的跨年區間可遞增結束年份。
 - 不合法日期、時間倒置、多個未形成區間的日期或無法解析的時間，均標記待審。中文數字時間、模糊日期、隱含跨午夜時間（含「晚上12點」）目前需人工確認。
 
-## 測試公告與驗收對照
+## 測試公告
 
 `fixtures/ntou-announcements.json` 收錄 20 個不同原始網址：食品科學系 12 則、學術演講 7 則、國際事務處 1 則。保留 excerptSource 與 captureKind，標題採短述、內文為與解析相關的欄位摘錄，**不是完整原始 HTML 快照**。食品系 listing-fields 只記錄列表確認的日期，未提供時間因此為全天；detail-fields 保留已確認的時間字串。
 
 資料來源：[食品系演講列表](https://fs.ntou.edu.tw/p/403-1073-380-1.php?Lang=zh-tw)、各 fixture 所列的學術演講 detail.aspx、[國際處實習計畫說明會](https://oia.ntou.edu.tw/p/406-1022-129806,r11.php?Lang=zh-tw)。離線測試不依賴網站即時回應。
-
-| Issue 項目 | 狀態 |
-| --- | --- |
-| Event schema、migration、欄位文件與範例 | 完成 |
-| 清理、日期解析、欄位擷取、分類、必填驗證 | 完成，非支援格式進待審 |
-| 台北 ISO 時間、待審隔離、冪等更新、來源追溯 | 完成；缺追溯鍵須由擷取端保留 |
-| 20 則真實公告 fixture 與單元測試 | 完成，使用欄位摘錄 |
-| 與 US-17 負責人確認介面 | 待組員確認，本文件提供契約 |
-| source_id 外鍵 | 待 sources 表建立後新增 migration 接合 |
-| schema PR review／merge | 待 GitHub PR 流程，不等同程式已合併 |
-
-US-01、US-05、US-08 的 API 接合屬於各自 issue；本次不實作這些功能。
