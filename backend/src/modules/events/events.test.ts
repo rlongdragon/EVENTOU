@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import { migrate } from '../../db/index.js';
+import { seedSources } from '../sources/sources.testHelpers.js';
 import { cleanAnnouncement, httpUrl } from './events.cleaner.js';
 import { convertAnnouncement } from './events.converter.js';
 import { parseEventDates } from './events.dates.js';
@@ -145,6 +146,7 @@ test('冪等更新保留 id 與建立時間，待審不出現在公開 view，�
   const db = new DatabaseSync(':memory:');
   try {
     migrate(db);
+    seedSources(db, 2);
     const first = processAnnouncement(db, raw, {}, new Date(reference));
     const second = processAnnouncement(
       db,
@@ -180,6 +182,7 @@ test('儲存再次驗證，不能自行指定 published 繞過日期或必填檢
   const db = new DatabaseSync(':memory:');
   try {
     migrate(db);
+    seedSources(db);
     const converted = convertAnnouncement(raw);
     for (const override of [
       { startTime: '2026-02-30T14:00:00+08:00' },

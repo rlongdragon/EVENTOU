@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import { migrate } from '../../db/index.js';
+import { seedSources } from '../sources/sources.testHelpers.js';
 
 process.env.DATABASE_PATH = ':memory:';
 
@@ -10,6 +11,7 @@ test('Event schema 可重跑 migration，保存待審並只公開完整活動', 
   try {
     migrate(db);
     migrate(db);
+    seedSources(db);
     const insert = db.prepare(`
       INSERT INTO events (
         title, category, start_time, all_day, source_id, original_url, status,
