@@ -85,7 +85,7 @@ export function EventDetailPage() {
         <dt>地點</dt>
         <dd>{event.location ?? '未提供'}</dd>
         <dt>類別</dt>
-        <dd>{event.category}</dd>
+        <dd>{event.categoryLabel}</dd>
         <dt>主辦單位</dt>
         <dd>{event.organizer ?? '未提供'}</dd>
       </dl>

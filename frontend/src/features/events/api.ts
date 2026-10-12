@@ -3,8 +3,10 @@ export interface EventDetail {
   id: number;
   title: string;
   description: string;
-  /** 類別代碼，顯示名稱待類別清單定案（#9）後再處理 */
+  /** 類別代碼 */
   category: string;
+  /** 類別顯示名稱，由後端依 EVENT_CATEGORY_LABELS 提供 */
+  categoryLabel: string;
   /** Asia/Taipei ISO 8601；全天活動的 endTime 為結束日隔天 00:00 */
   startTime: string;
   endTime: string | null;

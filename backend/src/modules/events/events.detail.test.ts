@@ -46,7 +46,10 @@ after(() => {
 
 async function getEvent(eventId: string | number) {
   const response = await fetch(`${baseUrl}/api/events/${eventId}`);
-  const body = (await response.json()) as { event?: PublishedEvent; error?: string };
+  const body = (await response.json()) as {
+    event?: PublishedEvent & { categoryLabel: string };
+    error?: string;
+  };
   return { status: response.status, body };
 }
 
@@ -60,6 +63,7 @@ describe('GET /api/events/:eventId（US-02）', () => {
     assert.equal(event.status, 'published');
     assert.equal(event.title, '海大講座');
     assert.equal(event.category, 'lecture');
+    assert.equal(event.categoryLabel, '講座');
     assert.equal(event.startTime, '2026-10-07T14:00:00+08:00');
     assert.equal(event.endTime, '2026-10-07T16:00:00+08:00');
     assert.equal(event.allDay, false);
