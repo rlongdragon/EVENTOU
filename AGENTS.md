@@ -21,6 +21,8 @@ Source（已核准且啟用中）
 
 搜尋、行事曆、通知都讀同一份 Event，不要各自另存一份活動資料。
 
+接合擷取、搜尋、行事曆、通知或去重時，先讀 [`docs/event-schema.md`](docs/event-schema.md)；Event 欄位、`published_events` view 與來源 FK 的接合限制皆見該文件。
+
 ## 目錄結構
 
 npm workspaces 單一 repo，前後端各是一個 workspace。

@@ -3,7 +3,7 @@ import { notImplemented } from '../../shared/notImplemented.js';
 import { requireAuth } from '../auth/auth.middleware.js';
 
 // 活動（Event）：RawAnnouncement → Event，唯一鍵 source_id + original_url
-// TODO(#5): US-19 定義 Event 資料結構，把 RawAnnouncement 整理成統一活動格式
+// US-19 轉換入口為 events.service.ts 的 processAnnouncement；資料格式見 events.types.ts。
 // TODO(#7): US-20 跨來源偵測可能重複的活動
 export const eventsRouter = Router();
 
