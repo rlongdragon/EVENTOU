@@ -127,6 +127,24 @@ npm run user:set-role -w backend -- someone@example.com admin
 - `.ics` 的產生邏輯在 `backend/src/modules/calendars/calendars.ics.ts` 的 `buildCalendar`，US-09 的個人行事曆可沿用。
 - 前端頁面 `/calendars`：列出各類別的訂閱網址，提供「複製網址」與「訂閱行事曆」（`webcal://`）。Google Calendar 等線上服務需要能從外部連到的網址，本機的 `localhost` 網址無法訂閱。
 
+## 訂閱活動類別（US-07）
+
+- 後端 API（皆需登入，訪客回傳 `401`）：`GET /api/subscriptions`（所有類別與自己的訂閱狀態）、`PUT /api/subscriptions/:category`（訂閱）、`DELETE /api/subscriptions/:category`（取消訂閱）。三者都回傳 `{ "categories": [{ "category", "label", "subscribed" }] }`。
+- `:category` 為類別代碼（`EVENT_CATEGORIES`），不存在的類別回傳 `404`。訂閱與取消都可重複呼叫：重複訂閱不會產生第二筆，取消未訂閱的類別也視為成功。
+- 訂閱關係存在 `category_subscriptions`（migration 7），主鍵為 `(user_id, category)`；使用者刪除時一併刪除。類別值域由程式驗證，不設 CHECK。
+- US-08 的通知對象請用 `listSubscribersByCategory()`（`backend/src/modules/subscriptions/subscriptions.service.ts`）取得，取消訂閱的使用者不會出現。
+- 前端頁面 `/subscriptions`（需登入，訪客會先被導向登入再回來）：「我的訂閱」清單，以及各類別的訂閱狀態與訂閱／取消訂閱按鈕。
+
+## 新活動 Email 通知（US-08）
+
+- 沒有 HTTP API，由後端啟動時開始的背景排程處理（`backend/src/modules/subscriptions/subscriptions.scheduler.ts`），預設每 5 分鐘一輪，可用 `NOTIFICATION_INTERVAL_MS`（毫秒，預設 `300000`）調整。
+- 每一輪會從 `published_events` 找出**還沒有派送紀錄**的活動，替當下訂閱該類別的使用者建立寄送紀錄並寄信。是不是「新活動」只看有沒有派送過，不看 upsert 的結果：重跑擷取或活動內容更新不會再寄，`needs_review` 轉為已發布時才第一次通知。
+- 不通知的情況：活動已經結束、來源審核狀態不是 `approved`、使用者在活動派送之後才訂閱、寄出前已取消訂閱。
+- 資料表（migration 8）：`event_notification_dispatches`（每個活動只派送一次）、`event_notifications`（寄送紀錄，`(event_id, user_id)` 唯一，同一活動對同一使用者只寄一次）。
+- 寄送狀態：`pending`（待寄送或待重試）、`sent`、`failed`（試滿 5 次）、`skipped`。失敗原因記在 `last_error`，`pending` 的通知每一輪都會重試；`failed` 的可用 `npm run notifications:retry -w backend` 重新排入。
+- 信件內容包含活動標題、時間、地點、活動頁連結、原始公告連結，以及到訂閱頁取消訂閱的連結；連結的網站位址由 `PUBLIC_BASE_URL` 決定。
+- 寄信使用 SMTP（`nodemailer`），設定見 `backend/.env.example` 的 `SMTP_*` 與 `MAIL_FROM`。**沒有設定 `SMTP_HOST` 時不會真的寄信**，只把信件內容印在後端主控台，方便本機開發。
+
 ## 功能入口與 TODO
 
 US-17 已提供每小時背景擷取、原始公告 upsert、擷取紀錄與 US-19 接合。管理員可使用 `POST /api/ingestion/:sourceId/fetch` 手動擷取，以及 `GET /api/ingestion/:sourceId/runs` 查看最近 100 筆紀錄。人工來源設定、環境變數與操作方式見 [`docs/ingestion.md`](docs/ingestion.md)。
