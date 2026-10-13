@@ -1,5 +1,7 @@
 # EVENTOU
 
+<img width="1448" height="1086" alt="image" src="https://github.com/user-attachments/assets/cb3dfb6d-dc99-482d-8710-bd92948942fe" />
+
 校園活動資訊整合平台。需求文件見 [`docs/需求文件網址.md`](docs/需求文件網址.md)。
 
 ## 技術架構
@@ -106,6 +108,14 @@ npm run user:set-role -w backend -- someone@example.com admin
 - 只有 `pending` 的來源能審核，已審核的來源回傳 `409`。審核者、審核時間、備註與海大確認會保存（migration 5：`reviewed_by`、`reviewed_at`、`review_note`、`ntou_verified`）。
 - 審核只改 `review_status`，不改 `enabled`；是否擷取仍要 US-16 的啟用狀態與 US-17 判斷。
 - 前端頁面 `/admin/sources`（管理員）：預設顯示待審核來源，可核准或退回，也可切換查看已核准、已退回的來源。
+
+## 來源啟用／停用（US-16）
+
+- 後端 API（需管理員）：`PATCH /api/sources/:sourceId/enabled`，body 為 `{ "enabled": boolean }`。
+- 只有 `approved` 的來源能切換，其他審核狀態回傳 `409`；切換不影響 `review_status`。
+- **核准即啟用是刻意的決定**：`sources.enabled` 預設為 `1`（US-13 的 schema），來源核准後不需要管理員再按「啟用」就會出現在 `listIngestableSources()`；管理員要暫停擷取時再按「停用」。管理員用 `GET /api/sources` 可看到每個來源目前是否啟用。
+- US-17 的排程擷取請用 `listIngestableSources()`（`backend/src/modules/sources/sources.service.ts`）取得來源，只會包含「已核准且啟用中」的來源，停用的來源不會被擷取。
+- 前端 `/admin/sources`：已核准的來源會顯示啟用狀態，可按鈕啟用或停用。
 
 ## 類別公開行事曆（US-05）
 

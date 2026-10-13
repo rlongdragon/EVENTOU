@@ -97,3 +97,12 @@ export async function reviewSource(id: number, input: ReviewSourceInput): Promis
   });
   return source;
 }
+
+/** 管理員啟用或停用已核准的來源。 */
+export async function setSourceEnabled(id: number, enabled: boolean): Promise<AdminSource> {
+  const { source } = await request<{ source: AdminSource }>(`/api/sources/${id}/enabled`, {
+    method: 'PATCH',
+    body: JSON.stringify({ enabled }),
+  });
+  return source;
+}
