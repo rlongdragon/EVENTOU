@@ -129,7 +129,9 @@ npm run user:set-role -w backend -- someone@example.com admin
 
 ## 功能入口與 TODO
 
-US-19 已提供 Event 資料格式、migration、公告清理與轉換、日期解析、驗證及冪等 upsert，供搜尋、行事曆與通知共用。使用 `processAnnouncement` 接合擷取結果。欄位、RawAnnouncement 契約、範例及來源 FK 的接合限制見 [`docs/event-schema.md`](docs/event-schema.md)。擷取排程及各功能 API 仍由各自模組實作。
+US-17 已提供每小時背景擷取、原始公告 upsert、擷取紀錄與 US-19 接合。管理員可使用 `POST /api/ingestion/:sourceId/fetch` 手動擷取，以及 `GET /api/ingestion/:sourceId/runs` 查看最近 100 筆紀錄。人工來源設定、環境變數與操作方式見 [`docs/ingestion.md`](docs/ingestion.md)。
+
+US-19 已提供 Event 資料格式、migration、公告清理與轉換、日期解析、驗證及冪等 upsert，供搜尋、行事曆與通知共用。使用 `processAnnouncement` 接合擷取結果。欄位、RawAnnouncement 契約、範例及來源 FK 的接合限制見 [`docs/event-schema.md`](docs/event-schema.md)。其他功能 API 由各自模組實作。
 
 各功能的入口已預先建立，尚未實作的部分：
 
