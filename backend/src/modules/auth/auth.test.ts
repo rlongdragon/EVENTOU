@@ -163,7 +163,7 @@ describe('角色權限', () => {
 
   test('一般使用者可使用需登入的功能，不能使用管理員功能', async () => {
     const cookie = userCookie;
-    assert.equal((await request('POST', '/api/sources', { cookie })).status, 501);
+    assert.equal((await request('POST', '/api/sources', { cookie })).status, 400);
     assert.equal((await request('GET', '/api/subscriptions', { cookie })).status, 501);
     assert.equal((await request('POST', '/api/sources/1/review', { cookie })).status, 403);
     assert.equal((await request('PATCH', '/api/sources/1/enabled', { cookie })).status, 403);
