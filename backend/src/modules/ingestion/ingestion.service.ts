@@ -2,6 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { getDb } from '../../db/index.js';
 import { processAnnouncement } from '../events/events.service.js';
 import type { RawAnnouncement } from '../events/events.types.js';
+import { listIngestableSources } from '../sources/sources.service.js';
 import { positiveInteger, scraperConfigs, type ScraperConfig } from './ingestion.config.js';
 import { scrapeAnnouncements, ScraperClient } from './ingestion.scraper.js';
 
@@ -25,9 +26,7 @@ export class IngestionService {
   ) {}
   async runAll(): Promise<void> {
     this.client.clearRobots();
-    const sources = this.db
-      .prepare("SELECT id FROM sources WHERE review_status='approved' AND enabled=1")
-      .all();
+    const sources = listIngestableSources();
     for (const source of sources) {
       try {
         await this.runSource(Number(source.id));

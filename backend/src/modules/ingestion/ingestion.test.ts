@@ -29,7 +29,9 @@ function setup(count = 1) {
   return db;
 }
 test('只擷取核准且啟用的來源，停用後不再擷取，錯誤不影響其他來源', async () => {
-  const db = setup(5);
+  const db = getDb();
+  migrate(db);
+  seedSources(db, 5);
   try {
     db.exec(
       "UPDATE sources SET review_status='approved' WHERE id IN (1,2,3); UPDATE sources SET enabled=0 WHERE id=3; UPDATE sources SET review_status='rejected' WHERE id=4;",
@@ -64,7 +66,7 @@ test('只擷取核准且啟用的來源，停用後不再擷取，錯誤不影�
     assert.deepEqual(calls, [1, 2, 1]);
     await assert.rejects(service.runSource(2), /停用/);
   } finally {
-    db.close();
+    closeDb();
   }
 });
 test('重複公告保持同一筆，內容更新後更新 Event', async () => {
