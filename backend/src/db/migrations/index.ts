@@ -149,7 +149,7 @@ export const migrations: Migration[] = [
     `,
   },
   {
-    id: 6,
+    id: 7,
     name: 'create_category_subscriptions',
     // US-07：使用者訂閱的活動類別，(user_id, category) 為主鍵，同一類別不會重複訂閱。
     // category 值域與 events 相同，由程式 EVENT_CATEGORIES 驗證，不設 CHECK，增減類別不必重建資料表。
