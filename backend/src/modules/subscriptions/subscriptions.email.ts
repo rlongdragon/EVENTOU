@@ -21,19 +21,33 @@ export interface NotificationEvent {
 }
 
 const TIME_ZONE = 'Asia/Taipei';
-const dateFormat = new Intl.DateTimeFormat('zh-TW', {
+const WEEKDAYS = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
+// 只用 Intl 取出台北時間的數字，文字自己組：Intl 直接輸出的字串會隨 Node 內建的 ICU 版本不同
+// （例如日期與星期之間有沒有空格），信件內容不應該跟著變。
+const partsFormat = new Intl.DateTimeFormat('en-US', {
   timeZone: TIME_ZONE,
   year: 'numeric',
-  month: 'long',
+  month: 'numeric',
   day: 'numeric',
-  weekday: 'short',
-});
-const timeFormat = new Intl.DateTimeFormat('zh-TW', {
-  timeZone: TIME_ZONE,
-  hour: '2-digit',
-  minute: '2-digit',
+  hour: 'numeric',
+  minute: 'numeric',
   hourCycle: 'h23',
 });
+
+/** 把時間轉成台北時間的日期（例：2026年10月7日 週三）與時間（例：14:00）。 */
+function taipeiDateTime(value: Date): { date: string; time: string } {
+  const parts: Partial<Record<Intl.DateTimeFormatPartTypes, number>> = {};
+  for (const part of partsFormat.formatToParts(value)) {
+    if (part.type !== 'literal') parts[part.type] = Number(part.value);
+  }
+  const { year = 0, month = 1, day = 1, hour = 0, minute = 0 } = parts;
+  const weekday = WEEKDAYS[new Date(Date.UTC(year, month - 1, day)).getUTCDay()];
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return {
+    date: `${year}年${month}月${day}日 ${weekday}`,
+    time: `${pad(hour)}:${pad(minute)}`,
+  };
+}
 
 /** 例：2026年10月7日 週三 14:00 – 16:00；全天活動只顯示日期（與前端活動頁的顯示方式一致）。 */
 export function formatEventTime({
@@ -41,16 +55,16 @@ export function formatEventTime({
   endTime,
   allDay,
 }: Pick<NotificationEvent, 'startTime' | 'endTime' | 'allDay'>): string {
-  const start = new Date(startTime);
+  const start = taipeiDateTime(new Date(startTime));
   // 全天活動的 endTime 是結束日隔天 00:00，顯示時往前推到結束日
-  const end = endTime ? new Date(new Date(endTime).getTime() - (allDay ? 1 : 0)) : null;
-  const startDate = dateFormat.format(start);
-  const endDate = end ? dateFormat.format(end) : startDate;
-  if (allDay) return endDate === startDate ? startDate : `${startDate} – ${endDate}`;
-  const startText = `${startDate} ${timeFormat.format(start)}`;
+  const end = endTime
+    ? taipeiDateTime(new Date(new Date(endTime).getTime() - (allDay ? 1 : 0)))
+    : null;
+  if (allDay) return !end || end.date === start.date ? start.date : `${start.date} – ${end.date}`;
+  const startText = `${start.date} ${start.time}`;
   if (!end) return startText;
-  const endText = endDate === startDate ? '' : `${endDate} `;
-  return `${startText} – ${endText}${timeFormat.format(end)}`;
+  const endText = end.date === start.date ? '' : `${end.date} `;
+  return `${startText} – ${endText}${end.time}`;
 }
 
 function escapeHtml(value: string): string {

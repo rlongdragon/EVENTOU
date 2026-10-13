@@ -276,6 +276,24 @@ describe('通知信內容', () => {
     assert.equal(formatEventTime({ ...event, endTime: null }), '2026年10月12日 週一');
   });
 
+  test('時間以台北時間顯示，跨日活動的結束時間帶日期', () => {
+    const timed = { startTime: '2026-10-07T14:00:00+08:00', allDay: false };
+    assert.equal(
+      formatEventTime({ ...timed, endTime: '2026-10-07T16:00:00+08:00' }),
+      '2026年10月7日 週三 14:00 – 16:00',
+    );
+    assert.equal(formatEventTime({ ...timed, endTime: null }), '2026年10月7日 週三 14:00');
+    // UTC 16:30 是台北隔天 00:30
+    assert.equal(
+      formatEventTime({
+        ...timed,
+        startTime: '2026-10-07T23:00:00+08:00',
+        endTime: '2026-10-07T16:30:00Z',
+      }),
+      '2026年10月7日 週三 23:00 – 2026年10月8日 週四 00:30',
+    );
+  });
+
   test('HTML 內容會跳脫特殊字元，沒有地點時顯示未提供', () => {
     const message = buildNewEventEmail(
       { email: 'a@example.com', displayName: '<Amy>' },

@@ -165,7 +165,7 @@ export const migrations: Migration[] = [
     `,
   },
   {
-    id: 7,
+    id: 8,
     name: 'create_event_notifications',
     // US-08：event_notification_dispatches 記錄活動是否已派送過通知（每個活動只派送一次）；
     // event_notifications 是每位訂閱者的寄送紀錄，(event_id, user_id) 唯一，同一活動對同一使用者只寄一次。

@@ -3,16 +3,17 @@ import { runNotificationCycle } from './subscriptions.notifier.js';
 
 // US-08 新活動 Email 通知的背景排程，不提供 HTTP API。
 
-const DEFAULT_INTERVAL_SECONDS = 300;
+const DEFAULT_INTERVAL_MS = 300000;
 const DEFAULT_PUBLIC_BASE_URL = 'http://localhost:5173';
 
 /**
- * 啟動定期通知排程：每隔 NOTIFICATION_INTERVAL_SECONDS（預設 300 秒，需小於 NFR-05 的 15 分鐘）
+ * 啟動定期通知排程：每隔 NOTIFICATION_INTERVAL_MS 毫秒（預設 300000，即 5 分鐘，需小於 NFR-05 的 15 分鐘；
+ * 單位與擷取排程的 INGESTION_INTERVAL_MS 一致）
  * 執行一輪 runNotificationCycle。信中的連結以 PUBLIC_BASE_URL 為網站位址。
  */
 export function startNotificationScheduler(env: NodeJS.ProcessEnv = process.env): NodeJS.Timeout {
-  const seconds = Number(env.NOTIFICATION_INTERVAL_SECONDS);
-  const intervalMs = (seconds > 0 ? seconds : DEFAULT_INTERVAL_SECONDS) * 1000;
+  const configured = Number(env.NOTIFICATION_INTERVAL_MS);
+  const intervalMs = configured > 0 ? configured : DEFAULT_INTERVAL_MS;
   const baseUrl = (env.PUBLIC_BASE_URL ?? DEFAULT_PUBLIC_BASE_URL).replace(/\/+$/, '');
   const mailer = createMailer(env);
   let running = false;

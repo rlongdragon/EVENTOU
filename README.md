@@ -125,10 +125,10 @@ npm run user:set-role -w backend -- someone@example.com admin
 
 ## 新活動 Email 通知（US-08）
 
-- 沒有 HTTP API，由後端啟動時開始的背景排程處理（`backend/src/modules/subscriptions/subscriptions.scheduler.ts`），預設每 300 秒一輪，可用 `NOTIFICATION_INTERVAL_SECONDS` 調整。
+- 沒有 HTTP API，由後端啟動時開始的背景排程處理（`backend/src/modules/subscriptions/subscriptions.scheduler.ts`），預設每 5 分鐘一輪，可用 `NOTIFICATION_INTERVAL_MS`（毫秒，預設 `300000`）調整。
 - 每一輪會從 `published_events` 找出**還沒有派送紀錄**的活動，替當下訂閱該類別的使用者建立寄送紀錄並寄信。是不是「新活動」只看有沒有派送過，不看 upsert 的結果：重跑擷取或活動內容更新不會再寄，`needs_review` 轉為已發布時才第一次通知。
 - 不通知的情況：活動已經結束、來源審核狀態不是 `approved`、使用者在活動派送之後才訂閱、寄出前已取消訂閱。
-- 資料表（migration 7）：`event_notification_dispatches`（每個活動只派送一次）、`event_notifications`（寄送紀錄，`(event_id, user_id)` 唯一，同一活動對同一使用者只寄一次）。
+- 資料表（migration 8）：`event_notification_dispatches`（每個活動只派送一次）、`event_notifications`（寄送紀錄，`(event_id, user_id)` 唯一，同一活動對同一使用者只寄一次）。
 - 寄送狀態：`pending`（待寄送或待重試）、`sent`、`failed`（試滿 5 次）、`skipped`。失敗原因記在 `last_error`，`pending` 的通知每一輪都會重試；`failed` 的可用 `npm run notifications:retry -w backend` 重新排入。
 - 信件內容包含活動標題、時間、地點、活動頁連結、原始公告連結，以及到訂閱頁取消訂閱的連結；連結的網站位址由 `PUBLIC_BASE_URL` 決定。
 - 寄信使用 SMTP（`nodemailer`），設定見 `backend/.env.example` 的 `SMTP_*` 與 `MAIL_FROM`。**沒有設定 `SMTP_HOST` 時不會真的寄信**，只把信件內容印在後端主控台，方便本機開發。
