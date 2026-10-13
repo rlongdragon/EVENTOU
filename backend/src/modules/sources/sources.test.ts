@@ -5,6 +5,7 @@ import { after, before, describe, test } from 'node:test';
 import { createApp } from '../../app.js';
 import { closeDb, getDb, migrate } from '../../db/index.js';
 import { setUserRole } from '../auth/auth.service.js';
+import { listIngestableSources } from './sources.service.js';
 
 process.env.DATABASE_PATH = ':memory:';
 
@@ -359,5 +360,113 @@ describe('POST /api/sources/:sourceId/review', () => {
     const again = await review(id, { decision: 'approved', ntouVerified: true });
     assert.equal(again.status, 409);
     assert.equal(again.body.error, 'already_reviewed');
+  });
+});
+
+describe('PATCH /api/sources/:sourceId/enabled', () => {
+  async function approvedSource(adminCookie: string, submitterCookie: string, name: string) {
+    const id = await submitAs(submitterCookie, name);
+    const reviewed = await request('POST', `/api/sources/${id}/review`, {
+      cookie: adminCookie,
+      body: { decision: 'approved', ntouVerified: true },
+    });
+    assert.equal(reviewed.status, 200);
+    return id;
+  }
+
+  test('訪客 401，一般使用者 403', async () => {
+    const user = await registerUser('toggle-user@example.com');
+    const id = await submitAs(user.cookie, '權限測試（啟用）');
+    const body = { enabled: false };
+    assert.equal((await request('PATCH', `/api/sources/${id}/enabled`, { body })).status, 401);
+    assert.equal(
+      (await request('PATCH', `/api/sources/${id}/enabled`, { cookie: user.cookie, body })).status,
+      403,
+    );
+  });
+
+  test('已核准的來源可以停用，再重新啟用，且不影響審核狀態', async () => {
+    const user = await registerUser('toggle-submitter@example.com');
+    const admin = await loginAdmin('toggle-admin@example.com');
+    const id = await approvedSource(admin.cookie, user.cookie, '要切換的來源');
+    const toggle = (enabled: boolean) =>
+      request('PATCH', `/api/sources/${id}/enabled`, { cookie: admin.cookie, body: { enabled } });
+
+    const off = await toggle(false);
+    assert.equal(off.status, 200);
+    assert.equal(off.body.source.enabled, false);
+    assert.equal(off.body.source.reviewStatus, 'approved');
+    assert.ok(!listIngestableSources().some((s) => s.id === id));
+
+    const listed = await request('GET', '/api/sources?status=approved', { cookie: admin.cookie });
+    assert.equal(listed.body.sources.find((s: { id: number }) => s.id === id).enabled, false);
+
+    const on = await toggle(true);
+    assert.equal(on.body.source.enabled, true);
+    assert.ok(listIngestableSources().some((s) => s.id === id));
+  });
+
+  test('只有已核准的來源可以切換，未審核或已退回回傳 409', async () => {
+    const user = await registerUser('toggle-pending@example.com');
+    const admin = await loginAdmin('toggle-pending-admin@example.com');
+    const pendingId = await submitAs(user.cookie, '還沒審核');
+    const rejectedId = await submitAs(user.cookie, '已退回');
+    await request('POST', `/api/sources/${rejectedId}/review`, {
+      cookie: admin.cookie,
+      body: { decision: 'rejected' },
+    });
+
+    for (const id of [pendingId, rejectedId]) {
+      const result = await request('PATCH', `/api/sources/${id}/enabled`, {
+        cookie: admin.cookie,
+        body: { enabled: true },
+      });
+      assert.equal(result.status, 409);
+      assert.equal(result.body.error, 'not_approved');
+    }
+  });
+
+  test('驗證 enabled 欄位，找不到來源回傳 404', async () => {
+    const admin = await loginAdmin('toggle-edge-admin@example.com');
+    const patch = (id: number | string, body: unknown) =>
+      request('PATCH', `/api/sources/${id}/enabled`, { cookie: admin.cookie, body });
+
+    const missing = await patch(1, {});
+    assert.equal(missing.status, 400);
+    assert.ok(missing.body.fields.enabled);
+    assert.equal((await patch(1, { enabled: 'yes' })).status, 400);
+    assert.equal((await patch(999999, { enabled: true })).status, 404);
+    assert.equal((await patch('abc', { enabled: true })).status, 404);
+  });
+});
+
+describe('listIngestableSources', () => {
+  test('只包含已核准且啟用中的來源', async () => {
+    const user = await registerUser('ingest-submitter@example.com');
+    const admin = await loginAdmin('ingest-admin@example.com');
+    const pendingId = await submitAs(user.cookie, '擷取：待審核');
+    const rejectedId = await submitAs(user.cookie, '擷取：已退回');
+    const disabledId = await submitAs(user.cookie, '擷取：已停用');
+    const activeId = await submitAs(user.cookie, '擷取：啟用中');
+    await request('POST', `/api/sources/${rejectedId}/review`, {
+      cookie: admin.cookie,
+      body: { decision: 'rejected' },
+    });
+    for (const id of [disabledId, activeId]) {
+      await request('POST', `/api/sources/${id}/review`, {
+        cookie: admin.cookie,
+        body: { decision: 'approved', ntouVerified: true },
+      });
+    }
+    await request('PATCH', `/api/sources/${disabledId}/enabled`, {
+      cookie: admin.cookie,
+      body: { enabled: false },
+    });
+
+    const ids = listIngestableSources().map((s) => s.id);
+    assert.ok(ids.includes(activeId));
+    for (const id of [pendingId, rejectedId, disabledId]) {
+      assert.ok(!ids.includes(id), `source ${id} 不應被擷取`);
+    }
   });
 });

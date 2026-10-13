@@ -7,6 +7,7 @@ import {
   listSourcesBySubmitter,
   listSourcesForAdmin,
   reviewSource,
+  setSourceEnabled,
 } from './sources.service.js';
 import { REVIEW_STATUSES, isSourceType, type ReviewStatus } from './sourceTypes.js';
 
@@ -158,5 +159,27 @@ sourcesRouter.post('/:sourceId/review', requireRole('admin'), (req, res) => {
 // TODO(#23): US-15 來源可信度／風險提示
 sourcesRouter.get('/:sourceId/risk', notImplemented('#23'));
 
-// TODO(#24): US-16 管理員啟用／停用來源
-sourcesRouter.patch('/:sourceId/enabled', requireRole('admin'), notImplemented('#24'));
+// US-16 管理員啟用／停用來源：只有已核准的來源能切換，不影響審核狀態；
+// 停用的來源不會進入擷取流程（見 listIngestableSources）
+sourcesRouter.patch('/:sourceId/enabled', requireRole('admin'), (req, res) => {
+  const sourceId = Number(req.params.sourceId);
+  if (!Number.isInteger(sourceId) || sourceId <= 0) {
+    res.status(404).json({ error: 'not_found', message: '找不到這個來源' });
+    return;
+  }
+
+  const enabled = req.body?.enabled;
+  if (typeof enabled !== 'boolean') {
+    sendValidationError(res, '啟用狀態有誤', { enabled: '請指定啟用或停用' });
+    return;
+  }
+
+  const result = setSourceEnabled(sourceId, enabled);
+  if (result === 'not_found') {
+    res.status(404).json({ error: 'not_found', message: '找不到這個來源' });
+  } else if (result === 'not_approved') {
+    res.status(409).json({ error: 'not_approved', message: '只有已核准的來源可以啟用或停用' });
+  } else {
+    res.json({ source: result });
+  }
+});

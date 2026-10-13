@@ -5,6 +5,7 @@ import {
   SOURCE_TYPE_OPTIONS,
   fetchAdminSources,
   reviewSource,
+  setSourceEnabled,
   type AdminSource,
   type ReviewStatus,
 } from './api';
@@ -80,6 +81,45 @@ function ReviewForm({
   );
 }
 
+function EnabledToggle({
+  source,
+  onChanged,
+}: {
+  source: AdminSource;
+  onChanged: (source: AdminSource) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (source.reviewStatus !== 'approved') return <>—</>;
+
+  async function toggle() {
+    setError(null);
+    setBusy(true);
+    try {
+      onChanged(await setSourceEnabled(source.id, !source.enabled));
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : '無法連線到伺服器，請稍後再試');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+      <span>{source.enabled ? '啟用中' : '已停用'}</span>
+      <button type="button" disabled={busy} onClick={toggle}>
+        {source.enabled ? '停用' : '啟用'}
+      </button>
+      {error && (
+        <p role="alert" style={errorStyle}>
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function AdminSourcesPage() {
   const [filter, setFilter] = useState<ReviewStatus | 'all'>('pending');
   const [sources, setSources] = useState<AdminSource[]>([]);
@@ -118,8 +158,10 @@ export function AdminSourcesPage() {
     <>
       <h1>來源管理</h1>
 
-      <h2>審核來源</h2>
-      <p>核准前請確認來源屬於海大的單位或社團；審核結果會被保存。</p>
+      <h2>審核與啟用</h2>
+      <p>
+        核准前請確認來源屬於海大的單位或社團；審核結果會被保存。已核准的來源可在這裡啟用或停用，停用的來源不會被擷取。
+      </p>
       <label>
         顯示{' '}
         <select
@@ -150,6 +192,7 @@ export function AdminSourcesPage() {
               <th style={{ textAlign: 'left' }}>提交者</th>
               <th style={{ textAlign: 'left' }}>提交時間</th>
               <th style={{ textAlign: 'left' }}>審核</th>
+              <th style={{ textAlign: 'left' }}>啟用狀態</th>
             </tr>
           </thead>
           <tbody>
@@ -180,6 +223,9 @@ export function AdminSourcesPage() {
                     </>
                   )}
                 </td>
+                <td>
+                  <EnabledToggle source={source} onChanged={handleReviewed} />
+                </td>
               </tr>
             ))}
           </tbody>
@@ -187,13 +233,9 @@ export function AdminSourcesPage() {
       )}
 
       {/* TODO(#23): US-15 來源可信度／風險提示 */}
-      {/* TODO(#24): US-16 啟用／停用來源 */}
       <TodoPlaceholder
         title="來源管理（其他功能）"
-        issues={[
-          { number: 23, label: 'US-15 來源可信度／風險提示' },
-          { number: 24, label: 'US-16 啟用／停用來源' },
-        ]}
+        issues={[{ number: 23, label: 'US-15 來源可信度／風險提示' }]}
       />
     </>
   );

@@ -151,3 +151,40 @@ export function reviewSource(input: ReviewInput): AdminSource | 'not_found' | 'a
     .get(input.sourceId) as unknown as AdminSourceRow;
   return toAdminSource(row);
 }
+
+/**
+ * 設定來源的啟用狀態。只有已核准的來源能被啟用或停用，
+ * 其他審核狀態回傳 'not_approved'，找不到回傳 'not_found'。不影響審核狀態。
+ */
+export function setSourceEnabled(
+  sourceId: number,
+  enabled: boolean,
+): AdminSource | 'not_found' | 'not_approved' {
+  const db = getDb();
+  const updated = db
+    .prepare(
+      "UPDATE sources SET enabled = ? WHERE id = ? AND review_status = 'approved' RETURNING id",
+    )
+    .get(enabled ? 1 : 0, sourceId);
+
+  if (!updated) {
+    const exists = db.prepare('SELECT 1 FROM sources WHERE id = ?').get(sourceId);
+    return exists ? 'not_approved' : 'not_found';
+  }
+  const row = db
+    .prepare(`${ADMIN_SELECT} WHERE sources.id = ?`)
+    .get(sourceId) as unknown as AdminSourceRow;
+  return toAdminSource(row);
+}
+
+/** 可進入擷取流程的來源：已核准且啟用中。US-17 的排程擷取只處理這些來源。 */
+export function listIngestableSources(): Source[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT * FROM sources
+       WHERE review_status = 'approved' AND enabled = 1
+       ORDER BY id`,
+    )
+    .all() as unknown as SourceRow[];
+  return rows.map(toSource);
+}
