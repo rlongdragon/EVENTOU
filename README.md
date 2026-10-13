@@ -1,5 +1,7 @@
 # EVENTOU
 
+<img width="1448" height="1086" alt="image" src="https://github.com/user-attachments/assets/cb3dfb6d-dc99-482d-8710-bd92948942fe" />
+
 校園活動資訊整合平台。需求文件見 [`docs/需求文件網址.md`](docs/需求文件網址.md)。
 
 ## 技術架構
@@ -114,6 +116,16 @@ npm run user:set-role -w backend -- someone@example.com admin
 - **核准即啟用是刻意的決定**：`sources.enabled` 預設為 `1`（US-13 的 schema），來源核准後不需要管理員再按「啟用」就會出現在 `listIngestableSources()`；管理員要暫停擷取時再按「停用」。管理員用 `GET /api/sources` 可看到每個來源目前是否啟用。
 - US-17 的排程擷取請用 `listIngestableSources()`（`backend/src/modules/sources/sources.service.ts`）取得來源，只會包含「已核准且啟用中」的來源，停用的來源不會被擷取。
 - 前端 `/admin/sources`：已核准的來源會顯示啟用狀態，可按鈕啟用或停用。
+
+## 類別公開行事曆（US-05）
+
+- 後端 API（皆不需登入）：`GET /api/calendars/categories`（各類別的代碼、顯示名稱與訂閱路徑）、`GET /api/calendars/categories/:category.ics`（該類別的 iCalendar，`Content-Type: text/calendar`）。
+- 每個類別一個固定網址，類別代碼見 `EVENT_CATEGORIES`（`lecture`、`workshop`、`exhibition`、`sports`、`welfare`）；不存在的類別回傳 `404`，沒有活動的類別回傳合法的空行事曆。
+- 只輸出已發布（`published_events`）且來源審核狀態為 `approved` 的活動；活動轉為待審或來源被退回後，下次同步就會從行事曆消失。
+- 每個活動的 UID 為 `event-<活動 id>@eventou`，活動更新時 id 不變，行事曆軟體會視為同一筆並更新內容。
+- 時間以 UTC 輸出（不需 VTIMEZONE）；全天活動以 `VALUE=DATE` 輸出，結束日為排他的隔天。
+- `.ics` 的產生邏輯在 `backend/src/modules/calendars/calendars.ics.ts` 的 `buildCalendar`，US-09 的個人行事曆可沿用。
+- 前端頁面 `/calendars`：列出各類別的訂閱網址，提供「複製網址」與「訂閱行事曆」（`webcal://`）。Google Calendar 等線上服務需要能從外部連到的網址，本機的 `localhost` 網址無法訂閱。
 
 ## 訂閱活動類別（US-07）
 
