@@ -23,6 +23,8 @@ Source（已核准且啟用中）
 
 接合擷取、搜尋、行事曆、通知或去重時，先讀 [`docs/event-schema.md`](docs/event-schema.md)；Event 欄位、`published_events` view 與來源 FK 的接合限制皆見該文件。
 
+修改擷取規則、排程或手動擷取 API 時，先讀 [`docs/ingestion.md`](docs/ingestion.md)；US-17 與 US-19 共用既有 `RawAnnouncement` 型別。
+
 ## 目錄結構
 
 npm workspaces 單一 repo，前後端各是一個 workspace。
