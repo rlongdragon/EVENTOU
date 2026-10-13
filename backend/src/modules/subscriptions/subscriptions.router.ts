@@ -69,5 +69,4 @@ subscriptionsRouter.delete('/:category', (req, res) => {
   sendSubscriptions(res, userId);
 });
 
-// TODO(#10): US-08 有符合訂閱的新活動時寄送 Email 通知（背景工作，不一定需要 API）；
-//            通知對象用 subscriptions.service.ts 的 listSubscribersByCategory 取得
+// US-08 新活動 Email 通知沒有 HTTP API，由 subscriptions.scheduler.ts 的背景排程處理

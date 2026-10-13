@@ -164,4 +164,33 @@ export const migrations: Migration[] = [
       CREATE INDEX category_subscriptions_category ON category_subscriptions (category);
     `,
   },
+  {
+    id: 7,
+    name: 'create_event_notifications',
+    // US-08：event_notification_dispatches 記錄活動是否已派送過通知（每個活動只派送一次）；
+    // event_notifications 是每位訂閱者的寄送紀錄，(event_id, user_id) 唯一，同一活動對同一使用者只寄一次。
+    // status 的可用值與 modules/subscriptions/subscriptions.notifier.ts 的 NOTIFICATION_STATUSES 一致。
+    up: `
+      CREATE TABLE event_notification_dispatches (
+        event_id INTEGER PRIMARY KEY REFERENCES events (id) ON DELETE CASCADE,
+        dispatched_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      CREATE TABLE event_notifications (
+        id INTEGER PRIMARY KEY,
+        event_id INTEGER NOT NULL REFERENCES events (id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+        status TEXT NOT NULL DEFAULT 'pending'
+          CHECK (status IN ('pending', 'sent', 'failed', 'skipped')),
+        attempts INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT,
+        sent_at TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE (event_id, user_id)
+      );
+
+      CREATE INDEX event_notifications_status ON event_notifications (status);
+    `,
+  },
 ];
