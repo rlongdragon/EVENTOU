@@ -148,4 +148,20 @@ export const migrations: Migration[] = [
       ALTER TABLE sources ADD COLUMN ntou_verified INTEGER CHECK (ntou_verified IN (0, 1));
     `,
   },
+  {
+    id: 6,
+    name: 'create_category_subscriptions',
+    // US-07：使用者訂閱的活動類別，(user_id, category) 為主鍵，同一類別不會重複訂閱。
+    // category 值域與 events 相同，由程式 EVENT_CATEGORIES 驗證，不設 CHECK，增減類別不必重建資料表。
+    up: `
+      CREATE TABLE category_subscriptions (
+        user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+        category TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY (user_id, category)
+      );
+
+      CREATE INDEX category_subscriptions_category ON category_subscriptions (category);
+    `,
+  },
 ];
