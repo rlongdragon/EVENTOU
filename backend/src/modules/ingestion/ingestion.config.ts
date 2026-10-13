@@ -4,6 +4,7 @@ export interface ScraperConfig {
   titleSelector: string;
   contentSelector: string;
   publishedSelector?: string;
+  listItemSelector?: string;
   maxAnnouncements: number;
 }
 
@@ -16,7 +17,8 @@ export const scraperConfigs: ScraperConfig[] = [
   linkSelector: '.module-rcglist .mtitle a[href*="/p/406-"]',
   titleSelector: '.module-detail .hdline',
   contentSelector: '.module-detail .mpgdetail',
-  publishedSelector: '.module-detail .mdate',
+  listItemSelector: '.d-item',
+  publishedSelector: '.mdate',
   maxAnnouncements: 20,
 }));
 

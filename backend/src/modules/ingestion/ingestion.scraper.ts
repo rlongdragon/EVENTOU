@@ -85,33 +85,36 @@ export async function* scrapeAnnouncements(
   client: ScraperClient,
 ): AsyncGenerator<RawAnnouncement> {
   const list = load(await client.get(config.listUrl));
-  const urls = [
-    ...new Set(
-      list(config.linkSelector)
-        .toArray()
-        .map((element) => {
-          const url = new URL(list(element).attr('href') ?? '', config.listUrl);
-          url.hash = '';
-          return url.href;
-        }),
-    ),
-  ];
-  if (!urls.length) throw new Error('公告列表未找到連結，請檢查頁面結構與選擇器');
-  for (const url of urls.slice(0, config.maxAnnouncements)) {
+  const announcements = new Map<string, string | null>(
+    list(config.linkSelector)
+      .toArray()
+      .map((element) => {
+        const url = new URL(list(element).attr('href') ?? '', config.listUrl);
+        url.hash = '';
+        const published =
+          config.listItemSelector && config.publishedSelector
+            ? list(element)
+                .closest(config.listItemSelector)
+                .find(config.publishedSelector)
+                .first()
+                .text()
+            : '';
+        return [url.href, published.match(/\b\d{4}-\d{2}-\d{2}\b/)?.[0] ?? null] as const;
+      }),
+  );
+  if (!announcements.size) throw new Error('公告列表未找到連結，請檢查頁面結構與選擇器');
+  for (const [url, publishedAt] of [...announcements].slice(0, config.maxAnnouncements)) {
     if (new URL(url).origin !== new URL(config.listUrl).origin) throw new Error('公告連結跨網域');
     const detail = load(await client.get(url));
     const title = detail(config.titleSelector).first().text().trim();
     const rawContent = detail(config.contentSelector).first().html();
     if (!title || !rawContent?.trim()) throw new Error(`公告欄位缺漏，請檢查頁面結構：${url}`);
-    const published = config.publishedSelector
-      ? detail(config.publishedSelector).first().text()
-      : '';
     yield {
       sourceId,
       url,
       title,
       rawContent,
-      publishedAt: published.match(/\b\d{4}-\d{2}-\d{2}\b/)?.[0] ?? null,
+      publishedAt,
       fetchedAt: new Date().toISOString(),
     };
   }

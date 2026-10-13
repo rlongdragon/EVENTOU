@@ -1,4 +1,4 @@
-﻿import { positiveInteger } from './ingestion.config.js';
+import { positiveInteger } from './ingestion.config.js';
 import { getIngestionService } from './ingestion.service.js';
 
 export function startIngestionScheduler(

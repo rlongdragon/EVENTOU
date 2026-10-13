@@ -149,7 +149,7 @@ export const migrations: Migration[] = [
     `,
   },
   {
-    id: 5,
+    id: 6,
     name: 'create_ingestion',
     up: `
       CREATE TABLE raw_announcements (
