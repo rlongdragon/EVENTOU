@@ -149,6 +149,34 @@ export const migrations: Migration[] = [
     `,
   },
   {
+    id: 6,
+    name: 'create_ingestion',
+    up: `
+      CREATE TABLE raw_announcements (
+        id INTEGER PRIMARY KEY,
+        source_id INTEGER NOT NULL REFERENCES sources(id),
+        url TEXT NOT NULL,
+        title TEXT NOT NULL,
+        raw_content TEXT NOT NULL,
+        published_at TEXT,
+        fetched_at TEXT NOT NULL,
+        processed_at TEXT,
+        UNIQUE(source_id, url)
+      );
+      CREATE TABLE ingestion_runs (
+        id INTEGER PRIMARY KEY,
+        source_id INTEGER NOT NULL REFERENCES sources(id),
+        started_at TEXT NOT NULL,
+        finished_at TEXT,
+        status TEXT NOT NULL CHECK(status IN ('running', 'success', 'failure')),
+        inserted_count INTEGER NOT NULL DEFAULT 0,
+        updated_count INTEGER NOT NULL DEFAULT 0,
+        error_message TEXT
+      );
+      CREATE INDEX ingestion_runs_source ON ingestion_runs(source_id, id);
+    `,
+  },
+  {
     id: 7,
     name: 'create_category_subscriptions',
     // US-07：使用者訂閱的活動類別，(user_id, category) 為主鍵，同一類別不會重複訂閱。

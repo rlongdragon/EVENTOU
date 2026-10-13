@@ -1,4 +1,5 @@
 import express from 'express';
+import { ingestionRouter } from './modules/ingestion/ingestion.router.js';
 import { authenticate } from './modules/auth/auth.middleware.js';
 import { authRouter } from './modules/auth/auth.router.js';
 import { calendarsRouter } from './modules/calendars/calendars.router.js';
@@ -17,6 +18,7 @@ export function createApp() {
   app.use('/api/health', healthRouter);
   app.use('/api/auth', authRouter);
   app.use('/api/sources', sourcesRouter);
+  app.use('/api/ingestion', ingestionRouter);
   app.use('/api/events', eventsRouter);
   app.use('/api/subscriptions', subscriptionsRouter);
   app.use('/api/calendars', calendarsRouter);
