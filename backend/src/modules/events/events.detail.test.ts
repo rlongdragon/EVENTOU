@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { after, before, describe, test } from 'node:test';
 import { createApp } from '../../app.js';
 import { closeDb, getDb, migrate } from '../../db/index.js';
+import { seedSources } from '../sources/sources.testHelpers.js';
 import { processAnnouncement } from './events.service.js';
 import type { PublishedEvent, RawAnnouncement } from './events.types.js';
 
@@ -27,6 +28,7 @@ let reviewId: number;
 
 before(async () => {
   migrate();
+  seedSources(getDb()); // events.source_id 需對應到 sources
   publishedId = processAnnouncement(getDb(), raw, { defaultCategory: 'lecture' }).id;
   // 缺標題 → needs_review
   reviewId = processAnnouncement(getDb(), {
