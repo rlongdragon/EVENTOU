@@ -1,6 +1,9 @@
 import { Router } from 'express';
+import { getDb } from '../../db/index.js';
 import { notImplemented } from '../../shared/notImplemented.js';
 import { requireAuth } from '../auth/auth.middleware.js';
+import { findPublishedEventById } from './events.repository.js';
+import { EVENT_CATEGORY_LABELS } from './events.types.js';
 
 // 活動（Event）：RawAnnouncement → Event，唯一鍵 source_id + original_url
 // US-19 轉換入口為 events.service.ts 的 processAnnouncement；資料格式見 events.types.ts。
@@ -10,9 +13,23 @@ export const eventsRouter = Router();
 // TODO(#6): US-01 搜尋活動（未登入可用），支援關鍵字與篩選條件
 eventsRouter.get('/', notImplemented('#6'));
 
-// TODO(#12): US-02 取得活動詳細資訊
+// US-02 取得活動詳細資訊（未登入可用）；id 無效、不存在或待審的活動一律回 404
 // TODO(#18): US-03 回傳活動地點座標，供活動頁顯示地圖
-eventsRouter.get('/:eventId', notImplemented('#12'));
+eventsRouter.get('/:eventId', (req, res) => {
+  const { eventId } = req.params;
+  const id = Number(eventId);
+  const event =
+    /^[1-9]\d*$/.test(eventId) && Number.isSafeInteger(id)
+      ? findPublishedEventById(getDb(), id)
+      : undefined;
+  if (!event) {
+    res.status(404).json({ error: 'not_found', message: '找不到這個活動' });
+    return;
+  }
+  // categoryLabel 取自 EVENT_CATEGORY_LABELS（類別顯示名稱的單一來源）；查無對照時顯示代碼
+  const categoryLabel = EVENT_CATEGORY_LABELS[event.category] ?? event.category;
+  res.json({ event: { ...event, categoryLabel } });
+});
 
 // TODO(#13): US-10 活動留言（需登入）
 eventsRouter.get('/:eventId/comments', notImplemented('#13'));
