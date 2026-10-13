@@ -99,6 +99,14 @@ npm run user:set-role -w backend -- someone@example.com admin
 - 新提交的來源審核狀態一律為 `pending`，並記錄提交者與提交時間；審核狀態（`pending`／`approved`／`rejected`）與啟用狀態（`enabled`）是兩個獨立欄位，只有「已核准且啟用中」的來源會被擷取。US-14、US-16 沿用同一個 `sources` 資料表。
 - 前端頁面 `/sources/new`（需登入）：提交表單，以及「我提交的來源」與其審核狀態。
 
+## 來源審核（US-14）
+
+- 後端 API（皆需管理員）：`GET /api/sources`（管理員會看到全部來源，含提交者名稱與審核結果，可用 `?status=pending|approved|rejected` 篩選）、`POST /api/sources/:sourceId/review`。
+- 審核內容：`{ "decision": "approved" | "rejected", "ntouVerified": boolean, "note": string }`。依 #22 的建議，**核准前必須確認來源為海大單位或社團**（`ntouVerified: true`），退回不需要；`note` 為選填（最長 500 字）。
+- 只有 `pending` 的來源能審核，已審核的來源回傳 `409`。審核者、審核時間、備註與海大確認會保存（migration 5：`reviewed_by`、`reviewed_at`、`review_note`、`ntou_verified`）。
+- 審核只改 `review_status`，不改 `enabled`；是否擷取仍要 US-16 的啟用狀態與 US-17 判斷。
+- 前端頁面 `/admin/sources`（管理員）：預設顯示待審核來源，可核准或退回，也可切換查看已核准、已退回的來源。
+
 ## 功能入口與 TODO
 
 US-19 已提供 Event 資料格式、migration、公告清理與轉換、日期解析、驗證及冪等 upsert，供搜尋、行事曆與通知共用。使用 `processAnnouncement` 接合擷取結果。欄位、RawAnnouncement 契約、範例及來源 FK 的接合限制見 [`docs/event-schema.md`](docs/event-schema.md)。擷取排程及各功能 API 仍由各自模組實作。

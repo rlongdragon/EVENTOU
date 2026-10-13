@@ -24,6 +24,22 @@ export interface Source {
   createdAt: string;
 }
 
+/** 管理員看到的來源：多了提交者名稱與審核結果（US-14）。 */
+export interface AdminSource extends Source {
+  submitterName: string;
+  reviewedBy: number | null;
+  reviewedAt: string | null;
+  reviewNote: string | null;
+  /** 是否確認為海大單位或社團；尚未審核為 null */
+  ntouVerified: boolean | null;
+}
+
+export interface ReviewSourceInput {
+  decision: 'approved' | 'rejected';
+  ntouVerified: boolean;
+  note: string;
+}
+
 export interface SubmitSourceInput {
   name: string;
   url: string;
@@ -61,4 +77,23 @@ export async function submitSource(input: SubmitSourceInput): Promise<Source> {
 export async function fetchMySources(signal?: AbortSignal): Promise<Source[]> {
   const { sources } = await request<{ sources: Source[] }>('/api/sources/mine', { signal });
   return sources;
+}
+
+/** 管理員取得來源清單，可只看某個審核狀態。 */
+export async function fetchAdminSources(
+  status?: ReviewStatus,
+  signal?: AbortSignal,
+): Promise<AdminSource[]> {
+  const query = status ? `?status=${status}` : '';
+  const { sources } = await request<{ sources: AdminSource[] }>(`/api/sources${query}`, { signal });
+  return sources;
+}
+
+/** 管理員核准或退回待審核的來源。 */
+export async function reviewSource(id: number, input: ReviewSourceInput): Promise<AdminSource> {
+  const { source } = await request<{ source: AdminSource }>(`/api/sources/${id}/review`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  return source;
 }

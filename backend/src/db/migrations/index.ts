@@ -136,4 +136,16 @@ export const migrations: Migration[] = [
       CREATE VIEW published_events AS SELECT * FROM events WHERE status = 'published';
     `,
   },
+  {
+    id: 5,
+    name: 'add_source_review_fields',
+    // US-14：保存審核結果。reviewed_by／reviewed_at／review_note 在審核前為 NULL；
+    // ntou_verified 記錄管理員是否確認來源為海大單位或社團（1 是、0 否、NULL 未審核）。
+    up: `
+      ALTER TABLE sources ADD COLUMN reviewed_by INTEGER REFERENCES users (id);
+      ALTER TABLE sources ADD COLUMN reviewed_at TEXT;
+      ALTER TABLE sources ADD COLUMN review_note TEXT;
+      ALTER TABLE sources ADD COLUMN ntou_verified INTEGER CHECK (ntou_verified IN (0, 1));
+    `,
+  },
 ];

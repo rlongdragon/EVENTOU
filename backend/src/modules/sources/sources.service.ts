@@ -71,3 +71,83 @@ export function listSources(options: { approvedOnly: boolean }): Source[] {
     .all(options.approvedOnly ? 1 : 0) as unknown as SourceRow[];
   return rows.map(toSource);
 }
+
+/** 管理員看到的來源：多了提交者名稱與審核結果。 */
+export interface AdminSource extends Source {
+  submitterName: string;
+  reviewedBy: number | null;
+  reviewedAt: string | null;
+  reviewNote: string | null;
+  /** 管理員是否確認來源為海大單位或社團；尚未審核為 null */
+  ntouVerified: boolean | null;
+}
+
+interface AdminSourceRow extends SourceRow {
+  submitter_name: string;
+  reviewed_by: number | null;
+  reviewed_at: string | null;
+  review_note: string | null;
+  ntou_verified: number | null;
+}
+
+function toAdminSource(row: AdminSourceRow): AdminSource {
+  return {
+    ...toSource(row),
+    submitterName: row.submitter_name,
+    reviewedBy: row.reviewed_by,
+    reviewedAt: row.reviewed_at,
+    reviewNote: row.review_note,
+    ntouVerified: row.ntou_verified === null ? null : row.ntou_verified === 1,
+  };
+}
+
+const ADMIN_SELECT = `
+  SELECT sources.*, users.display_name AS submitter_name
+  FROM sources JOIN users ON users.id = sources.submitted_by`;
+
+/** 管理員列出來源，可只看某個審核狀態，新的在前。 */
+export function listSourcesForAdmin(options: { reviewStatus?: ReviewStatus } = {}): AdminSource[] {
+  const rows = getDb()
+    .prepare(
+      `${ADMIN_SELECT}
+       WHERE (? IS NULL OR sources.review_status = ?)
+       ORDER BY sources.created_at DESC, sources.id DESC`,
+    )
+    .all(options.reviewStatus ?? null, options.reviewStatus ?? null) as unknown as AdminSourceRow[];
+  return rows.map(toAdminSource);
+}
+
+export interface ReviewInput {
+  sourceId: number;
+  reviewerId: number;
+  decision: 'approved' | 'rejected';
+  ntouVerified: boolean;
+  note: string | null;
+}
+
+/**
+ * 審核待審核的來源並保存結果。只有 pending 的來源能審核，
+ * 已核准或已退回的來源回傳 'already_reviewed'，找不到回傳 'not_found'。
+ * 審核不會改變 enabled（啟用狀態由 US-16 管理）。
+ */
+export function reviewSource(input: ReviewInput): AdminSource | 'not_found' | 'already_reviewed' {
+  const db = getDb();
+  const updated = db
+    .prepare(
+      `UPDATE sources
+       SET review_status = ?, reviewed_by = ?, reviewed_at = datetime('now'),
+           review_note = ?, ntou_verified = ?
+       WHERE id = ? AND review_status = 'pending'
+       RETURNING id`,
+    )
+    .get(input.decision, input.reviewerId, input.note, input.ntouVerified ? 1 : 0, input.sourceId);
+
+  if (!updated) {
+    const exists = db.prepare('SELECT 1 FROM sources WHERE id = ?').get(input.sourceId);
+    return exists ? 'already_reviewed' : 'not_found';
+  }
+  const row = db
+    .prepare(`${ADMIN_SELECT} WHERE sources.id = ?`)
+    .get(input.sourceId) as unknown as AdminSourceRow;
+  return toAdminSource(row);
+}

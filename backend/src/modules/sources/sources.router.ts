@@ -1,14 +1,21 @@
 import { Router, type Response } from 'express';
 import { notImplemented } from '../../shared/notImplemented.js';
 import { requireAuth, requireRole } from '../auth/auth.middleware.js';
-import { createSource, listSources, listSourcesBySubmitter } from './sources.service.js';
-import { isSourceType } from './sourceTypes.js';
+import {
+  createSource,
+  listSources,
+  listSourcesBySubmitter,
+  listSourcesForAdmin,
+  reviewSource,
+} from './sources.service.js';
+import { REVIEW_STATUSES, isSourceType, type ReviewStatus } from './sourceTypes.js';
 
 // 活動資訊來源（Source）：審核狀態與啟用狀態分開管理
 export const sourcesRouter = Router();
 
 const NAME_MAX_LENGTH = 100;
 const URL_MAX_LENGTH = 2048;
+const REVIEW_NOTE_MAX_LENGTH = 500;
 
 type FieldErrors = Record<string, string>;
 
@@ -79,14 +86,74 @@ sourcesRouter.get('/mine', requireAuth, (req, res) => {
   res.json({ sources: listSourcesBySubmitter(userId) });
 });
 
-// 列出來源：管理員看到全部，其他人（含訪客）只看到已核准的來源
+// 列出來源：管理員看到全部（含提交者與審核結果，可用 ?status= 篩選審核狀態），其他人（含訪客）只看到已核准的來源
 sourcesRouter.get('/', (req, res) => {
-  const isAdmin = req.user?.role === 'admin';
-  res.json({ sources: listSources({ approvedOnly: !isAdmin }) });
+  if (req.user?.role !== 'admin') {
+    res.json({ sources: listSources({ approvedOnly: true }) });
+    return;
+  }
+
+  const status = req.query.status;
+  if (status !== undefined && !REVIEW_STATUSES.includes(status as ReviewStatus)) {
+    sendValidationError(res, '審核狀態篩選條件有誤', {
+      status: '請使用 pending、approved 或 rejected',
+    });
+    return;
+  }
+  res.json({ sources: listSourcesForAdmin({ reviewStatus: status as ReviewStatus | undefined }) });
 });
 
-// TODO(#22): US-14 管理員審核來源（核准／退回）
-sourcesRouter.post('/:sourceId/review', requireRole('admin'), notImplemented('#22'));
+// US-14 管理員審核來源（核准／退回），只有待審核的來源能審核；
+// 核准前須確認來源為海大單位或社團（ntouVerified）；審核結果會保存，且不影響啟用狀態（US-16）
+sourcesRouter.post('/:sourceId/review', requireRole('admin'), (req, res) => {
+  const reviewerId = req.user?.id;
+  if (reviewerId === undefined) {
+    res.status(401).json({ error: 'unauthorized', message: '請先登入' });
+    return;
+  }
+
+  const sourceId = Number(req.params.sourceId);
+  if (!Number.isInteger(sourceId) || sourceId <= 0) {
+    res.status(404).json({ error: 'not_found', message: '找不到這個來源' });
+    return;
+  }
+
+  const decision = req.body?.decision;
+  const ntouVerified = req.body?.ntouVerified;
+  const note = asString(req.body?.note).trim();
+
+  const fields: FieldErrors = {};
+  if (decision !== 'approved' && decision !== 'rejected') {
+    fields.decision = '請選擇核准或退回';
+  }
+  if (ntouVerified !== undefined && typeof ntouVerified !== 'boolean') {
+    fields.ntouVerified = '格式不正確';
+  } else if (decision === 'approved' && ntouVerified !== true) {
+    fields.ntouVerified = '核准前請確認此來源為海大單位或社團';
+  }
+  if (note.length > REVIEW_NOTE_MAX_LENGTH) {
+    fields.note = `審核備註不可超過 ${REVIEW_NOTE_MAX_LENGTH} 個字元`;
+  }
+  if (Object.keys(fields).length > 0 || (decision !== 'approved' && decision !== 'rejected')) {
+    sendValidationError(res, '審核資料有誤', fields);
+    return;
+  }
+
+  const result = reviewSource({
+    sourceId,
+    reviewerId,
+    decision,
+    ntouVerified: ntouVerified === true,
+    note: note || null,
+  });
+  if (result === 'not_found') {
+    res.status(404).json({ error: 'not_found', message: '找不到這個來源' });
+  } else if (result === 'already_reviewed') {
+    res.status(409).json({ error: 'already_reviewed', message: '這個來源已經審核過了' });
+  } else {
+    res.json({ source: result });
+  }
+});
 
 // TODO(#23): US-15 來源可信度／風險提示
 sourcesRouter.get('/:sourceId/risk', notImplemented('#23'));

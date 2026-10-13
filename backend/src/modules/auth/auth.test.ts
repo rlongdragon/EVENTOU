@@ -173,7 +173,7 @@ describe('角色權限', () => {
     const cookie = adminCookie;
     const me = await request('GET', '/api/auth/me', { cookie });
     assert.equal(me.body.user.role, 'admin');
-    assert.equal((await request('POST', '/api/sources/1/review', { cookie })).status, 501);
+    assert.equal((await request('POST', '/api/sources/1/review', { cookie })).status, 400);
     assert.equal((await request('PATCH', '/api/sources/1/enabled', { cookie })).status, 501);
   });
 
