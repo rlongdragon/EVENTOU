@@ -12,6 +12,8 @@ import express from 'express';
 import type { AddressInfo } from 'node:net';
 import { ingestionRouter } from './ingestion.router.js';
 
+process.env.DATABASE_PATH = ':memory:';
+
 const config: ScraperConfig = {
   listUrl: 'https://example.com/source-1',
   linkSelector: 'a',
