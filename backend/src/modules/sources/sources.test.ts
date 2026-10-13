@@ -212,3 +212,152 @@ describe('GET /api/sources', () => {
     assert.ok(pending.body.source.id);
   });
 });
+
+async function loginAdmin(email: string) {
+  await registerUser(email);
+  assert.equal(setUserRole(email, 'admin'), true);
+  const login = await request('POST', '/api/auth/login', {
+    body: { email, password: 'password123' },
+  });
+  assert.ok(login.cookie);
+  return { cookie: login.cookie };
+}
+
+async function submitAs(cookie: string, name: string) {
+  const result = await request('POST', '/api/sources', {
+    cookie,
+    body: { ...validSource, name },
+  });
+  assert.equal(result.status, 201);
+  return result.body.source.id as number;
+}
+
+describe('GET /api/sources（管理員審核清單）', () => {
+  test('管理員看得到提交者與審核結果，並可用 status 篩選', async () => {
+    const user = await registerUser('list-submitter@example.com');
+    const admin = await loginAdmin('list-admin@example.com');
+    const pendingId = await submitAs(user.cookie, '清單待審核');
+    const rejectedId = await submitAs(user.cookie, '清單已退回');
+    await request('POST', `/api/sources/${rejectedId}/review`, {
+      cookie: admin.cookie,
+      body: { decision: 'rejected', note: '不是海大的來源' },
+    });
+
+    const pending = await request('GET', '/api/sources?status=pending', { cookie: admin.cookie });
+    assert.equal(pending.status, 200);
+    const found = pending.body.sources.find((s: { id: number }) => s.id === pendingId);
+    assert.equal(found.submitterName, 'list-submitter');
+    assert.equal(found.reviewedAt, null);
+    assert.ok(!pending.body.sources.some((s: { id: number }) => s.id === rejectedId));
+
+    const rejected = await request('GET', '/api/sources?status=rejected', {
+      cookie: admin.cookie,
+    });
+    assert.equal(rejected.body.sources[0].reviewNote, '不是海大的來源');
+
+    const bad = await request('GET', '/api/sources?status=oops', { cookie: admin.cookie });
+    assert.equal(bad.status, 400);
+  });
+
+  test('一般使用者看不到審核資訊，也不能用 status 看待審核來源', async () => {
+    const user = await registerUser('list-plain@example.com');
+    await submitAs(user.cookie, '一般使用者看不到');
+    const result = await request('GET', '/api/sources?status=pending', { cookie: user.cookie });
+    assert.equal(result.status, 200);
+    for (const source of result.body.sources) {
+      assert.equal(source.reviewStatus, 'approved');
+      assert.equal(source.submitterName, undefined);
+    }
+  });
+});
+
+describe('POST /api/sources/:sourceId/review', () => {
+  test('訪客 401，一般使用者 403', async () => {
+    const user = await registerUser('review-user@example.com');
+    const id = await submitAs(user.cookie, '權限測試');
+    const body = { decision: 'rejected' };
+    assert.equal((await request('POST', `/api/sources/${id}/review`, { body })).status, 401);
+    assert.equal(
+      (await request('POST', `/api/sources/${id}/review`, { cookie: user.cookie, body })).status,
+      403,
+    );
+  });
+
+  test('核准：狀態變為已核准，保存審核者、時間與海大確認，且不改變啟用狀態', async () => {
+    const user = await registerUser('approve-submitter@example.com');
+    const admin = await loginAdmin('approve-admin@example.com');
+    const id = await submitAs(user.cookie, '要核准的來源');
+
+    const result = await request('POST', `/api/sources/${id}/review`, {
+      cookie: admin.cookie,
+      body: { decision: 'approved', ntouVerified: true, note: '  社團官方網站  ' },
+    });
+    assert.equal(result.status, 200);
+    const { source } = result.body;
+    assert.equal(source.reviewStatus, 'approved');
+    assert.equal(source.enabled, true);
+    assert.equal(source.ntouVerified, true);
+    assert.equal(source.reviewNote, '社團官方網站');
+    assert.ok(source.reviewedBy);
+    assert.ok(source.reviewedAt);
+
+    const mine = await request('GET', '/api/sources/mine', { cookie: user.cookie });
+    const own = mine.body.sources.find((s: { id: number }) => s.id === id);
+    assert.equal(own.reviewStatus, 'approved');
+  });
+
+  test('核准前必須確認為海大單位或社團', async () => {
+    const user = await registerUser('ntou-submitter@example.com');
+    const admin = await loginAdmin('ntou-admin@example.com');
+    const id = await submitAs(user.cookie, '沒確認海大');
+
+    for (const body of [
+      { decision: 'approved' },
+      { decision: 'approved', ntouVerified: false },
+      { decision: 'approved', ntouVerified: 'yes' },
+    ]) {
+      const result = await request('POST', `/api/sources/${id}/review`, {
+        cookie: admin.cookie,
+        body,
+      });
+      assert.equal(result.status, 400);
+      assert.ok(result.body.fields.ntouVerified);
+    }
+    const still = await request('GET', '/api/sources?status=pending', { cookie: admin.cookie });
+    assert.ok(still.body.sources.some((s: { id: number }) => s.id === id));
+  });
+
+  test('退回：狀態變為已退回，不需要海大確認', async () => {
+    const user = await registerUser('reject-submitter@example.com');
+    const admin = await loginAdmin('reject-admin@example.com');
+    const id = await submitAs(user.cookie, '要退回的來源');
+
+    const result = await request('POST', `/api/sources/${id}/review`, {
+      cookie: admin.cookie,
+      body: { decision: 'rejected', ntouVerified: false },
+    });
+    assert.equal(result.status, 200);
+    assert.equal(result.body.source.reviewStatus, 'rejected');
+    assert.equal(result.body.source.ntouVerified, false);
+  });
+
+  test('驗證 decision、備註長度與來源是否存在，已審核的來源不能再審核', async () => {
+    const user = await registerUser('edge-submitter@example.com');
+    const admin = await loginAdmin('edge-admin@example.com');
+    const id = await submitAs(user.cookie, '邊界測試');
+    const review = (sourceId: number | string, body: unknown) =>
+      request('POST', `/api/sources/${sourceId}/review`, { cookie: admin.cookie, body });
+
+    const noDecision = await review(id, {});
+    assert.equal(noDecision.status, 400);
+    assert.ok(noDecision.body.fields.decision);
+    assert.equal((await review(id, { decision: 'rejected', note: 'x'.repeat(501) })).status, 400);
+    assert.equal((await review(999999, { decision: 'rejected' })).status, 404);
+    assert.equal((await review('abc', { decision: 'rejected' })).status, 404);
+
+    assert.equal((await review(id, { decision: 'rejected' })).status, 200);
+    const again = await review(id, { decision: 'approved', ntouVerified: true });
+    assert.equal(again.status, 409);
+    assert.equal(again.body.error, 'already_reviewed');
+  });
+});
