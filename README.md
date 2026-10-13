@@ -110,7 +110,8 @@ npm run user:set-role -w backend -- someone@example.com admin
 ## 來源啟用／停用（US-16）
 
 - 後端 API（需管理員）：`PATCH /api/sources/:sourceId/enabled`，body 為 `{ "enabled": boolean }`。
-- 只有 `approved` 的來源能切換，其他審核狀態回傳 `409`；切換不影響 `review_status`。管理員用 `GET /api/sources` 可看到每個來源目前是否啟用。
+- 只有 `approved` 的來源能切換，其他審核狀態回傳 `409`；切換不影響 `review_status`。
+- **核准即啟用是刻意的決定**：`sources.enabled` 預設為 `1`（US-13 的 schema），來源核准後不需要管理員再按「啟用」就會出現在 `listIngestableSources()`；管理員要暫停擷取時再按「停用」。管理員用 `GET /api/sources` 可看到每個來源目前是否啟用。
 - US-17 的排程擷取請用 `listIngestableSources()`（`backend/src/modules/sources/sources.service.ts`）取得來源，只會包含「已核准且啟用中」的來源，停用的來源不會被擷取。
 - 前端 `/admin/sources`：已核准的來源會顯示啟用狀態，可按鈕啟用或停用。
 

@@ -28,6 +28,16 @@ function sendValidationError(res: Response, message: string, fields: FieldErrors
   res.status(400).json({ error: 'validation_error', message, fields });
 }
 
+/** 解析路徑上的 sourceId，不是正整數時回傳 undefined。 */
+function parseSourceId(value: unknown): number | undefined {
+  const id = Number(value);
+  return Number.isInteger(id) && id > 0 ? id : undefined;
+}
+
+function sendSourceNotFound(res: Response): void {
+  res.status(404).json({ error: 'not_found', message: '找不到這個來源' });
+}
+
 /** 只接受 http／https 網址，且不可內含帳號密碼。 */
 function validateUrl(value: string): string | undefined {
   if (!value) return '請輸入來源網址';
@@ -113,9 +123,9 @@ sourcesRouter.post('/:sourceId/review', requireRole('admin'), (req, res) => {
     return;
   }
 
-  const sourceId = Number(req.params.sourceId);
-  if (!Number.isInteger(sourceId) || sourceId <= 0) {
-    res.status(404).json({ error: 'not_found', message: '找不到這個來源' });
+  const sourceId = parseSourceId(req.params.sourceId);
+  if (sourceId === undefined) {
+    sendSourceNotFound(res);
     return;
   }
 
@@ -148,7 +158,7 @@ sourcesRouter.post('/:sourceId/review', requireRole('admin'), (req, res) => {
     note: note || null,
   });
   if (result === 'not_found') {
-    res.status(404).json({ error: 'not_found', message: '找不到這個來源' });
+    sendSourceNotFound(res);
   } else if (result === 'already_reviewed') {
     res.status(409).json({ error: 'already_reviewed', message: '這個來源已經審核過了' });
   } else {
@@ -162,9 +172,9 @@ sourcesRouter.get('/:sourceId/risk', notImplemented('#23'));
 // US-16 管理員啟用／停用來源：只有已核准的來源能切換，不影響審核狀態；
 // 停用的來源不會進入擷取流程（見 listIngestableSources）
 sourcesRouter.patch('/:sourceId/enabled', requireRole('admin'), (req, res) => {
-  const sourceId = Number(req.params.sourceId);
-  if (!Number.isInteger(sourceId) || sourceId <= 0) {
-    res.status(404).json({ error: 'not_found', message: '找不到這個來源' });
+  const sourceId = parseSourceId(req.params.sourceId);
+  if (sourceId === undefined) {
+    sendSourceNotFound(res);
     return;
   }
 
@@ -176,7 +186,7 @@ sourcesRouter.patch('/:sourceId/enabled', requireRole('admin'), (req, res) => {
 
   const result = setSourceEnabled(sourceId, enabled);
   if (result === 'not_found') {
-    res.status(404).json({ error: 'not_found', message: '找不到這個來源' });
+    sendSourceNotFound(res);
   } else if (result === 'not_approved') {
     res.status(409).json({ error: 'not_approved', message: '只有已核准的來源可以啟用或停用' });
   } else {

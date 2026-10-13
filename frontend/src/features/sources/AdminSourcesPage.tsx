@@ -146,12 +146,17 @@ export function AdminSourcesPage() {
     setLoadError(null);
   }
 
+  function replaceSource(updated: AdminSource) {
+    setSources((current) => current.map((source) => (source.id === updated.id ? updated : source)));
+  }
+
+  // 審核後該來源不再是待審核，在「待審核」清單中要移除
   function handleReviewed(updated: AdminSource) {
-    setSources((current) =>
-      filter === 'pending'
-        ? current.filter((source) => source.id !== updated.id)
-        : current.map((source) => (source.id === updated.id ? updated : source)),
-    );
+    if (filter === 'pending') {
+      setSources((current) => current.filter((source) => source.id !== updated.id));
+    } else {
+      replaceSource(updated);
+    }
   }
 
   return (
@@ -224,7 +229,7 @@ export function AdminSourcesPage() {
                   )}
                 </td>
                 <td>
-                  <EnabledToggle source={source} onChanged={handleReviewed} />
+                  <EnabledToggle source={source} onChanged={replaceSource} />
                 </td>
               </tr>
             ))}
