@@ -29,3 +29,40 @@ export async function fetchEvent(
   const { event } = (await response.json()) as { event: EventDetail };
   return event;
 }
+
+/** 搜尋結果列表的單筆活動（US-01） */
+export type EventSummary = Pick<
+  EventDetail,
+  'id' | 'title' | 'category' | 'categoryLabel' | 'startTime' | 'endTime' | 'allDay' | 'location'
+>;
+
+export interface EventSearchParams {
+  q: string;
+  category: string;
+  page: number;
+}
+
+export interface EventSearchResult {
+  items: EventSummary[];
+  page: number;
+  pageSize: number;
+  total: number;
+  /** 類別篩選選項，由後端依 EVENT_CATEGORY_LABELS 提供 */
+  categories: { code: string; label: string }[];
+}
+
+/** 搜尋活動（US-01），空字串的條件不送出。 */
+export async function searchEvents(
+  { q, category, page }: EventSearchParams,
+  signal?: AbortSignal,
+): Promise<EventSearchResult> {
+  const query = new URLSearchParams();
+  if (q) query.set('q', q);
+  if (category) query.set('category', category);
+  if (page > 1) query.set('page', String(page));
+  const response = await fetch(`/api/events?${query}`, { signal });
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+  return (await response.json()) as EventSearchResult;
+}

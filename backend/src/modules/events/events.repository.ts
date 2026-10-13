@@ -123,3 +123,71 @@ export function findPublishedEventById(db: DatabaseSync, id: number): PublishedE
     updatedAt: String(row.updated_at),
   };
 }
+
+/** 搜尋結果列表的單筆活動（US-01），只含列表需要的欄位。 */
+export interface EventSummary {
+  id: number;
+  title: string;
+  category: EventCategory;
+  startTime: string;
+  endTime: string | null;
+  allDay: boolean;
+  location: string | null;
+}
+
+export interface EventSearchOptions {
+  /** 關鍵字，不分大小寫比對標題、說明、地點、主辦單位 */
+  q?: string;
+  category?: string;
+  page: number;
+  pageSize: number;
+}
+
+/**
+ * US-01：搜尋已發布且尚未結束的活動（end_time，沒有則 start_time，晚於現在），
+ * 依開始時間由近到遠排序並分頁。
+ */
+export function searchPublishedEvents(
+  db: DatabaseSync,
+  { q, category, page, pageSize }: EventSearchOptions,
+  now = new Date(),
+): { items: EventSummary[]; total: number } {
+  // 時間皆存成 +08:00 的 ISO 字串，可直接以字串比較先後
+  const conditions = ['COALESCE(end_time, start_time) > ?'];
+  const params: string[] = [taipeiNow(now)];
+  if (q) {
+    // 跳脫 LIKE 萬用字元，讓 % 與 _ 以字面比對
+    const pattern = `%${q.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
+    conditions.push(
+      `(title LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\'
+        OR location LIKE ? ESCAPE '\\' OR organizer LIKE ? ESCAPE '\\')`,
+    );
+    params.push(pattern, pattern, pattern, pattern);
+  }
+  if (category) {
+    conditions.push('category = ?');
+    params.push(category);
+  }
+  const where = `WHERE ${conditions.join(' AND ')}`;
+  const total = Number(
+    db.prepare(`SELECT count(*) AS total FROM published_events ${where}`).get(...params)?.total,
+  );
+  const rows = db
+    .prepare(
+      `SELECT id, title, category, start_time, end_time, all_day, location
+      FROM published_events ${where}
+      ORDER BY start_time, id
+      LIMIT ? OFFSET ?`,
+    )
+    .all(...params, pageSize, (page - 1) * pageSize);
+  const items = rows.map((row) => ({
+    id: Number(row.id),
+    title: String(row.title),
+    category: String(row.category) as EventCategory,
+    startTime: String(row.start_time),
+    endTime: row.end_time === null ? null : String(row.end_time),
+    allDay: Number(row.all_day) === 1,
+    location: row.location === null ? null : String(row.location),
+  }));
+  return { items, total };
+}
