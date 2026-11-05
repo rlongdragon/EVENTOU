@@ -113,3 +113,6 @@ eslint.config.js        # 前後端共用的 ESLint flat config
 - 不要為了通過檢查而關閉 lint 規則、放寬 `tsconfig` 或使用 `any`／`@ts-ignore`。
 - 一個 PR 只處理一個 issue，不要順手修改無關的檔案或其他人負責的模組；需要跨模組調整時先在 issue 討論。
 - `.agents/` 與 `skills-lock.json` 由 `npx skills` 管理，不要手動編輯。
+- commit 不要把你用什麼 agent 加進去 commit 裡面，請各位對自己的 commit 負責。 (尤其你使用 claude code)
+- PR、Message 不要把你用什麼 agent 加進去文字裡面，請各位對自己的提交負責。 (尤其你使用 claude code)
+- commit 用 Conventional Commits，可使用中文或英文，以中文為主，英文無妨。
