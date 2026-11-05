@@ -1,6 +1,7 @@
 import { createApp } from './app.js';
 import { migrate } from './db/index.js';
 import { startIngestionScheduler } from './modules/ingestion/ingestion.scheduler.js';
+import { startNotificationScheduler } from './modules/subscriptions/subscriptions.scheduler.js';
 
 const port = Number(process.env.PORT ?? 3000);
 
@@ -11,3 +12,4 @@ createApp().listen(port, () => {
 });
 
 startIngestionScheduler();
+startNotificationScheduler();

@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { TodoPlaceholder } from '../../shared/TodoPlaceholder';
 import { ApiError } from '../auth/api';
 import type { CategorySubscription } from './api';
 import { fetchSubscriptions, setSubscribed } from './api';
@@ -67,7 +66,10 @@ export function SubscriptionsPage() {
           </section>
           <section>
             <h2>活動類別</h2>
-            <p>訂閱感興趣的類別，可以同時訂閱多個，也可以隨時取消。</p>
+            <p>
+              訂閱感興趣的類別後，該類別有新活動時會寄 Email
+              通知你。可以同時訂閱多個類別，也可以隨時取消，取消後就不會再收到通知。
+            </p>
             {actionError && (
               <p role="alert" style={{ color: '#cf222e' }}>
                 {actionError}
@@ -107,11 +109,6 @@ export function SubscriptionsPage() {
           </section>
         </>
       )}
-      {/* TODO(#10): US-08 Email 通知設定 */}
-      <TodoPlaceholder
-        title="Email 通知"
-        issues={[{ number: 10, label: 'US-08 新活動 Email 通知' }]}
-      />
     </>
   );
 }
