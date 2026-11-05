@@ -5,6 +5,7 @@ import { after, before, describe, test } from 'node:test';
 import { createApp } from '../../app.js';
 import { closeDb, getDb, migrate } from '../../db/index.js';
 import { seedSources } from '../sources/sources.testHelpers.js';
+import { searchPublishedEvents } from './events.repository.js';
 import { processAnnouncement } from './events.service.js';
 import type { EventCategory, RawAnnouncement } from './events.types.js';
 
@@ -120,6 +121,17 @@ describe('GET /api/events（US-01）', () => {
     const { body } = await search();
     assert.equal(body.total, 28);
     assert.ok(body.items.every((item) => item.title !== '已結束的活動' && item.title !== ''));
+  });
+
+  test('沒有結束時間的全天活動，當天仍會出現，隔天才排除', () => {
+    const titles = (now: string) =>
+      searchPublishedEvents(
+        getDb(),
+        { category: 'welfare', page: 1, pageSize: 100 },
+        new Date(now),
+      ).items.map((item) => item.title);
+    assert.equal(titles('2099-04-01T23:59:00+08:00')[0], '福利活動 1');
+    assert.equal(titles('2099-04-02T00:00:00+08:00')[0], '福利活動 2');
   });
 
   test('分頁預設每頁 20 筆', async () => {

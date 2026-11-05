@@ -143,18 +143,24 @@ export interface EventSearchOptions {
   pageSize: number;
 }
 
+const DAY_MS = 86400000;
+
 /**
- * US-01：搜尋已發布且尚未結束的活動（end_time，沒有則 start_time，晚於現在），
- * 依開始時間由近到遠排序並分頁。
+ * US-01：搜尋已發布且尚未結束的活動，依開始時間由近到遠排序並分頁。
+ * 結束時間為 end_time；沒有 end_time 時，全天活動算到當天結束，其餘算到 start_time。
  */
 export function searchPublishedEvents(
   db: DatabaseSync,
   { q, category, page, pageSize }: EventSearchOptions,
   now = new Date(),
 ): { items: EventSummary[]; total: number } {
-  // 時間皆存成 +08:00 的 ISO 字串，可直接以字串比較先後
-  const conditions = ['COALESCE(end_time, start_time) > ?'];
-  const params: string[] = [taipeiNow(now)];
+  // 時間皆存成 +08:00 的 ISO 字串，可直接以字串比較先後。
+  // 單日全天活動的 end_time 是 null、start_time 是當天 00:00，改用「開始時間晚於 24 小時前」判斷
+  const conditions = [
+    `(CASE WHEN end_time IS NULL AND all_day = 1 THEN start_time > ?
+      ELSE COALESCE(end_time, start_time) > ? END)`,
+  ];
+  const params: string[] = [taipeiNow(new Date(now.getTime() - DAY_MS)), taipeiNow(now)];
   if (q) {
     // 跳脫 LIKE 萬用字元，讓 % 與 _ 以字面比對
     const pattern = `%${q.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
