@@ -4,7 +4,9 @@ import { TodoPlaceholder } from '../../shared/TodoPlaceholder';
 import type { EventDetail } from './api';
 import { fetchEvent } from './api';
 import { EventComments } from './EventComments';
+import { EventRating } from './EventRating';
 import { formatEventTime } from './eventTime';
+import { ShareEventButton } from './ShareEventButton';
 
 type LoadState =
   | { status: 'loading' }
@@ -69,15 +71,13 @@ export function EventDetailPage() {
           查看原始公告
         </a>
       </p>
+      <ShareEventButton eventId={event.id} />
       {/* TODO(#18): US-03 活動地點地圖 */}
       <TodoPlaceholder
         title="地點地圖"
         issues={[{ number: 18, label: 'US-03 活動頁顯示地點地圖' }]}
       />
-      {/* TODO(#15): US-12 分享活動連結 */}
-      <TodoPlaceholder title="分享" issues={[{ number: 15, label: 'US-12 分享活動連結' }]} />
-      {/* TODO(#14): US-11 評價（需登入，#20） */}
-      <TodoPlaceholder title="評價" issues={[{ number: 14, label: 'US-11 對活動評價' }]} />
+      <EventRating eventId={eventId} />
       <EventComments eventId={eventId} />
     </>
   );

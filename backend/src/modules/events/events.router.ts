@@ -1,12 +1,18 @@
 import { Router, type Response } from 'express';
 import { getDb } from '../../db/index.js';
-import { notImplemented } from '../../shared/notImplemented.js';
 import { requireAuth } from '../auth/auth.middleware.js';
 import {
   createEventComment,
   listEventComments,
   validateCommentContent,
 } from './events.comments.js';
+import {
+  RATING_MAX,
+  RATING_MIN,
+  getEventRatingSummary,
+  parseRatingScore,
+  upsertEventRating,
+} from './events.ratings.js';
 import { findPublishedEventById, searchPublishedEvents } from './events.repository.js';
 import { EVENT_CATEGORIES, EVENT_CATEGORY_LABELS, type PublishedEvent } from './events.types.js';
 
@@ -95,6 +101,28 @@ eventsRouter.post('/:eventId/comments', requireAuth, (req, res) => {
   res.status(201).json({ comment });
 });
 
-// TODO(#14): US-11 活動評價（需登入）
-eventsRouter.get('/:eventId/ratings', notImplemented('#14'));
-eventsRouter.post('/:eventId/ratings', requireAuth, notImplemented('#14'));
+// US-11 活動評價：未登入可看平均分數與人數，評分需登入；每人每活動一筆，再次評分即修改
+eventsRouter.get('/:eventId/ratings', (req, res) => {
+  const event = findPublishedEventOr404(req.params.eventId, res);
+  if (!event) return;
+  res.json({ rating: getEventRatingSummary(getDb(), event.id, req.user?.id) });
+});
+
+eventsRouter.put('/:eventId/ratings', requireAuth, (req, res) => {
+  const event = findPublishedEventOr404(req.params.eventId, res);
+  if (!event || !req.user) return;
+  const body: unknown = req.body;
+  const score = parseRatingScore(
+    typeof body === 'object' && body !== null && 'score' in body ? body.score : undefined,
+  );
+  if (score === undefined) {
+    res.status(400).json({
+      error: 'validation_error',
+      message: '評分資料有誤',
+      fields: { score: `請選擇 ${RATING_MIN}–${RATING_MAX} 星` },
+    });
+    return;
+  }
+  const rating = upsertEventRating(getDb(), { eventId: event.id, userId: req.user.id, score });
+  res.json({ rating });
+});

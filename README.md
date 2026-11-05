@@ -154,6 +154,20 @@ npm run user:set-role -w backend -- someone@example.com admin
 - 資料表（migration 9）：`event_comments`，活動或使用者刪除時留言一併刪除。
 - 前端在活動頁（`/events/:eventId`）下方顯示留言列表；訪客看到登入提示，登入後才出現留言輸入框。
 
+## 活動評價（US-11）
+
+- 後端 API：`GET /api/events/:eventId/ratings`（未登入可看）、`PUT /api/events/:eventId/ratings`（需登入，body 為 `{ "score": 1-5 }`）。
+- 回應為 `{ "rating": { "average", "count", "myScore" } }`：`average` 四捨五入到小數第一位，沒有評價時為 `null`；`myScore` 是目前使用者的評分，訪客或尚未評分時為 `null`。
+- 每位使用者對同一活動只有一筆評價，再次 `PUT` 即修改；分數不是 1–5 的整數時回傳 `400 validation_error`（`fields.score`）。
+- 只有已發布的活動能看與評分；活動不存在、待審或 id 無效時回傳 `404`。
+- 資料表（migration 10）：`event_ratings`，`(event_id, user_id)` 為主鍵。
+- 前端在活動頁顯示星等、平均分數與評價人數；登入後可點星星評分或修改，訪客看到登入提示。
+
+## 分享活動連結（US-12）
+
+- 活動頁的固定網址為 `<網站 origin>/events/:eventId`（`frontend/src/features/events/eventShare.ts`），不帶查詢字串或 hash，開啟不需登入。
+- 活動頁的「分享」按鈕會把固定網址複製到剪貼簿並顯示「已複製」；瀏覽器不允許存取剪貼簿時（例如非 HTTPS），改顯示網址讓使用者手動複製。
+
 ## 功能入口與 TODO
 
 US-17 已提供每小時背景擷取、原始公告 upsert、擷取紀錄與 US-19 接合。管理員可使用 `POST /api/ingestion/:sourceId/fetch` 手動擷取，以及 `GET /api/ingestion/:sourceId/runs` 查看最近 100 筆紀錄。人工來源設定、環境變數與操作方式見 [`docs/ingestion.md`](docs/ingestion.md)。

@@ -110,3 +110,31 @@ export async function postEventComment(eventId: string, content: string): Promis
   });
   return (await readJson<{ comment: EventComment }>(response)).comment;
 }
+
+/** 活動評價摘要（US-11），對應 backend/src/modules/events/events.ratings.ts 的 EventRatingSummary */
+export interface EventRatingSummary {
+  /** 平均分數（小數第一位），沒有評價時為 null */
+  average: number | null;
+  count: number;
+  /** 自己的評分，訪客或尚未評分時為 null */
+  myScore: number | null;
+}
+
+/** 取得活動評價摘要（未登入可用，登入時含自己的評分）。 */
+export async function fetchEventRating(
+  eventId: string,
+  signal?: AbortSignal,
+): Promise<EventRatingSummary> {
+  const response = await fetch(`/api/events/${encodeURIComponent(eventId)}/ratings`, { signal });
+  return (await readJson<{ rating: EventRatingSummary }>(response)).rating;
+}
+
+/** 評分或修改評分（需登入，1–5 星），回傳更新後的摘要。 */
+export async function rateEvent(eventId: string, score: number): Promise<EventRatingSummary> {
+  const response = await fetch(`/api/events/${encodeURIComponent(eventId)}/ratings`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ score }),
+  });
+  return (await readJson<{ rating: EventRatingSummary }>(response)).rating;
+}
