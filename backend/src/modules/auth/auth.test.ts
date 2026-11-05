@@ -154,7 +154,7 @@ describe('角色權限', () => {
   });
 
   test('訪客可使用公開功能，不能使用需登入的功能', async () => {
-    assert.equal((await request('GET', '/api/events')).status, 501);
+    assert.equal((await request('GET', '/api/events')).status, 200);
     assert.equal((await request('POST', '/api/sources')).status, 401);
     assert.equal((await request('GET', '/api/subscriptions')).status, 401);
     assert.equal((await request('POST', '/api/events/1/comments')).status, 401);
