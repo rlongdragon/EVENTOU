@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router';
 import { TodoPlaceholder } from '../../shared/TodoPlaceholder';
 import type { EventDetail } from './api';
 import { fetchEvent } from './api';
+import { EventComments } from './EventComments';
 import { formatEventTime } from './eventTime';
 
 type LoadState =
@@ -77,8 +78,7 @@ export function EventDetailPage() {
       <TodoPlaceholder title="分享" issues={[{ number: 15, label: 'US-12 分享活動連結' }]} />
       {/* TODO(#14): US-11 評價（需登入，#20） */}
       <TodoPlaceholder title="評價" issues={[{ number: 14, label: 'US-11 對活動評價' }]} />
-      {/* TODO(#13): US-10 留言（需登入，#20） */}
-      <TodoPlaceholder title="留言" issues={[{ number: 13, label: 'US-10 對活動留言' }]} />
+      <EventComments eventId={eventId} />
     </>
   );
 }

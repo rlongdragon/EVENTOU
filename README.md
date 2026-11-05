@@ -145,6 +145,15 @@ npm run user:set-role -w backend -- someone@example.com admin
 - 信件內容包含活動標題、時間、地點、活動頁連結、原始公告連結，以及到訂閱頁取消訂閱的連結；連結的網站位址由 `PUBLIC_BASE_URL` 決定。
 - 寄信使用 SMTP（`nodemailer`），設定見 `backend/.env.example` 的 `SMTP_*` 與 `MAIL_FROM`。**沒有設定 `SMTP_HOST` 時不會真的寄信**，只把信件內容印在後端主控台，方便本機開發。
 
+## 活動留言（US-10）
+
+- 後端 API：`GET /api/events/:eventId/comments`（未登入可看）、`POST /api/events/:eventId/comments`（需登入，body 為 `{ "content": string }`）。
+- 只有已發布的活動能看與留言；活動不存在、待審（`needs_review`）或 id 無效時回傳 `404`。
+- 留言內容會去除前後空白，空白留言回傳 `400 validation_error`（`fields.content`），上限 1000 字元。
+- 留言依時間由舊到新排序；每則留言回傳 `id`、`content`、`createdAt`（`+08:00` 的 ISO 字串）與留言者 `author`（`id`、`displayName`，不含 email）。
+- 資料表（migration 9）：`event_comments`，活動或使用者刪除時留言一併刪除。
+- 前端在活動頁（`/events/:eventId`）下方顯示留言列表；訪客看到登入提示，登入後才出現留言輸入框。
+
 ## 功能入口與 TODO
 
 US-17 已提供每小時背景擷取、原始公告 upsert、擷取紀錄與 US-19 接合。管理員可使用 `POST /api/ingestion/:sourceId/fetch` 手動擷取，以及 `GET /api/ingestion/:sourceId/runs` 查看最近 100 筆紀錄。人工來源設定、環境變數與操作方式見 [`docs/ingestion.md`](docs/ingestion.md)。

@@ -1,9 +1,14 @@
-import { Router } from 'express';
+import { Router, type Response } from 'express';
 import { getDb } from '../../db/index.js';
 import { notImplemented } from '../../shared/notImplemented.js';
 import { requireAuth } from '../auth/auth.middleware.js';
+import {
+  createEventComment,
+  listEventComments,
+  validateCommentContent,
+} from './events.comments.js';
 import { findPublishedEventById, searchPublishedEvents } from './events.repository.js';
-import { EVENT_CATEGORIES, EVENT_CATEGORY_LABELS } from './events.types.js';
+import { EVENT_CATEGORIES, EVENT_CATEGORY_LABELS, type PublishedEvent } from './events.types.js';
 
 // 活動（Event）：RawAnnouncement → Event，唯一鍵 source_id + original_url
 // US-19 轉換入口為 events.service.ts 的 processAnnouncement；資料格式見 events.types.ts。
@@ -38,27 +43,57 @@ eventsRouter.get('/', (req, res) => {
   });
 });
 
+/** 依路徑上的 eventId 讀取已發布活動；id 無效、不存在或待審時回 404 並回傳 undefined。 */
+function findPublishedEventOr404(eventId: unknown, res: Response): PublishedEvent | undefined {
+  const id = Number(eventId);
+  const event =
+    typeof eventId === 'string' && /^[1-9]\d*$/.test(eventId) && Number.isSafeInteger(id)
+      ? findPublishedEventById(getDb(), id)
+      : undefined;
+  if (!event) res.status(404).json({ error: 'not_found', message: '找不到這個活動' });
+  return event;
+}
+
 // US-02 取得活動詳細資訊（未登入可用）；id 無效、不存在或待審的活動一律回 404
 // TODO(#18): US-03 回傳活動地點座標，供活動頁顯示地圖
 eventsRouter.get('/:eventId', (req, res) => {
-  const { eventId } = req.params;
-  const id = Number(eventId);
-  const event =
-    /^[1-9]\d*$/.test(eventId) && Number.isSafeInteger(id)
-      ? findPublishedEventById(getDb(), id)
-      : undefined;
-  if (!event) {
-    res.status(404).json({ error: 'not_found', message: '找不到這個活動' });
-    return;
-  }
+  const event = findPublishedEventOr404(req.params.eventId, res);
+  if (!event) return;
   // categoryLabel 取自 EVENT_CATEGORY_LABELS（類別顯示名稱的單一來源）；查無對照時顯示代碼
   const categoryLabel = EVENT_CATEGORY_LABELS[event.category] ?? event.category;
   res.json({ event: { ...event, categoryLabel } });
 });
 
-// TODO(#13): US-10 活動留言（需登入）
-eventsRouter.get('/:eventId/comments', notImplemented('#13'));
-eventsRouter.post('/:eventId/comments', requireAuth, notImplemented('#13'));
+// US-10 活動留言：未登入可看，留言需登入；依留言時間由舊到新排序
+eventsRouter.get('/:eventId/comments', (req, res) => {
+  const event = findPublishedEventOr404(req.params.eventId, res);
+  if (!event) return;
+  res.json({ comments: listEventComments(getDb(), event.id) });
+});
+
+eventsRouter.post('/:eventId/comments', requireAuth, (req, res) => {
+  const event = findPublishedEventOr404(req.params.eventId, res);
+  if (!event || !req.user) return;
+  const body: unknown = req.body;
+  const raw =
+    typeof body === 'object' && body !== null && 'content' in body ? body.content : undefined;
+  const content = typeof raw === 'string' ? raw.trim() : '';
+  const contentError = validateCommentContent(content);
+  if (contentError) {
+    res.status(400).json({
+      error: 'validation_error',
+      message: '留言內容有誤',
+      fields: { content: contentError },
+    });
+    return;
+  }
+  const comment = createEventComment(getDb(), {
+    eventId: event.id,
+    userId: req.user.id,
+    content,
+  });
+  res.status(201).json({ comment });
+});
 
 // TODO(#14): US-11 活動評價（需登入）
 eventsRouter.get('/:eventId/ratings', notImplemented('#14'));

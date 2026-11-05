@@ -1,3 +1,5 @@
+import { ApiError } from '../auth/api';
+
 // 對應 backend/src/modules/events/events.types.ts 的 PublishedEvent（只列活動頁用到的欄位）
 export interface EventDetail {
   id: number;
@@ -65,4 +67,46 @@ export async function searchEvents(
     throw new Error(`HTTP ${response.status}`);
   }
   return (await response.json()) as EventSearchResult;
+}
+
+/** 活動留言（US-10），對應 backend/src/modules/events/events.comments.ts 的 EventComment */
+export interface EventComment {
+  id: number;
+  content: string;
+  /** Asia/Taipei ISO 8601 */
+  createdAt: string;
+  author: { id: number; displayName: string };
+}
+
+async function readJson<T>(response: Response): Promise<T> {
+  const text = await response.text();
+  const body = text ? JSON.parse(text) : undefined;
+  if (!response.ok) {
+    throw new ApiError(
+      response.status,
+      body?.error ?? 'unknown_error',
+      body?.message ?? `HTTP ${response.status}`,
+      body?.fields,
+    );
+  }
+  return body as T;
+}
+
+/** 取得活動留言，依留言時間由舊到新排序（未登入可用）。 */
+export async function fetchEventComments(
+  eventId: string,
+  signal?: AbortSignal,
+): Promise<EventComment[]> {
+  const response = await fetch(`/api/events/${encodeURIComponent(eventId)}/comments`, { signal });
+  return (await readJson<{ comments: EventComment[] }>(response)).comments;
+}
+
+/** 新增留言（需登入），空白留言由後端回傳 validation_error。 */
+export async function postEventComment(eventId: string, content: string): Promise<EventComment> {
+  const response = await fetch(`/api/events/${encodeURIComponent(eventId)}/comments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content }),
+  });
+  return (await readJson<{ comment: EventComment }>(response)).comment;
 }
