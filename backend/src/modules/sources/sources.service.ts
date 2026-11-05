@@ -60,6 +60,13 @@ export function listSourcesBySubmitter(userId: number): Source[] {
   return rows.map(toSource);
 }
 
+/** 依 id 取得來源，找不到回傳 undefined。 */
+export function getSource(sourceId: number): Source | undefined {
+  const row = getDb().prepare('SELECT * FROM sources WHERE id = ?').get(sourceId) as
+    SourceRow | undefined;
+  return row ? toSource(row) : undefined;
+}
+
 /** 列出來源，approvedOnly 為 true 時只回傳已核准的來源。 */
 export function listSources(options: { approvedOnly: boolean }): Source[] {
   const rows = getDb()

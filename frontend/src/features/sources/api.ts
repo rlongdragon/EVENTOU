@@ -24,8 +24,34 @@ export interface Source {
   createdAt: string;
 }
 
-/** 管理員看到的來源：多了提交者名稱與審核結果（US-14）。 */
+// 與 backend/src/modules/sources/sources.risk.ts 保持一致（US-15）
+export type RiskLevel = 'low' | 'medium' | 'high';
+
+export const RISK_LEVEL_LABELS: Record<RiskLevel, string> = {
+  low: '低風險',
+  medium: '中風險',
+  high: '高風險',
+};
+
+export interface RiskReason {
+  code: string;
+  points: number;
+  message: string;
+}
+
+/** 來源風險評估；只是提示，不會改變審核或啟用狀態。 */
+export interface SourceRisk {
+  level: RiskLevel;
+  score: number;
+  /** 依分數由高到低，第一筆為主要原因 */
+  reasons: RiskReason[];
+  recentRuns: number;
+  recentFailures: number;
+}
+
+/** 管理員看到的來源：多了提交者名稱、審核結果（US-14）與風險評估（US-15）。 */
 export interface AdminSource extends Source {
+  risk: SourceRisk;
   submitterName: string;
   reviewedBy: number | null;
   reviewedAt: string | null;
