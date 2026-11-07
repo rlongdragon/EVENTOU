@@ -253,4 +253,35 @@ export const migrations: Migration[] = [
       );
     `,
   },
+  {
+    id: 11,
+    name: 'create_personal_calendars',
+    // US-09：使用者的個人行事曆與篩選條件。token 是 iCal 訂閱網址用的隨機字串，行事曆軟體無法登入，
+    // 所以以不可猜的 token 取代登入。類別與標籤條件各自一張表，行事曆刪除時一併刪除；
+    // 類別值域由程式 EVENT_CATEGORIES 驗證，不設 CHECK。
+    up: `
+      CREATE TABLE personal_calendars (
+        id INTEGER PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+        name TEXT NOT NULL CHECK (length(trim(name)) > 0),
+        token TEXT NOT NULL UNIQUE,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE INDEX personal_calendars_user ON personal_calendars (user_id, id);
+
+      CREATE TABLE personal_calendar_categories (
+        calendar_id INTEGER NOT NULL REFERENCES personal_calendars (id) ON DELETE CASCADE,
+        category TEXT NOT NULL,
+        PRIMARY KEY (calendar_id, category)
+      );
+
+      CREATE TABLE personal_calendar_tags (
+        calendar_id INTEGER NOT NULL REFERENCES personal_calendars (id) ON DELETE CASCADE,
+        tag TEXT NOT NULL CHECK (length(trim(tag)) > 0),
+        PRIMARY KEY (calendar_id, tag)
+      );
+    `,
+  },
 ];
