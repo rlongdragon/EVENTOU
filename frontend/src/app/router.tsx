@@ -2,6 +2,7 @@ import { createBrowserRouter } from 'react-router';
 import { LoginPage } from '../features/auth/LoginPage';
 import { RequireAuth } from '../features/auth/RequireAuth';
 import { CalendarsPage } from '../features/calendars/CalendarsPage';
+import { PersonalCalendarPage } from '../features/calendars/PersonalCalendarPage';
 import { EventDetailPage } from '../features/events/EventDetailPage';
 import { EventSearchPage } from '../features/events/EventSearchPage';
 import { CampusMapPage } from '../features/map/CampusMapPage';
@@ -28,6 +29,14 @@ export const router = createBrowserRouter([
         ),
       },
       { path: 'calendars', element: <CalendarsPage /> },
+      {
+        path: 'calendars/personal/:calendarId',
+        element: (
+          <RequireAuth>
+            <PersonalCalendarPage />
+          </RequireAuth>
+        ),
+      },
       {
         path: 'sources/new',
         element: (
