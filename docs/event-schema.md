@@ -74,7 +74,7 @@ published_at 與 fetched_at 須為帶時區的 ISO 8601（如 `2026-10-01T09:00:
 - `(source_id, original_url)` 為唯一鍵，`upsertEvent` 使用 `ON CONFLICT DO UPDATE`，保留 id 與 created_at，更新其餘內容及 updated_at；內容與既有資料完全相同時不寫入，updated_at 不變。
 - `status` 與 `all_day` 有值域約束（category 由程式驗證），tags 與 review_reasons 須為合法 JSON array。
 - published 活動須有非空標題、類別與開始時間，且沒有待審原因。
-- `published_events` view 只提供 published 活動；搜尋、行事曆與通知應從此 view 或加上相同狀態條件查詢。
+- `published_events` view 只提供 published 活動，並排除 US-20 判定為重複而合併掉的活動（migration 12，見 [`dedup.md`](dedup.md)）；搜尋、行事曆與通知應從此 view 查詢，不要直接查 `events` 再自己加狀態條件。
 - `source_id` 是指向 `sources(id)` 的外鍵，由 migration 4 `add_events_source_foreign_key` 補上（SQLite 不能用 `ALTER TABLE` 加外鍵，所以重建 `events`，欄位、index 與 `published_events` view 不變）。`db/client.ts` 開啟 `PRAGMA foreign_keys = ON`，寫入 Event 前來源必須已存在；升級時若既有 Event 的 `source_id` 對不到來源，migration 會失敗並回復，需先補上來源或清除這些 Event。測試可用 `sources.testHelpers.ts` 的 `seedSources(db)` 建立來源。
 
 後端既有啟動流程會呼叫 migrate()；亦可在 repo 根目錄執行 `npm run db:migrate -w backend`。

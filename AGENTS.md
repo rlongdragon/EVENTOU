@@ -21,7 +21,7 @@ Source（已核准且啟用中）
 
 搜尋、行事曆、通知都讀同一份 Event，不要各自另存一份活動資料。
 
-接合擷取、搜尋、行事曆、通知或去重時，先讀 [`docs/event-schema.md`](docs/event-schema.md)；Event 欄位、`published_events` view 與來源 FK 的接合限制皆見該文件。
+接合擷取、搜尋、行事曆、通知或去重時，先讀 [`docs/event-schema.md`](docs/event-schema.md)，跨來源重複偵測另見 [`docs/dedup.md`](docs/dedup.md)；Event 欄位、`published_events` view 與來源 FK 的接合限制皆見該文件。
 
 修改擷取規則、排程或手動擷取 API 時，先讀 [`docs/ingestion.md`](docs/ingestion.md)；US-17 與 US-19 共用既有 `RawAnnouncement` 型別。
 

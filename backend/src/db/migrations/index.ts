@@ -253,4 +253,60 @@ export const migrations: Migration[] = [
       );
     `,
   },
+  {
+    id: 12,
+    name: 'add_event_duplicates',
+    // US-20：跨來源重複活動。重複的那筆仍保留自己的資料列（來源與原始連結），
+    // duplicate_of 指向保留的活動，dedup_status 為 none／merged（自動或管理員確認合併）／possible（可能重複，待確認）。
+    // published_events 不再列出已合併的活動（保留的那筆仍發布時），保留的那筆缺地點、主辦或報名連結時
+    // 以合併進來的活動補上；只在 view 補，不改寫原始資料，還原後自然回到各自的內容。
+    // event_distinct_pairs 記錄管理員判定「不是重複」的配對，重跑擷取時不再合併。
+    // id 跳過 11：11 留給 US-09 的個人行事曆（#45）。
+    up: `
+      DROP VIEW published_events;
+
+      ALTER TABLE events ADD COLUMN duplicate_of INTEGER REFERENCES events (id) ON DELETE SET NULL;
+      ALTER TABLE events ADD COLUMN dedup_status TEXT NOT NULL DEFAULT 'none'
+        CHECK (dedup_status IN ('none', 'merged', 'possible'));
+      ALTER TABLE events ADD COLUMN dedup_score REAL;
+
+      CREATE INDEX events_duplicate_of ON events (duplicate_of);
+
+      CREATE TABLE event_distinct_pairs (
+        event_id INTEGER NOT NULL REFERENCES events (id) ON DELETE CASCADE,
+        other_event_id INTEGER NOT NULL REFERENCES events (id) ON DELETE CASCADE,
+        decided_by INTEGER REFERENCES users (id) ON DELETE SET NULL,
+        decided_at TEXT NOT NULL,
+        PRIMARY KEY (event_id, other_event_id),
+        CHECK (event_id < other_event_id)
+      );
+
+      CREATE VIEW published_events AS
+      SELECT
+        e.id, e.title, e.description, e.category, e.tags, e.start_time, e.end_time, e.all_day,
+        COALESCE(e.location, (
+          SELECT d.location FROM events d
+          WHERE d.duplicate_of = e.id AND d.dedup_status = 'merged' AND d.location IS NOT NULL
+          ORDER BY d.id LIMIT 1
+        )) AS location,
+        COALESCE(e.organizer, (
+          SELECT d.organizer FROM events d
+          WHERE d.duplicate_of = e.id AND d.dedup_status = 'merged' AND d.organizer IS NOT NULL
+          ORDER BY d.id LIMIT 1
+        )) AS organizer,
+        COALESCE(e.registration_url, (
+          SELECT d.registration_url FROM events d
+          WHERE d.duplicate_of = e.id AND d.dedup_status = 'merged' AND d.registration_url IS NOT NULL
+          ORDER BY d.id LIMIT 1
+        )) AS registration_url,
+        e.source_id, e.original_url, e.status, e.review_reasons, e.created_at, e.updated_at,
+        e.duplicate_of, e.dedup_status, e.dedup_score
+      FROM events e
+      WHERE e.status = 'published'
+        AND NOT (
+          e.dedup_status = 'merged'
+          AND EXISTS (SELECT 1 FROM events k WHERE k.id = e.duplicate_of AND k.status = 'published')
+        );
+    `,
+  },
 ];
