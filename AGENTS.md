@@ -68,6 +68,7 @@ eslint.config.js        # 前後端共用的 ESLint flat config
 
 - 啟動後可用 `curl localhost:5173/api/health` 確認前後端已串接。
 - 測試使用 Node 內建的 `node:test`（以 `tsx` 執行 TypeScript），檔名為 `*.test.ts`，與被測程式放在同一個模組資料夾；後端測試設 `DATABASE_PATH=:memory:` 使用記憶體資料庫。
+- 前端測試同樣使用 `node:test`，只測不依賴 DOM 的純函式；`*.test.ts` 由 `frontend/tsconfig.test.json` 做型別檢查，不會打包進前端。
 - 提交前請確認 `npm run lint`、`npm run typecheck`、`npm run build`、`npm test`、`npm run format:check` 都通過。
 
 ## 程式碼慣例

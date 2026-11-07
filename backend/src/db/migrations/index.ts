@@ -221,4 +221,36 @@ export const migrations: Migration[] = [
       CREATE INDEX event_notifications_status ON event_notifications (status);
     `,
   },
+  {
+    id: 9,
+    name: 'create_event_comments',
+    // US-10：活動留言。created_at 與 events 相同存成 +08:00 的 ISO 字串（由程式寫入），
+    // 可直接以字串排序；活動或使用者刪除時留言一併刪除。
+    up: `
+      CREATE TABLE event_comments (
+        id INTEGER PRIMARY KEY,
+        event_id INTEGER NOT NULL REFERENCES events (id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+        content TEXT NOT NULL CHECK (length(trim(content)) > 0),
+        created_at TEXT NOT NULL
+      );
+
+      CREATE INDEX event_comments_event ON event_comments (event_id, created_at, id);
+    `,
+  },
+  {
+    id: 10,
+    name: 'create_event_ratings',
+    // US-11：活動評價，(event_id, user_id) 為主鍵，每位使用者對同一活動只有一筆，再次評分即修改。
+    up: `
+      CREATE TABLE event_ratings (
+        event_id INTEGER NOT NULL REFERENCES events (id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+        score INTEGER NOT NULL CHECK (score BETWEEN 1 AND 5),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (event_id, user_id)
+      );
+    `,
+  },
 ];
