@@ -117,6 +117,28 @@ npm run user:set-role -w backend -- someone@example.com admin
 - US-17 的排程擷取請用 `listIngestableSources()`（`backend/src/modules/sources/sources.service.ts`）取得來源，只會包含「已核准且啟用中」的來源，停用的來源不會被擷取。
 - 前端 `/admin/sources`：已核准的來源會顯示啟用狀態，可按鈕啟用或停用。
 
+## 來源風險提示（US-15）
+
+- 後端 API：`GET /api/sources/:sourceId/risk`。管理員可查看任何來源的風險等級、分數與原因；其他人（含訪客）只能查看已核准來源的風險等級（`{ "level" }`），未核准的來源回傳 `404`。`GET /api/sources` 的每個來源也帶有 `risk`（管理員為完整結果，其他人只有等級）。
+- 規則式評估，規則與門檻定義在 `backend/src/modules/sources/sources.risk.ts`，修改時請同步更新此表：
+
+  | 規則                                        | 分數 |
+  | ------------------------------------------- | ---- |
+  | 已被管理員退回                              | 60   |
+  | 尚未通過管理員審核                          | 30   |
+  | 網址未使用 HTTPS                            | 20   |
+  | 最近連續 3 次以上擷取失敗（視為無法存取）   | 30   |
+  | 最近一次擷取失敗（連續未達 3 次）           | 20   |
+  | 最近 10 次擷取失敗率 ≥ 50%（至少 3 次紀錄） | 20   |
+  | 最近 10 次擷取失敗率 ≥ 20%（至少 3 次紀錄） | 10   |
+  | 已核准但已停用                              | 10   |
+  | 已核准但尚無擷取紀錄                        | 5    |
+
+- 擷取相關規則只套用在已核准的來源，資料來自 US-17 的 `ingestion_runs`（只計 `success`／`failure`，不計執行中）。可存取性以擷取結果判斷，不另外發送連線檢查。
+- 總分 0–19 為低風險、20–49 為中風險、50 以上為高風險；原因依分數由高到低排列，第一項為主要原因。
+- 風險只是提示，**不會**改變審核狀態或啟用狀態，也不影響擷取；最終決定仍由管理員審核。
+- 前端 `/admin/sources`：每個來源顯示風險等級與原因。
+
 ## 類別公開行事曆（US-05）
 
 - 後端 API（皆不需登入）：`GET /api/calendars/categories`（各類別的代碼、顯示名稱與訂閱路徑）、`GET /api/calendars/categories/:category.ics`（該類別的 iCalendar，`Content-Type: text/calendar`）。

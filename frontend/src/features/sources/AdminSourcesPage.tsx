@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
-import { TodoPlaceholder } from '../../shared/TodoPlaceholder';
 import { ApiError } from '../auth/api';
 import {
+  RISK_LEVEL_LABELS,
   SOURCE_TYPE_OPTIONS,
   fetchAdminSources,
   reviewSource,
   setSourceEnabled,
   type AdminSource,
   type ReviewStatus,
+  type RiskLevel,
+  type SourceRisk,
 } from './api';
 
 const errorStyle = { color: '#cf222e', margin: 0 } as const;
@@ -19,6 +21,41 @@ const REVIEW_STATUS_LABELS: Record<ReviewStatus, string> = {
   approved: '已核准',
   rejected: '已退回',
 };
+
+const RISK_COLORS: Record<RiskLevel, { color: string; background: string }> = {
+  low: { color: '#1a7f37', background: '#dafbe1' },
+  medium: { color: '#9a6700', background: '#fff8c5' },
+  high: { color: '#cf222e', background: '#ffebe9' },
+};
+
+function RiskSummary({ risk }: { risk: SourceRisk }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', minWidth: 180 }}>
+      <span
+        style={{
+          ...RISK_COLORS[risk.level],
+          alignSelf: 'flex-start',
+          padding: '0 0.5rem',
+          borderRadius: 999,
+          fontWeight: 600,
+        }}
+      >
+        {RISK_LEVEL_LABELS[risk.level]}（{risk.score} 分）
+      </span>
+      {risk.reasons.length === 0 ? (
+        <span>未發現風險</span>
+      ) : (
+        <ul style={{ margin: 0, paddingLeft: '1.25rem' }}>
+          {risk.reasons.map((reason) => (
+            <li key={reason.code}>
+              {reason.message}（+{reason.points}）
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 function ReviewForm({
   source,
@@ -167,6 +204,10 @@ export function AdminSourcesPage() {
       <p>
         核准前請確認來源屬於海大的單位或社團；審核結果會被保存。已核准的來源可在這裡啟用或停用，停用的來源不會被擷取。
       </p>
+      <p>
+        「風險提示」依審核狀態、啟用狀態、HTTPS 與最近 10
+        次擷取結果自動計算，列出的第一項為主要原因；它只是輔助參考，不會改變審核或啟用狀態。
+      </p>
       <label>
         顯示{' '}
         <select
@@ -198,6 +239,7 @@ export function AdminSourcesPage() {
               <th style={{ textAlign: 'left' }}>提交時間</th>
               <th style={{ textAlign: 'left' }}>審核</th>
               <th style={{ textAlign: 'left' }}>啟用狀態</th>
+              <th style={{ textAlign: 'left' }}>風險提示</th>
             </tr>
           </thead>
           <tbody>
@@ -231,17 +273,14 @@ export function AdminSourcesPage() {
                 <td>
                   <EnabledToggle source={source} onChanged={replaceSource} />
                 </td>
+                <td>
+                  <RiskSummary risk={source.risk} />
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       )}
-
-      {/* TODO(#23): US-15 來源可信度／風險提示 */}
-      <TodoPlaceholder
-        title="來源管理（其他功能）"
-        issues={[{ number: 23, label: 'US-15 來源可信度／風險提示' }]}
-      />
     </>
   );
 }

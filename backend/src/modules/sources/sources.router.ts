@@ -1,8 +1,9 @@
 import { Router, type Response } from 'express';
-import { notImplemented } from '../../shared/notImplemented.js';
 import { requireAuth, requireRole } from '../auth/auth.middleware.js';
+import { withRisk } from './sources.risk.js';
 import {
   createSource,
+  getSource,
   listSources,
   listSourcesBySubmitter,
   listSourcesForAdmin,
@@ -100,7 +101,12 @@ sourcesRouter.get('/mine', requireAuth, (req, res) => {
 // 列出來源：管理員看到全部（含提交者與審核結果，可用 ?status= 篩選審核狀態），其他人（含訪客）只看到已核准的來源
 sourcesRouter.get('/', (req, res) => {
   if (req.user?.role !== 'admin') {
-    res.json({ sources: listSources({ approvedOnly: true }) });
+    // 一般使用者只看到風險等級，造成風險的原因只給管理員看
+    const sources = withRisk(listSources({ approvedOnly: true })).map(({ risk, ...source }) => ({
+      ...source,
+      risk: { level: risk.level },
+    }));
+    res.json({ sources });
     return;
   }
 
@@ -111,7 +117,8 @@ sourcesRouter.get('/', (req, res) => {
     });
     return;
   }
-  res.json({ sources: listSourcesForAdmin({ reviewStatus: status as ReviewStatus | undefined }) });
+  const sources = listSourcesForAdmin({ reviewStatus: status as ReviewStatus | undefined });
+  res.json({ sources: withRisk(sources) });
 });
 
 // US-14 管理員審核來源（核准／退回），只有待審核的來源能審核；
@@ -162,12 +169,24 @@ sourcesRouter.post('/:sourceId/review', requireRole('admin'), (req, res) => {
   } else if (result === 'already_reviewed') {
     res.status(409).json({ error: 'already_reviewed', message: '這個來源已經審核過了' });
   } else {
-    res.json({ source: result });
+    res.json({ source: withRisk([result])[0] });
   }
 });
 
-// TODO(#23): US-15 來源可信度／風險提示
-sourcesRouter.get('/:sourceId/risk', notImplemented('#23'));
+// US-15 來源可信度／風險提示：依 sources.risk.ts 的規則計算風險等級；只是提示，不改變審核或啟用狀態。
+// 管理員可查看任何來源的分數與主要原因；其他人（含訪客）只能查看已核准來源的風險等級
+sourcesRouter.get('/:sourceId/risk', (req, res) => {
+  const sourceId = parseSourceId(req.params.sourceId);
+  const source = sourceId === undefined ? undefined : getSource(sourceId);
+  const isAdmin = req.user?.role === 'admin';
+  if (!source || (!isAdmin && source.reviewStatus !== 'approved')) {
+    sendSourceNotFound(res);
+    return;
+  }
+
+  const { risk } = withRisk([source])[0];
+  res.json({ sourceId: source.id, risk: isAdmin ? risk : { level: risk.level } });
+});
 
 // US-16 管理員啟用／停用來源：只有已核准的來源能切換，不影響審核狀態；
 // 停用的來源不會進入擷取流程（見 listIngestableSources）
@@ -190,6 +209,6 @@ sourcesRouter.patch('/:sourceId/enabled', requireRole('admin'), (req, res) => {
   } else if (result === 'not_approved') {
     res.status(409).json({ error: 'not_approved', message: '只有已核准的來源可以啟用或停用' });
   } else {
-    res.json({ source: result });
+    res.json({ source: withRisk([result])[0] });
   }
 });
