@@ -66,11 +66,27 @@ export function EventDetailPage() {
       </dl>
       <h2>活動說明</h2>
       <p style={{ whiteSpace: 'pre-wrap' }}>{event.description || '未提供'}</p>
-      <p>
-        <a href={event.originalUrl} target="_blank" rel="noreferrer">
-          查看原始公告
-        </a>
-      </p>
+      {event.sources.length > 1 ? (
+        <>
+          {/* US-20：跨來源的重複公告已合併成這一筆，列出所有來源 */}
+          <h2>來源</h2>
+          <ul>
+            {event.sources.map((source) => (
+              <li key={source.originalUrl}>
+                <a href={source.originalUrl} target="_blank" rel="noreferrer">
+                  {source.sourceName}的原始公告
+                </a>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : (
+        <p>
+          <a href={event.originalUrl} target="_blank" rel="noreferrer">
+            查看原始公告
+          </a>
+        </p>
+      )}
       <ShareEventButton eventId={event.id} />
       {/* TODO(#18): US-03 活動地點地圖 */}
       <TodoPlaceholder

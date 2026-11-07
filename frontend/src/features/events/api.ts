@@ -16,6 +16,14 @@ export interface EventDetail {
   location: string | null;
   organizer: string | null;
   originalUrl: string;
+  /** 活動的所有來源（US-20）：自己的來源在前，再列出合併進來的重複活動的來源 */
+  sources: EventSourceLink[];
+}
+
+export interface EventSourceLink {
+  sourceId: number;
+  sourceName: string;
+  originalUrl: string;
 }
 
 /** 取得單一活動（US-02），活動不存在時回傳 null。 */
@@ -137,4 +145,46 @@ export async function rateEvent(eventId: string, score: number): Promise<EventRa
     body: JSON.stringify({ score }),
   });
   return (await readJson<{ rating: EventRatingSummary }>(response)).rating;
+}
+
+/** 重複配對中的一筆活動（US-20），對應 backend 的 PairEvent */
+export interface PairEvent {
+  id: number;
+  title: string;
+  startTime: string;
+  endTime: string | null;
+  allDay: boolean;
+  location: string | null;
+  registrationUrl: string | null;
+  originalUrl: string;
+  sourceId: number;
+  sourceName: string;
+}
+
+/** 可能重複（possible）或已合併（merged）的配對；event 為重複的那筆，duplicateOf 為保留的那筆 */
+export interface DuplicatePair {
+  status: 'possible' | 'merged';
+  score: number | null;
+  event: PairEvent;
+  duplicateOf: PairEvent;
+}
+
+async function duplicatesRequest(path: string, method = 'GET'): Promise<DuplicatePair[]> {
+  const response = await fetch(path, { method });
+  return (await readJson<{ pairs: DuplicatePair[] }>(response)).pairs;
+}
+
+/** 管理員取得可能重複與已合併的配對（US-20）。 */
+export function fetchDuplicatePairs(): Promise<DuplicatePair[]> {
+  return duplicatesRequest('/api/events/duplicates');
+}
+
+/** 確認合併可能重複的活動，回傳更新後的配對清單。 */
+export function mergeDuplicate(eventId: number): Promise<DuplicatePair[]> {
+  return duplicatesRequest(`/api/events/duplicates/${eventId}/merge`, 'POST');
+}
+
+/** 拆開配對或還原誤合併，回傳更新後的配對清單。 */
+export function splitDuplicate(eventId: number): Promise<DuplicatePair[]> {
+  return duplicatesRequest(`/api/events/duplicates/${eventId}/split`, 'POST');
 }

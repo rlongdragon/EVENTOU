@@ -168,6 +168,14 @@ npm run user:set-role -w backend -- someone@example.com admin
 - 活動頁的固定網址為 `<網站 origin>/events/:eventId`（`frontend/src/features/events/eventShare.ts`），不帶查詢字串或 hash，開啟不需登入。
 - 活動頁的「分享」按鈕會把固定網址複製到剪貼簿並顯示「已複製」；瀏覽器不允許存取剪貼簿時（例如非 HTTPS），改顯示網址讓使用者手動複製。
 
+## 跨來源重複活動偵測（US-20）
+
+- 新活動寫入（`processAnnouncement`）後，與開始日期前後 1 天內、其他已核准來源的已發布活動比對重複分數：高信心自動合併、中信心標記「可能重複」交給管理員。規則、門檻與 precision／recall 驗證結果見 [`docs/dedup.md`](docs/dedup.md)。
+- 合併掉的活動不會出現在 `published_events`，所以搜尋、行事曆與通知都自動排除；`GET /api/events/:eventId` 的 `sources` 列出活動的所有來源，活動頁顯示全部原始公告。
+- 管理員 API：`GET /api/events/duplicates`、`POST /api/events/duplicates/:eventId/merge`（確認合併）、`POST /api/events/duplicates/:eventId/split`（拆開或還原誤合併）；前端頁面 `/admin/duplicates`。
+- 門檻用 `DEDUP_HIGH_THRESHOLD`（預設 0.75）、`DEDUP_LOW_THRESHOLD`（預設 0.5）設定。
+- 資料（migration 12）：`events` 新增 `duplicate_of`、`dedup_status`、`dedup_score`，新增 `event_distinct_pairs`。
+
 ## 功能入口與 TODO
 
 US-17 已提供每小時背景擷取、原始公告 upsert、擷取紀錄與 US-19 接合。管理員可使用 `POST /api/ingestion/:sourceId/fetch` 手動擷取，以及 `GET /api/ingestion/:sourceId/runs` 查看最近 100 筆紀錄。人工來源設定、環境變數與操作方式見 [`docs/ingestion.md`](docs/ingestion.md)。
