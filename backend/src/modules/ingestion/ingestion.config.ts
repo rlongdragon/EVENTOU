@@ -1,4 +1,6 @@
 export interface ScraperConfig {
+  // US-18 統一擷取設定格式：未填 kind 視為靜態 HTML 列表（US-17 人工設定），見 ingestion.extraction.ts
+  kind?: 'html';
   listUrl: string;
   linkSelector: string;
   titleSelector: string;

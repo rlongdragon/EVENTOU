@@ -180,6 +180,14 @@ npm run user:set-role -w backend -- someone@example.com admin
 - 活動頁的固定網址為 `<網站 origin>/events/:eventId`（`frontend/src/features/events/eventShare.ts`），不帶查詢字串或 hash，開啟不需登入。
 - 活動頁的「分享」按鈕會把固定網址複製到剪貼簿並顯示「已複製」；瀏覽器不允許存取剪貼簿時（例如非 HTTPS），改顯示網址讓使用者手動複製。
 
+## 自動擷取設定（US-18，第一部分）
+
+- 擷取設定改用統一格式 `ExtractionConfig`（`backend/src/modules/ingestion/ingestion.extraction.ts`）：靜態 HTML 沿用 US-17 的 `ScraperConfig`（`kind` 省略或 `'html'`），另有 `kind: 'feed'`（RSS／Atom）與 `kind: 'ical'`（iCalendar）。US-17 的 `IngestionService` 依 `kind` 選擇擷取器，輸出一律是 `RawAnnouncement`，人工寫的與自動產生的設定不需區分。
+- `detectSourceType` 依網址與回應內容判斷來源類型：iCalendar、RSS／Atom（含頁面宣告的 feed 連結）、一般 HTML、無法判斷（含需要執行 JavaScript 的頁面）。
+- `generateExtractionConfig` 抓取來源、偵測類型並產生設定；內容沒有可用項目，或類型無法判斷時，回傳 `manual_required` 與原因，不丟例外。
+- 目前尚未包含：靜態 HTML 的選擇器推測、核准後自動觸發、設定存檔、試跑預覽與管理介面（第二個 PR）。自動產生的設定在那之前不會被排程使用。
+- 詳細規則、限制與測試範例見 [`docs/ingestion.md`](docs/ingestion.md)。
+
 ## 功能入口與 TODO
 
 US-17 已提供每小時背景擷取、原始公告 upsert、擷取紀錄與 US-19 接合。管理員可使用 `POST /api/ingestion/:sourceId/fetch` 手動擷取，以及 `GET /api/ingestion/:sourceId/runs` 查看最近 100 筆紀錄。人工來源設定、環境變數與操作方式見 [`docs/ingestion.md`](docs/ingestion.md)。

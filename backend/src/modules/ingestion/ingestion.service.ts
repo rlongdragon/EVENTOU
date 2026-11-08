@@ -3,8 +3,9 @@ import { getDb } from '../../db/index.js';
 import { processAnnouncement } from '../events/events.service.js';
 import type { RawAnnouncement } from '../events/events.types.js';
 import { listIngestableSources } from '../sources/sources.service.js';
-import { positiveInteger, scraperConfigs, type ScraperConfig } from './ingestion.config.js';
-import { scrapeAnnouncements, ScraperClient } from './ingestion.scraper.js';
+import { positiveInteger, scraperConfigs } from './ingestion.config.js';
+import { extractAnnouncements, type ExtractionConfig } from './ingestion.extraction.js';
+import { ScraperClient } from './ingestion.scraper.js';
 
 export class IngestionError extends Error {
   constructor(
@@ -19,9 +20,9 @@ export class IngestionService {
   private active = new Set<number>();
   constructor(
     private db: DatabaseSync,
-    private configs: ScraperConfig[] = scraperConfigs,
+    private configs: ExtractionConfig[] = scraperConfigs,
     private client = new ScraperClient(),
-    private scrape = scrapeAnnouncements,
+    private scrape = extractAnnouncements,
     private process = processAnnouncement,
   ) {}
   async runAll(): Promise<void> {
