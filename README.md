@@ -198,4 +198,4 @@ git grep -n "TODO(#20)"
 
 API 路徑為暫定，實作時可依需求調整，但請同步更新前端呼叫與此 README。
 
-活動詳細頁的 `GET /api/map/geocode?location=...` 透過 OpenStreetMap Nominatim 將活動地點轉為座標，供 Leaflet 地圖顯示；查詢結果會在後端記憶體快取。地圖使用 OpenStreetMap 圖磚。
+活動詳細頁的 `GET /api/map/events/:eventId/location` 只會查詢資料庫中已發布活動的地點，再由共用 `map.service.ts` 透過 OpenStreetMap Nominatim 轉為座標；查詢結果會在後端記憶體快取並以佇列限速。地圖使用 OpenStreetMap 圖磚。

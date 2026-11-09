@@ -72,7 +72,7 @@ export function EventDetailPage() {
         </a>
       </p>
       <ShareEventButton eventId={event.id} />
-      <EventLocationMap key={event.id} location={event.location} />
+      <EventLocationMap key={event.id} eventId={event.id} location={event.location} />
       <EventRating eventId={eventId} />
       <EventComments eventId={eventId} />
     </>

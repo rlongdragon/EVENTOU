@@ -1,47 +1,29 @@
 import { Router } from 'express';
+import { getDb } from '../../db/index.js';
 import { notImplemented } from '../../shared/notImplemented.js';
+import { findMapEventLocation, geocodeLocation } from './map.service.js';
 
 // 地圖
 export const mapRouter = Router();
 
-type GeocodeResult = { latitude: number; longitude: number } | null;
-const geocodeCache = new Map<string, GeocodeResult>();
-let lastGeocodeAt = 0;
-
-// US-03：以 Nominatim 將公告地點轉為座標，快取同一地點的查詢結果。
-mapRouter.get('/geocode', async (req, res) => {
-  const location = typeof req.query.location === 'string' ? req.query.location.trim() : '';
-  if (!location || location.length > 200) {
-    res.status(400).json({ error: 'invalid_location' });
+// US-03：只對資料庫中已發布活動的地點進行地理編碼。
+mapRouter.get('/events/:eventId/location', async (req, res) => {
+  const id = Number(req.params.eventId);
+  if (!/^[1-9]\d*$/.test(req.params.eventId) || !Number.isSafeInteger(id)) {
+    res.status(404).json({ error: 'not_found' });
     return;
   }
-
-  const key = location.toLocaleLowerCase();
-  if (geocodeCache.has(key)) {
-    res.json({ coordinates: geocodeCache.get(key) });
+  const location = findMapEventLocation(getDb(), id);
+  if (location === undefined) {
+    res.status(404).json({ error: 'not_found' });
     return;
   }
-
+  if (!location?.trim()) {
+    res.json({ coordinates: null });
+    return;
+  }
   try {
-    const wait = Math.max(0, 1000 - (Date.now() - lastGeocodeAt));
-    if (wait) await new Promise((resolve) => setTimeout(resolve, wait));
-    lastGeocodeAt = Date.now();
-    const query = new URLSearchParams({
-      q: `${location}, Taiwan`,
-      format: 'jsonv2',
-      limit: '1',
-    });
-    const response = await fetch(`https://nominatim.openstreetmap.org/search?${query}`, {
-      headers: { 'User-Agent': 'EVENTOU/1.0 (campus event map)' },
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!response.ok) throw new Error(`Nominatim HTTP ${response.status}`);
-    const results = (await response.json()) as { lat: string; lon: string }[];
-    const result = results[0]
-      ? { latitude: Number(results[0].lat), longitude: Number(results[0].lon) }
-      : null;
-    geocodeCache.set(key, result);
-    res.json({ coordinates: result });
+    res.json({ coordinates: await geocodeLocation(location) });
   } catch {
     res.status(502).json({ error: 'geocoding_unavailable' });
   }

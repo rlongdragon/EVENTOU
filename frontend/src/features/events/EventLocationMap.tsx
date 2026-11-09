@@ -5,10 +5,11 @@ type Coordinates = { latitude: number; longitude: number };
 type GeocodeState = 'loading' | 'found' | 'not_found' | 'error';
 
 interface EventLocationMapProps {
+  eventId: number;
   location: string | null;
 }
 
-export function EventLocationMap({ location }: EventLocationMapProps) {
+export function EventLocationMap({ eventId, location }: EventLocationMapProps) {
   const [coordinates, setCoordinates] = useState<Coordinates | null>(null);
   const [state, setState] = useState<GeocodeState>(location?.trim() ? 'loading' : 'not_found');
 
@@ -17,7 +18,7 @@ export function EventLocationMap({ location }: EventLocationMapProps) {
     if (!query) return;
 
     const controller = new AbortController();
-    fetch(`/api/map/geocode?location=${encodeURIComponent(query)}`, { signal: controller.signal })
+    fetch(`/api/map/events/${eventId}/location`, { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         return (await response.json()) as { coordinates: Coordinates | null };
@@ -30,7 +31,7 @@ export function EventLocationMap({ location }: EventLocationMapProps) {
         if (!controller.signal.aborted) setState('error');
       });
     return () => controller.abort();
-  }, [location]);
+  }, [eventId, location]);
 
   return (
     <section className="event-location-section" aria-labelledby="event-location-heading">
