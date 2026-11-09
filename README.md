@@ -79,6 +79,12 @@ backend/src/
 └── shared/
 ```
 
+## 校園活動地圖（US-04）
+
+- 前端頁面 `/map` 未登入即可瀏覽，使用共用 Leaflet `MapView` 顯示活動標記；標記密集時會聚合，點選後可查看活動摘要並前往詳細頁。
+- `GET /api/map/events?date=YYYY-MM-DD&category=lecture` 回傳有地點的已發布活動、座標及類別選項。`date` 以台北時區活動開始日期篩選；`category` 可省略以包含全部類別。
+- 座標由 OpenStreetMap Nominatim 查詢並在後端記憶體快取；未能轉換座標的活動不會出現在地圖上。
+
 ## 帳號與權限（US-06）
 
 - 後端 API：`POST /api/auth/register`、`POST /api/auth/login`、`POST /api/auth/logout`、`GET /api/auth/me`。
