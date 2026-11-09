@@ -1,0 +1,581 @@
+{
+  "description": "US-20 重複偵測的標記配對（NFR-09）。每組是兩個不同來源的公告整理後的活動欄位，duplicate 為人工標記是否為同一活動。資料為依海大各單位公告寫法改寫的合成範例，不是實際擷取結果。",
+  "pairs": [
+    {
+      "note": "轉知前綴",
+      "duplicate": true,
+      "a": {
+        "title": "【轉知】2026 海洋科技就業博覽會",
+        "startTime": "2026-11-18T10:00:00+08:00",
+        "location": "體育館",
+        "registrationUrl": null
+      },
+      "b": {
+        "title": "2026海洋科技就業博覽會",
+        "startTime": "2026-11-18T10:00:00+08:00",
+        "location": "體育館",
+        "registrationUrl": null
+      }
+    },
+    {
+      "note": "系網與粉專標題寫法不同",
+      "duplicate": true,
+      "a": {
+        "title": "AI 在海洋監測的應用 專題演講",
+        "startTime": "2026-10-21T14:00:00+08:00",
+        "location": "資工系館 R101",
+        "registrationUrl": null
+      },
+      "b": {
+        "title": "【演講】AI在海洋監測的應用",
+        "startTime": "2026-10-21T14:00:00+08:00",
+        "location": "資工系館R101",
+        "registrationUrl": null
+      }
+    },
+    {
+      "note": "報名連結相同、標題不同",
+      "duplicate": true,
+      "a": {
+        "title": "校園徵才說明會：長榮海運",
+        "startTime": "2026-11-04T12:10:00+08:00",
+        "location": "行政大樓第一演講廳",
+        "registrationUrl": "https://forms.example.com/evergreen-2026"
+      },
+      "b": {
+        "title": "長榮海運企業說明會",
+        "startTime": "2026-11-04T12:00:00+08:00",
+        "location": null,
+        "registrationUrl": "https://forms.example.com/evergreen-2026#form"
+      }
+    },
+    {
+      "note": "括號補充主辦單位",
+      "duplicate": true,
+      "a": {
+        "title": "期末感恩音樂會",
+        "startTime": "2026-12-20T19:00:00+08:00",
+        "location": "海洋廳",
+        "registrationUrl": null
+      },
+      "b": {
+        "title": "期末感恩音樂會（學生會主辦）",
+        "startTime": "2026-12-20T19:00:00+08:00",
+        "location": "海洋廳",
+        "registrationUrl": null
+      }
+    },
+    {
+      "note": "一則沒寫地點",
+      "duplicate": true,
+      "a": {
+        "title": "研究資料庫利用講習",
+        "startTime": "2026-10-15T13:30:00+08:00",
+        "location": "圖書館 B1 研討室",
+        "registrationUrl": null
+      },
+      "b": {
+        "title": "圖書館研究資料庫利用講習",
+        "startTime": "2026-10-15T13:30:00+08:00",
+        "location": null,
+        "registrationUrl": null
+      }
+    },
+    {
+      "note": "一則只寫日期（全天）",
+      "duplicate": true,
+      "a": {
+        "title": "國際志工服務說明會",
+        "startTime": "2026-10-28T18:30:00+08:00",
+        "location": "綜合三館 301",
+        "registrationUrl": null
+      },
+      "b": {
+        "title": "國際志工服務說明會",
+        "startTime": "2026-10-28T00:00:00+08:00",
+        "location": null,
+        "registrationUrl": null
+      }
+    },
+    {
+      "note": "全形英數與空白",
+      "duplicate": true,
+      "a": {
+        "title": "ＮＴＯＵ　Ｈａｃｋａｔｈｏｎ　２０２６",
+        "startTime": "2026-11-21T09:00:00+08:00",
+        "location": "電資大樓",
+        "registrationUrl": null
+      },
+      "b": {
+        "title": "NTOU Hackathon 2026",
+        "startTime": "2026-11-21T09:00:00+08:00",
+        "location": "電資大樓",
+        "registrationUrl": null
+      }
+    },
+    {
+      "note": "標題多了活動類型",
+      "duplicate": true,
+      "a": {
+        "title": "永續海洋論壇",
+        "startTime": "2026-11-11T09:30:00+08:00",
+        "location": "海洋廳",
+        "registrationUrl": null
+      },
+      "b": {
+        "title": "永續海洋論壇研討會",
+        "startTime": "2026-11-11T09:30:00+08:00",
+        "location": "海洋廳",
+        "registrationUrl": null
+      }
+    },
+    {
+      "note": "英文標題大小寫",
+      "duplicate": true,
+      "a": {
+        "title": "Python Workshop for Beginners",
+        "startTime": "2026-10-24T13:00:00+08:00",
+        "location": "INS 201",
+        "registrationUrl": null
+      },
+      "b": {
+        "title": "python workshop for beginners（初學者）",
+        "startTime": "2026-10-24T13:00:00+08:00",
+        "location": "INS201",
+        "registrationUrl": null
+      }
+    },
+    {
+      "note": "標題前加系所",
+      "duplicate": true,
+      "a": {
+        "title": "食品科學系 專題演講：機能性食品發展",
+        "startTime": "2026-10-30T10:10:00+08:00",
+        "location": "食科館 101",
+        "registrationUrl": null
+      },
+      "b": {
+        "title": "專題演講：機能性食品發展",
+        "startTime": "2026-10-30T10:10:00+08:00",
+        "location": "食科館101",
+        "registrationUrl": null
+      }
+    },
+    {
+      "note": "報名連結相同（結尾斜線）",
+      "duplicate": true,
+      "a": {
+        "title": "海洋運動體驗營",
+        "startTime": "2026-11-07T08:30:00+08:00",
+        "location": "八斗子海域",
+        "registrationUrl": "https://reg.example.edu/sea-camp/"
+      },
+      "b": {
+        "title": "八斗子海洋運動體驗營 開放報名",
+        "startTime": "2026-11-07T08:30:00+08:00",
+        "location": null,
+        "registrationUrl": "https://reg.example.edu/sea-camp"
+      }
+    },
+    {
+      "note": "活動名稱加年度",
+      "duplicate": true,
+      "a": {
+        "title": "校慶運動會",
+        "startTime": "2026-11-14T08:00:00+08:00",
+        "location": "田徑場",
+        "registrationUrl": null
+      },
+      "b": {
+        "title": "2026 校慶運動會",
+        "startTime": "2026-11-14T08:00:00+08:00",
+        "location": "田徑場",
+        "registrationUrl": null
+      }
+    },
+    {
+      "note": "地點寫法不同",
+      "duplicate": true,
+      "a": {
+        "title": "碩士班招生說明會",
+        "startTime": "2026-10-17T14:00:00+08:00",
+        "location": "行政大樓 3 樓會議室",
+        "registrationUrl": null
+      },
+      "b": {
+        "title": "碩士班招生說明會",
+        "startTime": "2026-10-17T14:00:00+08:00",
+        "location": "行政大樓第三會議室",
+        "registrationUrl": null
+      }
+    },
+    {
+      "note": "粉專簡寫標題",
+      "duplicate": true,
+      "a": {
+        "title": "海洋生物多樣性特展開幕式",
+        "startTime": "2026-12-01T10:00:00+08:00",
+        "location": "海洋生物博物館",
+        "registrationUrl": null
+      },
+      "b": {
+        "title": "生物多樣性特展開幕",
+        "startTime": "2026-12-01T10:00:00+08:00",
+        "location": "海洋生物博物館",
+        "registrationUrl": null
+      }
+    },
+    {
+      "note": "時間差 10 分鐘（報到與開始）",
+      "duplicate": true,
+      "a": {
+        "title": "職涯諮詢工作坊",
+        "startTime": "2026-11-25T13:20:00+08:00",
+        "location": "學生活動中心 2F",
+        "registrationUrl": null
+      },
+      "b": {
+        "title": "職涯諮詢工作坊",
+        "startTime": "2026-11-25T13:30:00+08:00",
+        "location": "學生活動中心2F",
+        "registrationUrl": null
+      }
+    },
+    {
+      "note": "標題順序調換",
+      "duplicate": true,
+      "a": {
+        "title": "航運管理學系 系友座談",
+        "startTime": "2026-10-23T15:00:00+08:00",
+        "location": "航管系館 B03",
+        "registrationUrl": null
+      },
+      "b": {
+        "title": "系友座談（航運管理學系）",
+        "startTime": "2026-10-23T15:00:00+08:00",
+        "location": "航管系館B03",
+        "registrationUrl": null
+      }
+    },
+    {
+      "note": "活動頁與公告用語不同",
+      "duplicate": true,
+      "a": {
+        "title": "急救訓練 CPR+AED 課程",
+        "startTime": "2026-11-09T09:00:00+08:00",
+        "location": "體育館 2F",
+        "registrationUrl": null
+      },
+      "b": {
+        "title": "CPR與AED急救訓練",
+        "startTime": "2026-11-09T09:00:00+08:00",
+        "location": "體育館2F",
+        "registrationUrl": null
+      }
+    },
+    {
+      "note": "完全相同的轉貼",
+      "duplicate": true,
+      "a": {
+        "title": "海洋文學獎頒獎典禮",
+        "startTime": "2026-12-10T14:00:00+08:00",
+        "location": "圖書館國際會議廳",
+        "registrationUrl": null
+      },
+      "b": {
+        "title": "海洋文學獎頒獎典禮",
+        "startTime": "2026-12-10T14:00:00+08:00",
+        "location": "圖書館國際會議廳",
+        "registrationUrl": null
+      }
+    },
+    {
+      "note": "系列講座不同場次（同一天）",
+      "duplicate": false,
+      "a": {
+        "title": "海洋能源講座系列（一）：潮汐能",
+        "startTime": "2026-10-22T10:00:00+08:00",
+        "location": "河工館 201",
+        "registrationUrl": null
+      },
+      "b": {
+        "title": "海洋能源講座系列（二）：波浪能",
+        "startTime": "2026-10-22T14:00:00+08:00",
+        "location": "河工館 201",
+        "registrationUrl": null
+      }
+    },
+    {
+      "note": "初階與進階工作坊",
+      "duplicate": false,
+      "a": {
+        "title": "AI 工作坊（初階）",
+        "startTime": "2026-11-02T09:00:00+08:00",
+        "location": "電資大樓 301",
+        "registrationUrl": null
+      },
+      "b": {
+        "title": "AI 工作坊（進階）",
+        "startTime": "2026-11-02T13:00:00+08:00",
+        "location": "電資大樓 301",
+        "registrationUrl": null
+      }
+    },
+    {
+      "note": "不同系的系週會（同時段）",
+      "duplicate": false,
+      "a": {
+        "title": "電機系系週會",
+        "startTime": "2026-10-14T12:10:00+08:00",
+        "location": "電機館 101",
+        "registrationUrl": null
+      },
+      "b": {
+        "title": "機械系系週會",
+        "startTime": "2026-10-14T12:10:00+08:00",
+        "location": "機械館 101",
+        "registrationUrl": null
+      }
+    },
+    {
+      "note": "平行場次",
+      "duplicate": false,
+      "a": {
+        "title": "職涯講座：如何寫履歷",
+        "startTime": "2026-11-12T18:30:00+08:00",
+        "location": "綜合三館 101",
+        "registrationUrl": null
+      },
+      "b": {
+        "title": "職涯講座：如何準備面試",
+        "startTime": "2026-11-12T18:30:00+08:00",
+        "location": "綜合三館 102",
+        "registrationUrl": null
+      }
+    },
+    {
+      "note": "健檢與補檢",
+      "duplicate": false,
+      "a": {
+        "title": "新生健康檢查",
+        "startTime": "2026-09-15T08:30:00+08:00",
+        "location": "體育館",
+        "registrationUrl": null
+      },
+      "b": {
+        "title": "新生健康檢查（補檢）",
+        "startTime": "2026-09-16T08:30:00+08:00",
+        "location": "衛保組",
+        "registrationUrl": null
+      }
+    },
+    {
+      "note": "同一天同地點不同活動",
+      "duplicate": false,
+      "a": {
+        "title": "海洋廳電影欣賞：深海",
+        "startTime": "2026-10-16T19:00:00+08:00",
+        "location": "海洋廳",
+        "registrationUrl": null
+      },
+      "b": {
+        "title": "合唱團期中公演",
+        "startTime": "2026-10-16T19:00:00+08:00",
+        "location": "海洋廳",
+        "registrationUrl": null
+      }
+    },
+    {
+      "note": "說明會與正式活動",
+      "duplicate": false,
+      "a": {
+        "title": "交換學生說明會",
+        "startTime": "2026-10-20T12:10:00+08:00",
+        "location": "國際處會議室",
+        "registrationUrl": null
+      },
+      "b": {
+        "title": "交換學生甄選面試",
+        "startTime": "2026-10-21T09:00:00+08:00",
+        "location": "國際處會議室",
+        "registrationUrl": null
+      }
+    },
+    {
+      "note": "相同講者不同主題",
+      "duplicate": false,
+      "a": {
+        "title": "王教授專題演講：深海探測",
+        "startTime": "2026-11-05T10:00:00+08:00",
+        "location": "海科館",
+        "registrationUrl": null
+      },
+      "b": {
+        "title": "王教授專題演講：極地研究",
+        "startTime": "2026-11-06T10:00:00+08:00",
+        "location": "海科館",
+        "registrationUrl": null
+      }
+    },
+    {
+      "note": "上午場與下午場",
+      "duplicate": false,
+      "a": {
+        "title": "程式設計競賽（上午場）",
+        "startTime": "2026-11-28T09:00:00+08:00",
+        "location": "電資大樓",
+        "registrationUrl": null
+      },
+      "b": {
+        "title": "程式設計競賽（下午場）",
+        "startTime": "2026-11-28T14:00:00+08:00",
+        "location": "電資大樓",
+        "registrationUrl": null
+      }
+    },
+    {
+      "note": "同名但不同年級",
+      "duplicate": false,
+      "a": {
+        "title": "大一導師時間",
+        "startTime": "2026-10-13T12:10:00+08:00",
+        "location": "綜合一館 101",
+        "registrationUrl": null
+      },
+      "b": {
+        "title": "大二導師時間",
+        "startTime": "2026-10-13T12:10:00+08:00",
+        "location": "綜合一館 102",
+        "registrationUrl": null
+      }
+    },
+    {
+      "note": "展覽開幕與導覽",
+      "duplicate": false,
+      "a": {
+        "title": "海洋攝影展開幕",
+        "startTime": "2026-12-03T10:00:00+08:00",
+        "location": "藝文中心",
+        "registrationUrl": null
+      },
+      "b": {
+        "title": "海洋攝影展導覽",
+        "startTime": "2026-12-04T14:00:00+08:00",
+        "location": "藝文中心",
+        "registrationUrl": null
+      }
+    },
+    {
+      "note": "不同球類比賽",
+      "duplicate": false,
+      "a": {
+        "title": "校長盃籃球賽",
+        "startTime": "2026-11-16T08:00:00+08:00",
+        "location": "體育館",
+        "registrationUrl": null
+      },
+      "b": {
+        "title": "校長盃排球賽",
+        "startTime": "2026-11-16T08:00:00+08:00",
+        "location": "體育館",
+        "registrationUrl": null
+      }
+    },
+    {
+      "note": "同主題不同單位",
+      "duplicate": false,
+      "a": {
+        "title": "資訊安全講座",
+        "startTime": "2026-10-27T14:00:00+08:00",
+        "location": "電算中心",
+        "registrationUrl": null
+      },
+      "b": {
+        "title": "智慧財產權講座",
+        "startTime": "2026-10-27T14:00:00+08:00",
+        "location": "法政館",
+        "registrationUrl": null
+      }
+    },
+    {
+      "note": "第一梯與第二梯",
+      "duplicate": false,
+      "a": {
+        "title": "游泳能力檢定（第一梯）",
+        "startTime": "2026-10-19T13:00:00+08:00",
+        "location": "游泳池",
+        "registrationUrl": null
+      },
+      "b": {
+        "title": "游泳能力檢定（第二梯）",
+        "startTime": "2026-10-20T13:00:00+08:00",
+        "location": "游泳池",
+        "registrationUrl": null
+      }
+    },
+    {
+      "note": "報名連結不同的同名說明會（不同公司）",
+      "duplicate": false,
+      "a": {
+        "title": "企業說明會：陽明海運",
+        "startTime": "2026-11-04T12:10:00+08:00",
+        "location": "行政大樓第一演講廳",
+        "registrationUrl": "https://forms.example.com/yangming-2026"
+      },
+      "b": {
+        "title": "企業說明會：萬海航運",
+        "startTime": "2026-11-05T12:10:00+08:00",
+        "location": "行政大樓第一演講廳",
+        "registrationUrl": "https://forms.example.com/wanhai-2026"
+      }
+    },
+    {
+      "note": "同一講座的線上場與實體場",
+      "duplicate": false,
+      "a": {
+        "title": "研究倫理線上講座",
+        "startTime": "2026-10-29T10:00:00+08:00",
+        "location": "線上",
+        "registrationUrl": null
+      },
+      "b": {
+        "title": "研究倫理講座（實體場）",
+        "startTime": "2026-10-30T10:00:00+08:00",
+        "location": "圖書館 B1",
+        "registrationUrl": null
+      }
+    },
+    {
+      "note": "短標題撞名",
+      "duplicate": false,
+      "a": {
+        "title": "系學會大會",
+        "startTime": "2026-10-15T18:00:00+08:00",
+        "location": "電機館 101",
+        "registrationUrl": null
+      },
+      "b": {
+        "title": "系學會大會",
+        "startTime": "2026-10-16T18:00:00+08:00",
+        "location": "航管系館 B03",
+        "registrationUrl": null
+      }
+    },
+    {
+      "note": "同天同時段的不同社團社課",
+      "duplicate": false,
+      "a": {
+        "title": "吉他社社課",
+        "startTime": "2026-10-22T19:00:00+08:00",
+        "location": "學生活動中心 3F",
+        "registrationUrl": null
+      },
+      "b": {
+        "title": "熱音社社課",
+        "startTime": "2026-10-22T19:00:00+08:00",
+        "location": "學生活動中心 B1",
+        "registrationUrl": null
+      }
+    }
+  ]
+}
