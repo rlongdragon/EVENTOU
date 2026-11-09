@@ -1,0 +1,5 @@
+.map-view {
+  width: 100%;
+  height: clamp(16rem, 45vw, 24rem);
+  border-radius: 0.5rem;
+}
