@@ -22,6 +22,8 @@ export interface Source {
   enabled: boolean;
   submittedBy: number;
   createdAt: string;
+  /** 一般使用者只看到已核准來源的風險等級；未核准為 null，剛提交的來源沒有此欄位（US-15） */
+  risk?: { level: RiskLevel } | null;
 }
 
 // 與 backend/src/modules/sources/sources.risk.ts 保持一致（US-15）
@@ -33,8 +35,19 @@ export const RISK_LEVEL_LABELS: Record<RiskLevel, string> = {
   high: '高風險',
 };
 
+export type RiskReasonCode =
+  | 'review_rejected'
+  | 'review_pending'
+  | 'not_https'
+  | 'disabled'
+  | 'latest_run_failed'
+  | 'consecutive_failures'
+  | 'high_failure_rate'
+  | 'elevated_failure_rate'
+  | 'no_ingestion_history';
+
 export interface RiskReason {
-  code: string;
+  code: RiskReasonCode;
   points: number;
   message: string;
 }

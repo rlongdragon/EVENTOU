@@ -9,6 +9,7 @@ import {
   listSourcesForAdmin,
   reviewSource,
   setSourceEnabled,
+  type Source,
 } from './sources.service.js';
 import { REVIEW_STATUSES, isSourceType, type ReviewStatus } from './sourceTypes.js';
 
@@ -57,6 +58,17 @@ function validateUrl(value: string): string | undefined {
   return undefined;
 }
 
+/**
+ * 非管理員看到的風險（US-15）：只有已核准的來源公開風險等級，造成風險的原因只給管理員看；
+ * 未核准的來源 risk 為 null。
+ */
+function withPublicRisk(sources: Source[]) {
+  return withRisk(sources).map(({ risk, ...source }) => ({
+    ...source,
+    risk: source.reviewStatus === 'approved' ? { level: risk.level } : null,
+  }));
+}
+
 // US-13 提交新的活動資訊來源（需登入）；新來源一律為待審核，不會進入擷取流程
 sourcesRouter.post('/', requireAuth, (req, res) => {
   const userId = req.user?.id;
@@ -88,25 +100,20 @@ sourcesRouter.post('/', requireAuth, (req, res) => {
   res.status(201).json({ source });
 });
 
-// US-13 使用者查看自己提交的來源與目前的審核狀態（需登入）
+// US-13 使用者查看自己提交的來源與目前的審核狀態（需登入）；已核准的來源另帶風險等級（US-15）
 sourcesRouter.get('/mine', requireAuth, (req, res) => {
   const userId = req.user?.id;
   if (userId === undefined) {
     res.status(401).json({ error: 'unauthorized', message: '請先登入' });
     return;
   }
-  res.json({ sources: listSourcesBySubmitter(userId) });
+  res.json({ sources: withPublicRisk(listSourcesBySubmitter(userId)) });
 });
 
 // 列出來源：管理員看到全部（含提交者與審核結果，可用 ?status= 篩選審核狀態），其他人（含訪客）只看到已核准的來源
 sourcesRouter.get('/', (req, res) => {
   if (req.user?.role !== 'admin') {
-    // 一般使用者只看到風險等級，造成風險的原因只給管理員看
-    const sources = withRisk(listSources({ approvedOnly: true })).map(({ risk, ...source }) => ({
-      ...source,
-      risk: { level: risk.level },
-    }));
-    res.json({ sources });
+    res.json({ sources: withPublicRisk(listSources({ approvedOnly: true })) });
     return;
   }
 

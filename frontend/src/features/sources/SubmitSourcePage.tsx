@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { ApiError } from '../auth/api';
 import {
+  RISK_LEVEL_LABELS,
   SOURCE_TYPE_OPTIONS,
   fetchMySources,
   submitSource,
@@ -154,6 +155,7 @@ export function SubmitSourcePage() {
               <th style={{ textAlign: 'left' }}>類型</th>
               <th style={{ textAlign: 'left' }}>提交時間</th>
               <th style={{ textAlign: 'left' }}>狀態</th>
+              <th style={{ textAlign: 'left' }}>風險提示</th>
             </tr>
           </thead>
           <tbody>
@@ -167,6 +169,7 @@ export function SubmitSourcePage() {
                 <td>{TYPE_LABELS[source.type] ?? source.type}</td>
                 <td>{source.createdAt} (UTC)</td>
                 <td>{statusLabel(source)}</td>
+                <td>{source.risk ? RISK_LEVEL_LABELS[source.risk.level] : '—'}</td>
               </tr>
             ))}
           </tbody>

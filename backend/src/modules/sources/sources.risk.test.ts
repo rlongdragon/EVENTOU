@@ -205,6 +205,24 @@ describe('來源風險 API', () => {
     assert.deepEqual(listed.risk, { level: 'low' });
   });
 
+  test('「我提交的來源」只有已核准的來源帶風險等級，未核准為 null', async () => {
+    const cookie = await register('risk-mine@example.com');
+    const submitted = await request('POST', '/api/sources', cookie, {
+      name: '我的來源',
+      url: 'http://mine.example.com',
+      type: 'other',
+    });
+    assert.equal(submitted.status, 201);
+    const pendingId = submitted.body.source.id as number;
+
+    let mine = await request('GET', '/api/sources/mine', cookie);
+    assert.equal(mine.body.sources[0].risk, null);
+
+    getDb().prepare("UPDATE sources SET review_status = 'approved' WHERE id = ?").run(pendingId);
+    mine = await request('GET', '/api/sources/mine', cookie);
+    assert.deepEqual(mine.body.sources[0].risk, { level: 'medium' });
+  });
+
   test('找不到或 id 不正確回傳 404', async () => {
     const adminCookie = await register('risk-admin2@example.com', true);
     assert.equal((await request('GET', '/api/sources/99999/risk', adminCookie)).status, 404);
