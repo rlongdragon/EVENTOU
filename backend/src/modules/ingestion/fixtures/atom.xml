@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>範例社團活動</title>
+  <link href="https://club.example.edu.tw/" rel="alternate"/>
+  <link href="https://club.example.edu.tw/atom.xml" rel="self"/>
+  <updated>2026-10-12T10:00:00+08:00</updated>
+  <id>https://club.example.edu.tw/</id>
+  <entry>
+    <title>吉他社迎新演出</title>
+    <link href="https://club.example.edu.tw/events/guitar" rel="alternate"/>
+    <link href="https://club.example.edu.tw/events/guitar.json" rel="related"/>
+    <id>tag:club.example.edu.tw,2026:guitar</id>
+    <published>2026-10-10T08:00:00+08:00</published>
+    <updated>2026-10-11T08:00:00+08:00</updated>
+    <content type="html">&lt;p&gt;活動日期：2026-10-24&lt;/p&gt;&lt;p&gt;活動時間：18:30&lt;/p&gt;&lt;p&gt;活動地點：學生活動中心&lt;/p&gt;</content>
+  </entry>
+  <entry>
+    <title>攝影社外拍</title>
+    <link href="https://club.example.edu.tw/events/photo"/>
+    <id>tag:club.example.edu.tw,2026:photo</id>
+    <updated>2026-10-09T08:00:00Z</updated>
+    <summary>活動日期：2026-10-31</summary>
+  </entry>
+</feed>
