@@ -180,6 +180,14 @@ npm run user:set-role -w backend -- someone@example.com admin
 - 活動頁的固定網址為 `<網站 origin>/events/:eventId`（`frontend/src/features/events/eventShare.ts`），不帶查詢字串或 hash，開啟不需登入。
 - 活動頁的「分享」按鈕會把固定網址複製到剪貼簿並顯示「已複製」；瀏覽器不允許存取剪貼簿時（例如非 HTTPS），改顯示網址讓使用者手動複製。
 
+## 跨來源重複活動偵測（US-20）
+
+- 新活動寫入（`processAnnouncement`）後，與開始日期前後 1 天內、其他已核准來源的已發布活動比對重複分數：高信心自動合併、中信心標記「可能重複」交給管理員。規則、門檻與 precision／recall 驗證結果見 [`docs/dedup.md`](docs/dedup.md)。
+- 合併掉的活動不會出現在 `published_events`，所以搜尋、行事曆與通知都自動排除；`GET /api/events/:eventId` 的 `sources` 列出活動的所有來源，活動頁顯示全部原始公告。
+- 管理員 API：`GET /api/events/duplicates`、`POST /api/events/duplicates/:eventId/merge`（確認合併）、`POST /api/events/duplicates/:eventId/split`（拆開或還原誤合併）；前端頁面 `/admin/duplicates`。
+- 門檻用 `DEDUP_HIGH_THRESHOLD`（預設 0.75）、`DEDUP_LOW_THRESHOLD`（預設 0.5）設定。
+- 資料（migration 12）：`events` 新增 `duplicate_of`、`dedup_status`、`dedup_score`，新增 `event_distinct_pairs`。
+
 ## 自動擷取設定（US-18，第一部分）
 
 - 擷取設定改用統一格式 `ExtractionConfig`（`backend/src/modules/ingestion/ingestion.extraction.ts`）：靜態 HTML 沿用 US-17 的 `ScraperConfig`（`kind` 省略或 `'html'`），另有 `kind: 'feed'`（RSS／Atom）與 `kind: 'ical'`（iCalendar）。US-17 的 `IngestionService` 依 `kind` 選擇擷取器，輸出一律是 `RawAnnouncement`，人工寫的與自動產生的設定不需區分。

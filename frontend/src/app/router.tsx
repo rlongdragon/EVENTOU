@@ -3,6 +3,7 @@ import { LoginPage } from '../features/auth/LoginPage';
 import { RequireAuth } from '../features/auth/RequireAuth';
 import { CalendarsPage } from '../features/calendars/CalendarsPage';
 import { PersonalCalendarPage } from '../features/calendars/PersonalCalendarPage';
+import { AdminDuplicatesPage } from '../features/events/AdminDuplicatesPage';
 import { EventDetailPage } from '../features/events/EventDetailPage';
 import { EventSearchPage } from '../features/events/EventSearchPage';
 import { CampusMapPage } from '../features/map/CampusMapPage';
@@ -50,6 +51,14 @@ export const router = createBrowserRouter([
         element: (
           <RequireAuth role="admin">
             <AdminSourcesPage />
+          </RequireAuth>
+        ),
+      },
+      {
+        path: 'admin/duplicates',
+        element: (
+          <RequireAuth role="admin">
+            <AdminDuplicatesPage />
           </RequireAuth>
         ),
       },
