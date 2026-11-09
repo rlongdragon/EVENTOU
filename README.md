@@ -124,8 +124,20 @@ npm run user:set-role -w backend -- someone@example.com admin
 - 只輸出已發布（`published_events`）且來源審核狀態為 `approved` 的活動；活動轉為待審或來源被退回後，下次同步就會從行事曆消失。
 - 每個活動的 UID 為 `event-<活動 id>@eventou`，活動更新時 id 不變，行事曆軟體會視為同一筆並更新內容。
 - 時間以 UTC 輸出（不需 VTIMEZONE）；全天活動以 `VALUE=DATE` 輸出，結束日為排他的隔天。
-- `.ics` 的產生邏輯在 `backend/src/modules/calendars/calendars.ics.ts` 的 `buildCalendar`，US-09 的個人行事曆可沿用。
+- `.ics` 的產生邏輯在 `backend/src/modules/calendars/calendars.ics.ts` 的 `buildCalendar`，US-09 的個人行事曆也沿用。
 - 前端頁面 `/calendars`：列出各類別的訂閱網址，提供「複製網址」與「訂閱行事曆」（`webcal://`）。Google Calendar 等線上服務需要能從外部連到的網址，本機的 `localhost` 網址無法訂閱。
+
+## 個人行事曆（US-09）
+
+- 後端 API（需登入，訪客回傳 `401`）：`GET /api/calendars/personal`（自己的行事曆）、`POST /api/calendars/personal`（建立）、`GET /api/calendars/personal/:calendarId`（行事曆與目前符合條件的活動）、`PUT /api/calendars/personal/:calendarId`（修改）、`DELETE /api/calendars/personal/:calendarId`（刪除）。
+- 建立與修改的 body 為 `{ "name": string, "categories": string[], "tags": string[] }`：名稱最長 50 字，類別為 `EVENT_CATEGORIES` 的代碼，標籤最多 20 個、每個最長 30 字，類別與標籤至少要有一個；不符合時回傳 `400 validation_error`。每位使用者最多 20 個行事曆，超過回傳 `409 limit_reached`。
+- 篩選規則：類別之間、標籤之間是「任一符合」；同時指定類別與標籤時，活動要兩者都符合。標籤以與活動相同的方式正規化（全形轉半形、去除前後空白）後比對。
+- 行事曆只存條件，活動每次都從 `published_events`（且來源已核准）即時查詢，新活動符合條件時會自動出現。
+- 只能查看與管理自己的行事曆；別人的行事曆或不存在的 id 一律回傳 `404`。
+- iCal 訂閱（不需登入）：`GET /api/calendars/personal/:token.ics`。行事曆軟體無法登入，所以用隨機 token 當網址，拿到網址的人都能讀取；修改條件不會改變網址，刪除行事曆後網址失效。產生邏輯沿用 US-05 的 `buildCalendar`。
+- `GET /api/calendars/tags`（不需登入）：已發布活動中出現過的所有標籤，供選擇條件。
+- 資料表（migration 11）：`personal_calendars`、`personal_calendar_categories`、`personal_calendar_tags`；使用者或行事曆刪除時條件一併刪除。
+- 前端：`/calendars` 的「個人行事曆」區塊可建立與列出行事曆（訪客看到登入提示）；`/calendars/personal/:calendarId`（需登入）顯示符合條件的活動與訂閱網址，可編輯條件或刪除。
 
 ## 訂閱活動類別（US-07）
 

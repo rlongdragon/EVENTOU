@@ -14,6 +14,8 @@ export function processAnnouncement(
   options: ConversionOptions = {},
   now = new Date(),
 ): Event & { dedup: DedupResult } {
+  // 寫入與重複偵測不在同一個交易：偵測失敗時活動已寫入，只是這次沒有判定，
+  // 之後重跑擷取（dedup_status 仍為 none）會再判定一次，所以不另外包交易。
   const event = upsertEvent(db, convertAnnouncement(raw, options), now);
   return { ...event, dedup: detectDuplicate(db, event.id) };
 }

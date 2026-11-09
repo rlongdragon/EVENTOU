@@ -1,22 +1,13 @@
 import { useEffect, useState } from 'react';
-import { TodoPlaceholder } from '../../shared/TodoPlaceholder';
 import type { CategoryCalendar } from './api';
 import { fetchCategoryCalendars } from './api';
+import { subscribeUrl, webcalUrl } from './calendarUrls';
+import { PersonalCalendarsSection } from './PersonalCalendarsSection';
 
 type LoadState =
   | { status: 'loading' }
   | { status: 'error'; message: string }
   | { status: 'ok'; calendars: CategoryCalendar[] };
-
-/** 完整的訂閱網址；行事曆軟體要的是絕對網址，所以補上目前的網站位址。 */
-function subscribeUrl(icsPath: string): string {
-  return new URL(icsPath, window.location.origin).href;
-}
-
-/** webcal:// 會讓作業系統直接用預設的行事曆軟體開啟訂閱。 */
-function webcalUrl(icsPath: string): string {
-  return subscribeUrl(icsPath).replace(/^https?:/, 'webcal:');
-}
 
 function CategoryCalendarRow({ calendar }: { calendar: CategoryCalendar }) {
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
@@ -90,11 +81,7 @@ export function CalendarsPage() {
           </ul>
         )}
       </section>
-      {/* TODO(#11): US-09 個人行事曆（需登入，#20） */}
-      <TodoPlaceholder
-        title="個人行事曆"
-        issues={[{ number: 11, label: 'US-09 依類別與標籤建立個人行事曆' }]}
-      />
+      <PersonalCalendarsSection />
     </>
   );
 }

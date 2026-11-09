@@ -254,6 +254,37 @@ export const migrations: Migration[] = [
     `,
   },
   {
+    id: 11,
+    name: 'create_personal_calendars',
+    // US-09：使用者的個人行事曆與篩選條件。token 是 iCal 訂閱網址用的隨機字串，行事曆軟體無法登入，
+    // 所以以不可猜的 token 取代登入。類別與標籤條件各自一張表，行事曆刪除時一併刪除；
+    // 類別值域由程式 EVENT_CATEGORIES 驗證，不設 CHECK。
+    up: `
+      CREATE TABLE personal_calendars (
+        id INTEGER PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+        name TEXT NOT NULL CHECK (length(trim(name)) > 0),
+        token TEXT NOT NULL UNIQUE,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE INDEX personal_calendars_user ON personal_calendars (user_id, id);
+
+      CREATE TABLE personal_calendar_categories (
+        calendar_id INTEGER NOT NULL REFERENCES personal_calendars (id) ON DELETE CASCADE,
+        category TEXT NOT NULL,
+        PRIMARY KEY (calendar_id, category)
+      );
+
+      CREATE TABLE personal_calendar_tags (
+        calendar_id INTEGER NOT NULL REFERENCES personal_calendars (id) ON DELETE CASCADE,
+        tag TEXT NOT NULL CHECK (length(trim(tag)) > 0),
+        PRIMARY KEY (calendar_id, tag)
+      );
+    `,
+  },
+  {
     id: 12,
     name: 'add_event_duplicates',
     // US-20：跨來源重複活動。重複的那筆仍保留自己的資料列（來源與原始連結），
@@ -261,7 +292,7 @@ export const migrations: Migration[] = [
     // published_events 不再列出已合併的活動（保留的那筆仍發布時），保留的那筆缺地點、主辦或報名連結時
     // 以合併進來的活動補上；只在 view 補，不改寫原始資料，還原後自然回到各自的內容。
     // event_distinct_pairs 記錄管理員判定「不是重複」的配對，重跑擷取時不再合併。
-    // id 跳過 11：11 留給 US-09 的個人行事曆（#45）。
+    // id 11 是 US-09 的個人行事曆（#45），兩者分開開發所以各自編號。
     up: `
       DROP VIEW published_events;
 
