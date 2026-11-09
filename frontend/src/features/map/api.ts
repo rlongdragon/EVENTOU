@@ -8,10 +8,12 @@ export interface MapEventItem {
   allDay: boolean;
   location: string;
   coordinates: { latitude: number; longitude: number } | null;
+  geocodingPending: boolean;
 }
 
 export interface MapEventResult {
   items: MapEventItem[];
+  geocodingPending: boolean;
   categories: { code: string; label: string }[];
 }
 

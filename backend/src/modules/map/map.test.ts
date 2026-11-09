@@ -17,6 +17,9 @@ const originalFetch = globalThis.fetch;
 before(async () => {
   globalThis.fetch = (async (input, init) => {
     if (String(input).startsWith('https://nominatim.openstreetmap.org/')) {
+      if (new URL(String(input)).searchParams.get('q')?.includes('失敗會場')) {
+        return new Response('', { status: 503 });
+      }
       return new Response(JSON.stringify([{ lat: '25.15', lon: '121.77' }]), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
@@ -56,6 +59,16 @@ before(async () => {
     },
     { defaultCategory: 'lecture' },
   );
+  processAnnouncement(
+    getDb(),
+    {
+      ...base,
+      url: 'https://example.com/map-event-4',
+      title: '地理編碼失敗的活動',
+      rawContent: '活動日期：2099/03/02 14:00-16:00\n地點：失敗會場',
+    },
+    { defaultCategory: 'lecture' },
+  );
 
   server = createApp().listen(0);
   await new Promise((resolve) => server.once('listening', resolve));
@@ -73,9 +86,19 @@ async function getMapEvents(query = '') {
   return { status: response.status, body: (await response.json()) as Record<string, unknown> };
 }
 
+async function waitForMapEvents(query: string) {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const result = await getMapEvents(query);
+    assert.equal(result.status, 200);
+    if (!result.body.geocodingPending) return result;
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+  }
+  assert.fail('地理編碼佇列未在預期時間內完成');
+}
+
 describe('GET /api/map/events（US-04）', () => {
-  test('訪客可取得所有已發布且有地點的活動與座標', async () => {
-    const { status, body } = await getMapEvents();
+  test('單筆地理編碼失敗時仍回傳其他已定位活動', async () => {
+    const { status, body } = await waitForMapEvents('?date=2099-03-02');
     assert.equal(status, 200);
     const items = body.items as {
       title: string;
@@ -88,7 +111,15 @@ describe('GET /api/map/events（US-04）', () => {
     assert.equal(items[0].location, '測試會場');
     assert.equal(items[0].categoryLabel, '講座');
     assert.deepEqual(items[0].coordinates, { latitude: 25.15, longitude: 121.77 });
+    assert.equal(items[1].coordinates, null);
     assert.ok(Array.isArray(body.categories));
+  });
+
+  test('未指定日期時回傳所有日期且有地點資料的活動', async () => {
+    const { status, body } = await waitForMapEvents('');
+    assert.equal(status, 200);
+    assert.equal((body.items as unknown[]).length, 3);
+    assert.equal(body.geocodingPending, false);
   });
 
   test('可同時依台北日期與類別篩選，且不登入也能使用', async () => {
@@ -97,7 +128,7 @@ describe('GET /api/map/events（US-04）', () => {
     const items = body.items as { title: string }[];
     assert.deepEqual(
       items.map((item) => item.title),
-      ['校園地圖講座'],
+      ['校園地圖講座', '地理編碼失敗的活動'],
     );
   });
 

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { getDb } from '../../db/index.js';
 import { EVENT_CATEGORIES, EVENT_CATEGORY_LABELS } from '../events/events.types.js';
-import { findMapEvents, geocodeLocation } from './map.service.js';
+import { findMapEvents, geocodeLocation, getCachedGeocodeLocation } from './map.service.js';
 
 export const mapRouter = Router();
 
@@ -26,15 +26,19 @@ mapRouter.get('/events', async (req, res) => {
 
   try {
     const events = findMapEvents(getDb(), { category, date });
-    const items = await Promise.all(
-      events.map(async (event) => ({
+    const items = events.map((event) => {
+      const geocode = getCachedGeocodeLocation(event.location);
+      if (geocode.pending) void geocodeLocation(event.location).catch(() => undefined);
+      return {
         ...event,
         categoryLabel: EVENT_CATEGORY_LABELS[event.category] ?? event.category,
-        coordinates: await geocodeLocation(event.location),
-      })),
-    );
+        coordinates: geocode.coordinates,
+        geocodingPending: geocode.pending,
+      };
+    });
     res.json({
       items,
+      geocodingPending: items.some((item) => item.geocodingPending),
       categories: EVENT_CATEGORIES.map((code) => ({
         code,
         label: EVENT_CATEGORY_LABELS[code],
