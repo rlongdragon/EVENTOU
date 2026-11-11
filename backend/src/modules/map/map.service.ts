@@ -1,16 +1,4 @@
-﻿import type { DatabaseSync } from 'node:sqlite';
-import type { EventCategory } from '../events/events.types.js';
-
-export interface MapEvent {
-  id: number;
-  title: string;
-  category: EventCategory;
-  startTime: string;
-  endTime: string | null;
-  allDay: boolean;
-  location: string;
-}
-
+import type { DatabaseSync } from 'node:sqlite';
 export interface MapCoordinates {
   latitude: number;
   longitude: number;
@@ -23,59 +11,12 @@ export function findMapEventLocation(db: DatabaseSync, eventId: number): string 
   return row?.location;
 }
 
-export function findMapEvents(
-  db: DatabaseSync,
-  filters: { category: string; date: string },
-): MapEvent[] {
-  const conditions = ['location IS NOT NULL', 'length(trim(location)) > 0'];
-  const params: string[] = [];
-  if (filters.category) {
-    conditions.push('category = ?');
-    params.push(filters.category);
-  }
-  if (filters.date) {
-    conditions.push('substr(start_time, 1, 10) = ?');
-    params.push(filters.date);
-  }
-
-  const rows = db
-    .prepare(
-      `SELECT id, title, category, start_time, end_time, all_day, location
-       FROM published_events WHERE ${conditions.join(' AND ')} ORDER BY start_time, id`,
-    )
-    .all(...params);
-
-  return rows.map((row) => ({
-    id: Number(row.id),
-    title: String(row.title),
-    category: String(row.category) as EventCategory,
-    startTime: String(row.start_time),
-    endTime: row.end_time === null ? null : String(row.end_time),
-    allDay: Number(row.all_day) === 1,
-    location: String(row.location),
-  }));
-}
-
 type GeocodeResult = MapCoordinates | null;
 const geocodeCache = new Map<string, GeocodeResult>();
 const geocodeFailures = new Map<string, number>();
 const geocodeInFlight = new Map<string, Promise<GeocodeResult>>();
 let nextGeocodeAt = 0;
 let geocodeQueue: Promise<void> = Promise.resolve();
-
-export function getCachedGeocodeLocation(location: string): {
-  coordinates: GeocodeResult;
-  pending: boolean;
-} {
-  const normalized = location.trim().toLocaleLowerCase();
-  if (geocodeCache.has(normalized)) {
-    return { coordinates: geocodeCache.get(normalized) ?? null, pending: false };
-  }
-  if ((geocodeFailures.get(normalized) ?? 0) > Date.now()) {
-    return { coordinates: null, pending: false };
-  }
-  return { coordinates: null, pending: true };
-}
 
 /** Nominatim 查詢採序列化與記憶體快取，遵守公開服務每秒一筆的限制。 */
 export function geocodeLocation(location: string): Promise<GeocodeResult> {
