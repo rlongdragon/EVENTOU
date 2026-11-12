@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router';
-import { TodoPlaceholder } from '../../shared/TodoPlaceholder';
 import type { EventDetail } from './api';
 import { fetchEvent } from './api';
+import { EventLocationMap } from './EventLocationMap';
 import { EventComments } from './EventComments';
 import { EventRating } from './EventRating';
 import { formatEventTime } from './eventTime';
@@ -88,11 +88,7 @@ export function EventDetailPage() {
         </p>
       )}
       <ShareEventButton eventId={event.id} />
-      {/* TODO(#18): US-03 活動地點地圖 */}
-      <TodoPlaceholder
-        title="地點地圖"
-        issues={[{ number: 18, label: 'US-03 活動頁顯示地點地圖' }]}
-      />
+      <EventLocationMap key={event.id} eventId={event.id} location={event.location} />
       <EventRating eventId={eventId} />
       <EventComments eventId={eventId} />
     </>

@@ -100,7 +100,6 @@ function findPublishedEventOr404(eventId: unknown, res: Response): PublishedEven
 }
 
 // US-02 取得活動詳細資訊（未登入可用）；id 無效、不存在或待審的活動一律回 404
-// TODO(#18): US-03 回傳活動地點座標，供活動頁顯示地圖
 eventsRouter.get('/:eventId', (req, res) => {
   const event = findPublishedEventOr404(req.params.eventId, res);
   if (!event) return;

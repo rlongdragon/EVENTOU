@@ -75,7 +75,7 @@ backend/src/
 │   ├── events/         # /api/events        US-19、US-20、US-01、US-02、US-03、US-10、US-11
 │   ├── subscriptions/  # /api/subscriptions US-07、US-08
 │   ├── calendars/      # /api/calendars     US-05、US-09
-│   └── map/            # /api/map           US-04
+│   └── map/            # /api/map           US-03、US-04
 └── shared/
 ```
 
@@ -235,3 +235,5 @@ git grep -n "TODO(#20)"
 ```
 
 API 路徑為暫定，實作時可依需求調整，但請同步更新前端呼叫與此 README。
+
+活動詳細頁的 `GET /api/map/events/:eventId/location` 只會查詢資料庫中已發布活動的地點，再由共用 `map.service.ts` 透過 OpenStreetMap Nominatim 轉為座標；查詢結果會在後端記憶體快取並以佇列限速。地圖使用 OpenStreetMap 圖磚。
