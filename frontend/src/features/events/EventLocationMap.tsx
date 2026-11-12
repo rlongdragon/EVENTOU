@@ -10,12 +10,18 @@ interface EventLocationMapProps {
 }
 
 export function EventLocationMap({ eventId, location }: EventLocationMapProps) {
-  const [coordinates, setCoordinates] = useState<Coordinates | null>(null);
-  const [state, setState] = useState<GeocodeState>(location?.trim() ? 'loading' : 'not_found');
+  const [result, setResult] = useState<{
+    eventId: number;
+    query: string;
+    coordinates: Coordinates | null;
+    state: GeocodeState;
+  } | null>(null);
+  const query = location?.trim() ?? '';
 
   useEffect(() => {
-    const query = location?.trim();
-    if (!query) return;
+    if (!query) {
+      return;
+    }
 
     const controller = new AbortController();
     fetch(`/api/map/events/${eventId}/location`, { signal: controller.signal })
@@ -24,14 +30,28 @@ export function EventLocationMap({ eventId, location }: EventLocationMapProps) {
         return (await response.json()) as { coordinates: Coordinates | null };
       })
       .then(({ coordinates: result }) => {
-        setCoordinates(result);
-        setState(result ? 'found' : 'not_found');
+        setResult({
+          eventId,
+          query,
+          coordinates: result,
+          state: result ? 'found' : 'not_found',
+        });
       })
       .catch(() => {
-        if (!controller.signal.aborted) setState('error');
+        if (!controller.signal.aborted) {
+          setResult({ eventId, query, coordinates: null, state: 'error' });
+        }
       });
     return () => controller.abort();
-  }, [eventId, location]);
+  }, [eventId, query]);
+
+  const state: GeocodeState = !query
+    ? 'not_found'
+    : result?.eventId === eventId && result.query === query
+      ? result.state
+      : 'loading';
+  const coordinates =
+    result?.eventId === eventId && result.query === query ? result.coordinates : null;
 
   return (
     <section className="event-location-section" aria-labelledby="event-location-heading">
