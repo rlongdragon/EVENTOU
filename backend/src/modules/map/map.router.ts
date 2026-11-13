@@ -34,20 +34,25 @@ mapRouter.get('/events/:eventId/location', (req, res) => {
   res.json(toLocationResult(matchCampusPlace(location)));
 });
 
-// US-04：未登入可取得校園活動地圖資料，依台北日期與類別篩選。
+// US-04：未登入可取得校園活動地圖資料，依台北日期範圍與類別篩選。
 mapRouter.get('/events', (req, res) => {
   const category = typeof req.query.category === 'string' ? req.query.category : '';
-  const date = typeof req.query.date === 'string' ? req.query.date : '';
+  const from = typeof req.query.from === 'string' ? req.query.from : '';
+  const to = typeof req.query.to === 'string' ? req.query.to : '';
   if (category && !EVENT_CATEGORIES.includes(category as (typeof EVENT_CATEGORIES)[number])) {
     res.status(400).json({ error: 'invalid_category' });
     return;
   }
-  if (date && !isCalendarDate(date)) {
+  if ((from && !isCalendarDate(from)) || (to && !isCalendarDate(to))) {
     res.status(400).json({ error: 'invalid_date' });
     return;
   }
+  if (from && to && from > to) {
+    res.status(400).json({ error: 'invalid_date_range' });
+    return;
+  }
 
-  const items = findMapEvents(getDb(), { category, date }).map((event) => ({
+  const items = findMapEvents(getDb(), { category, from, to }).map((event) => ({
     ...event,
     categoryLabel: EVENT_CATEGORY_LABELS[event.category] ?? event.category,
     ...toLocationResult(matchCampusPlace(event.location)),

@@ -3,6 +3,14 @@ import { Link } from 'react-router';
 import { formatEventTime } from '../events/eventTime';
 import { MapView, type MapMarker } from './MapView';
 import { fetchMapEvents, type MapEventResult } from './api';
+import {
+  DATE_RANGE_PRESETS,
+  DEFAULT_RANGE_DAYS,
+  getTaipeiToday,
+  isValidRange,
+  rangeFromToday,
+  type DateRange,
+} from './dateRange';
 import './campusMapPage.css';
 
 interface LoadedMapEvents {
@@ -10,38 +18,39 @@ interface LoadedMapEvents {
   result: MapEventResult;
 }
 
-function getTaipeiToday(): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Taipei',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date());
-}
-
 export function CampusMapPage() {
-  const [date, setDate] = useState(getTaipeiToday);
+  const [today] = useState(() => getTaipeiToday());
+  const [range, setRange] = useState<DateRange>(() => rangeFromToday(today, DEFAULT_RANGE_DAYS));
   const [category, setCategory] = useState('');
   const [loaded, setLoaded] = useState<LoadedMapEvents | null>(null);
   const [error, setError] = useState<{ key: string; message: string } | null>(null);
-  const key = `${date}|${category}`;
+  const { from, to } = range;
+  const rangeIsValid = isValidRange(range);
+  const key = `${from}|${to}|${category}`;
 
   useEffect(() => {
+    // 範圍無效時不查詢，保留上一次的地圖並提示錯誤
+    if (!rangeIsValid) return;
     const controller = new AbortController();
-    fetchMapEvents({ date, category }, controller.signal)
+    fetchMapEvents({ from, to, category }, controller.signal)
       .then((result) => setLoaded({ key, result }))
       .catch((reason: unknown) => {
         if (!controller.signal.aborted) setError({ key, message: String(reason) });
       });
     return () => controller.abort();
-  }, [category, date, key]);
+  }, [category, from, to, key, rangeIsValid]);
 
   // 換篩選條件時先保留上一次的標記，載入完成再一次更新，地圖不會先跳回中心
   const result = loaded?.result;
-  const isLoading = loaded?.key !== key;
-  const matchingError = error?.key === key ? error.message : null;
+  const isLoading = rangeIsValid && loaded?.key !== key;
+  const matchingError = rangeIsValid
+    ? error?.key === key
+      ? `無法載入活動地圖：${error.message}`
+      : null
+    : '開始日期不能晚於結束日期。';
   const items = useMemo(() => result?.items ?? [], [result]);
-  const unlocatedEvents = isLoading ? [] : items.filter((event) => !event.coordinates);
+  const showResult = !isLoading && !matchingError;
+  const unlocatedEvents = showResult ? items.filter((event) => !event.coordinates) : [];
   const markers = useMemo<MapMarker[]>(
     () =>
       items.flatMap((event) =>
@@ -65,8 +74,22 @@ export function CampusMapPage() {
       <h1>校園活動地圖</h1>
       <div className="campus-map-filters">
         <label>
-          日期
-          <input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+          開始日期
+          <input
+            type="date"
+            value={from}
+            max={to || undefined}
+            onChange={(event) => setRange({ from: event.target.value, to })}
+          />
+        </label>
+        <label>
+          結束日期
+          <input
+            type="date"
+            value={to}
+            min={from || undefined}
+            onChange={(event) => setRange({ from, to: event.target.value })}
+          />
         </label>
         <label>
           類別
@@ -79,19 +102,35 @@ export function CampusMapPage() {
             ))}
           </select>
         </label>
+      </div>
+      <div className="campus-map-presets" role="group" aria-label="快速選擇日期範圍">
+        {DATE_RANGE_PRESETS.map((preset) => {
+          const presetRange = rangeFromToday(today, preset.days);
+          const active = presetRange.from === from && presetRange.to === to;
+          return (
+            <button
+              key={preset.days}
+              type="button"
+              aria-pressed={active}
+              onClick={() => setRange(presetRange)}
+            >
+              {preset.label}
+            </button>
+          );
+        })}
         <button
           type="button"
           onClick={() => {
-            setDate('');
+            setRange({ from: '', to: '' });
             setCategory('');
           }}
         >
           清除篩選
         </button>
       </div>
-      {matchingError && <p role="alert">無法載入活動地圖：{matchingError}</p>}
+      {matchingError && <p role="alert">{matchingError}</p>}
       {!matchingError && isLoading && <p role="status">正在載入活動地圖…</p>}
-      {!matchingError && !isLoading && (
+      {showResult && (
         <p role="status">
           {items.length === 0
             ? '目前沒有符合條件的活動。'
