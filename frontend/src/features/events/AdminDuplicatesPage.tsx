@@ -12,8 +12,8 @@ import { formatEventTime } from './eventTime';
 
 const errorStyle = { color: '#cf222e', margin: 0 } as const;
 const cardStyle = {
-  border: '1px solid #d0d7de',
-  borderRadius: 6,
+  border: '1px solid var(--color-line)',
+  borderRadius: 16,
   padding: '0.75rem 1rem',
   marginBottom: '1rem',
 } as const;

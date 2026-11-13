@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState, type CSSProperties, type FormEvent, type MouseEvent } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import type { EventSearchResult } from './api';
 import { searchEvents } from './api';
@@ -8,6 +8,14 @@ type LoadState =
   | { status: 'loading' }
   | { status: 'error'; message: string }
   | { status: 'ok'; result: EventSearchResult };
+
+/** 把游標在卡片內的位置寫進 CSS 變數，讓聚光效果跟著游標移動 */
+function moveSpotlight(event: MouseEvent<HTMLAnchorElement>) {
+  const card = event.currentTarget;
+  const rect = card.getBoundingClientRect();
+  card.style.setProperty('--spot-x', `${event.clientX - rect.left}px`);
+  card.style.setProperty('--spot-y', `${event.clientY - rect.top}px`);
+}
 
 /** 只接受正整數頁碼，其他一律視為第 1 頁 */
 function parsePage(value: string | null): number {
@@ -63,32 +71,51 @@ export function EventSearchPage() {
 
   return (
     <>
-      <h1>活動</h1>
-      {/* key 讓網址條件改變（例如按上一頁）時表單跟著重設 */}
-      <form
-        key={`${q}\n${category}`}
-        role="search"
-        onSubmit={handleSubmit}
-        style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1rem' }}
-      >
-        <input
-          type="search"
-          name="q"
-          defaultValue={q}
-          placeholder="搜尋標題、說明、地點、主辦單位"
-          aria-label="關鍵字"
-          style={{ flex: '1 1 16rem' }}
-        />
-        <select name="category" defaultValue={category} aria-label="類別">
-          <option value="">全部類別</option>
-          {categories.map((option) => (
-            <option key={option.code} value={option.code}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-        <button type="submit">搜尋</button>
-      </form>
+      <section className="hero">
+        <div className="hero-blobs" aria-hidden="true">
+          <span className="hero-blob" />
+          <span className="hero-blob" />
+          <span className="hero-blob" />
+        </div>
+        <h1 className="hero-title">
+          <span className="hero-title-line">
+            <span>把散落各處的</span>
+          </span>
+          <span className="hero-title-line">
+            <span>校園活動</span>
+          </span>
+          <span className="hero-title-line">
+            <span>收進同一片海。</span>
+          </span>
+        </h1>
+        <p className="hero-lead fade-in">
+          各來源的活動公告自動整理成同一份清單，可以搜尋、加進行事曆，有新活動就通知你。
+        </p>
+        {/* key 讓網址條件改變（例如按上一頁）時表單跟著重設 */}
+        <form
+          key={`${q}\n${category}`}
+          role="search"
+          onSubmit={handleSubmit}
+          className="search-bar fade-in"
+        >
+          <input
+            type="search"
+            name="q"
+            defaultValue={q}
+            placeholder="搜尋標題、說明、地點、主辦單位"
+            aria-label="關鍵字"
+          />
+          <select name="category" defaultValue={category} aria-label="類別">
+            <option value="">全部類別</option>
+            {categories.map((option) => (
+              <option key={option.code} value={option.code}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <button type="submit">搜尋</button>
+        </form>
+      </section>
 
       {state.status === 'loading' && <p>載入中…</p>}
       {state.status === 'error' && <p role="alert">無法載入活動：{state.message}</p>}
@@ -110,20 +137,23 @@ function SearchResults({
 
   return (
     <>
-      <ul style={{ listStyle: 'none', padding: 0 }}>
-        {items.map((item) => (
-          <li key={item.id} style={{ borderBottom: '1px solid #d0d7de', padding: '0.75rem 0' }}>
-            <Link to={`/events/${item.id}`}>
-              <strong>{item.title}</strong>
+      <ul className="event-grid">
+        {items.map((item, index) => (
+          <li
+            key={item.id}
+            className="event-card"
+            style={{ '--card-index': index } as CSSProperties}
+          >
+            <Link to={`/events/${item.id}`} onMouseMove={moveSpotlight}>
+              <span className="event-card-category">{item.categoryLabel}</span>
+              <strong className="event-card-title">{item.title}</strong>
+              <span className="event-card-meta">{formatEventTime(item)}</span>
+              <span className="event-card-meta">{item.location ?? '地點未提供'}</span>
             </Link>
-            <div>{formatEventTime(item)}</div>
-            <div>
-              {item.location ?? '地點未提供'}・{item.categoryLabel}
-            </div>
           </li>
         ))}
       </ul>
-      <nav aria-label="分頁" style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+      <nav aria-label="分頁" className="pagination">
         <button type="button" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>
           上一頁
         </button>
