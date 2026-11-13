@@ -18,7 +18,11 @@ export interface MapMarker {
 interface MapViewProps {
   markers: MapMarker[];
   ariaLabel: string;
+  /** 沒有任何標記時的地圖中心；未提供時地圖要等有標記才會定位 */
+  emptyCenter?: { latitude: number; longitude: number };
 }
+
+const DEFAULT_ZOOM = 16;
 
 const markerIcon = new L.Icon({
   iconUrl: new URL('leaflet/dist/images/marker-icon.png', import.meta.url).href,
@@ -31,7 +35,7 @@ const markerIcon = new L.Icon({
 });
 
 /** US-03 與 US-04 共用的 Leaflet 地圖，支援多筆標記與聚合。 */
-export function MapView({ markers, ariaLabel }: MapViewProps) {
+export function MapView({ markers, ariaLabel, emptyCenter }: MapViewProps) {
   const mapId = useId();
   const mapRef = useRef<L.Map | null>(null);
   const clusterRef = useRef<L.MarkerClusterGroup | null>(null);
@@ -106,17 +110,32 @@ export function MapView({ markers, ariaLabel }: MapViewProps) {
       addedCount += 1;
     }
 
-    if (addedCount > 0 && (removedCount > 0 || !userInteractedRef.current)) {
+    if (markers.length === 0) {
+      // 地圖尚未定位，或標記全被篩選掉時，回到預設中心
+      if (emptyCenter && (removedCount > 0 || !isMapPositioned(map))) {
+        map.setView([emptyCenter.latitude, emptyCenter.longitude], DEFAULT_ZOOM);
+      }
+    } else if (addedCount > 0 && (removedCount > 0 || !userInteractedRef.current)) {
       if (markers.length === 1) {
         const [marker] = markers;
-        map.setView([marker.latitude, marker.longitude], 16);
-      } else if (markers.length > 1) {
-        map.fitBounds(cluster.getBounds().pad(0.15), { maxZoom: 16 });
+        map.setView([marker.latitude, marker.longitude], DEFAULT_ZOOM);
+      } else {
+        map.fitBounds(cluster.getBounds().pad(0.15), { maxZoom: DEFAULT_ZOOM });
       }
     }
-  }, [markers]);
+  }, [markers, emptyCenter]);
 
   return <div id={mapId} className="map-view" role="application" aria-label={ariaLabel} />;
+}
+
+/** Leaflet 在第一次 setView／fitBounds 前沒有中心點，getCenter 會丟出錯誤。 */
+function isMapPositioned(map: L.Map): boolean {
+  try {
+    map.getCenter();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function createPopupContent(marker: MapMarker): HTMLElement {

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { MapView } from './MapView';
+import { Link } from 'react-router';
+import { formatEventTime } from '../events/eventTime';
+import { MapView, type MapMarker } from './MapView';
 import { fetchMapEvents, type MapEventResult } from './api';
 import './campusMapPage.css';
 
@@ -26,65 +28,36 @@ export function CampusMapPage() {
 
   useEffect(() => {
     const controller = new AbortController();
-    let timeout: ReturnType<typeof setTimeout> | undefined;
-
-    async function loadMapEvents() {
-      try {
-        const result = await fetchMapEvents({ date, category }, controller.signal);
-        if (controller.signal.aborted) return;
-        setLoaded((previous) => {
-          const previousState =
-            previous?.key === key
-              ? JSON.stringify(
-                  previous.result.items.map((item) => [
-                    item.id,
-                    item.coordinates,
-                    item.geocodingPending,
-                  ]),
-                )
-              : null;
-          const nextState = JSON.stringify(
-            result.items.map((item) => [item.id, item.coordinates, item.geocodingPending]),
-          );
-          return previousState === nextState &&
-            previous?.result.geocodingPending === result.geocodingPending
-            ? previous
-            : { key, result };
-        });
-        if (result.geocodingPending) {
-          timeout = setTimeout(() => void loadMapEvents(), 1000);
-        }
-      } catch (reason: unknown) {
+    fetchMapEvents({ date, category }, controller.signal)
+      .then((result) => setLoaded({ key, result }))
+      .catch((reason: unknown) => {
         if (!controller.signal.aborted) setError({ key, message: String(reason) });
-      }
-    }
-
-    void loadMapEvents();
-    return () => {
-      controller.abort();
-      if (timeout) clearTimeout(timeout);
-    };
+      });
+    return () => controller.abort();
   }, [category, date, key]);
 
+  // 換篩選條件時先保留上一次的標記，載入完成再一次更新，地圖不會先跳回中心
   const result = loaded?.result;
   const isLoading = loaded?.key !== key;
   const matchingError = error?.key === key ? error.message : null;
-  const locatedEvents = useMemo(
-    () => result?.items.filter((event) => event.coordinates) ?? [],
-    [result?.items],
-  );
-  const unlocatedCount = result?.items.length ? result.items.length - locatedEvents.length : 0;
-  const markers = useMemo(
+  const items = useMemo(() => result?.items ?? [], [result]);
+  const unlocatedEvents = isLoading ? [] : items.filter((event) => !event.coordinates);
+  const markers = useMemo<MapMarker[]>(
     () =>
-      locatedEvents.map((event) => ({
-        id: event.id,
-        latitude: event.coordinates!.latitude,
-        longitude: event.coordinates!.longitude,
-        label: event.title,
-        summary: `${event.startTime.slice(0, 10)}${event.allDay ? '（全天）' : ''}｜${event.categoryLabel}｜${event.location}`,
-        href: `/events/${event.id}`,
-      })),
-    [locatedEvents],
+      items.flatMap((event) =>
+        event.coordinates
+          ? [
+              {
+                id: event.id,
+                ...event.coordinates,
+                label: event.title,
+                summary: `${formatEventTime(event)}｜${event.categoryLabel}｜${event.location}`,
+                href: `/events/${event.id}`,
+              },
+            ]
+          : [],
+      ),
+    [items],
   );
 
   return (
@@ -116,27 +89,31 @@ export function CampusMapPage() {
           清除篩選
         </button>
       </div>
-      {isLoading && <p role="status">正在載入活動地圖…首次查詢地點可能需要一些時間。</p>}
-      {!isLoading && !matchingError && result?.geocodingPending && (
-        <p role="status">正在查詢尚未定位的活動，地圖會逐步更新。</p>
-      )}
       {matchingError && <p role="alert">無法載入活動地圖：{matchingError}</p>}
-      {!isLoading && !matchingError && markers.length === 0 && (
-        <p>目前沒有符合條件且可定位的活動。</p>
-      )}
-      {!isLoading && !matchingError && markers.length > 0 && (
-        <MapView markers={markers} ariaLabel="校園活動地圖" />
-      )}
-      {!isLoading && !matchingError && !result?.geocodingPending && unlocatedCount > 0 && (
-        <p className="campus-map-note">
-          有 {unlocatedCount} 筆活動地點無法轉換成座標，未顯示在地圖上。
+      {!matchingError && isLoading && <p role="status">正在載入活動地圖…</p>}
+      {!matchingError && !isLoading && (
+        <p role="status">
+          {items.length === 0
+            ? '目前沒有符合條件的活動。'
+            : `地圖顯示 ${markers.length} 筆活動，點選標記可查看摘要與詳細頁連結。`}
         </p>
       )}
-      {!isLoading && !matchingError && locatedEvents.length > 0 && (
-        <p>
-          地圖顯示 {locatedEvents.length}{' '}
-          筆活動。點選標記查看摘要，並使用標記中的連結查看活動詳細頁。
-        </p>
+      {result && <MapView markers={markers} ariaLabel="校園活動地圖" emptyCenter={result.campus} />}
+      {unlocatedEvents.length > 0 && (
+        <section className="campus-map-unlocated" aria-labelledby="campus-map-unlocated-heading">
+          <h2 id="campus-map-unlocated-heading">無法定位的活動（{unlocatedEvents.length}）</h2>
+          <p className="campus-map-note">以下活動的地點對不到校內建物，未顯示在地圖上。</p>
+          <ul>
+            {unlocatedEvents.map((event) => (
+              <li key={event.id}>
+                <Link to={`/events/${event.id}`}>{event.title}</Link>
+                <div className="campus-map-note">
+                  {formatEventTime(event)}｜{event.location}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
     </section>
   );
