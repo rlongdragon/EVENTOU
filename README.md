@@ -75,7 +75,7 @@ backend/src/
 │   ├── events/         # /api/events        US-19、US-20、US-01、US-02、US-03、US-10、US-11
 │   ├── subscriptions/  # /api/subscriptions US-07、US-08
 │   ├── calendars/      # /api/calendars     US-05、US-09
-│   └── map/            # /api/map           US-04
+│   └── map/            # /api/map           US-03、US-04
 └── shared/
 ```
 
@@ -122,6 +122,28 @@ npm run user:set-role -w backend -- someone@example.com admin
 - **核准即啟用是刻意的決定**：`sources.enabled` 預設為 `1`（US-13 的 schema），來源核准後不需要管理員再按「啟用」就會出現在 `listIngestableSources()`；管理員要暫停擷取時再按「停用」。管理員用 `GET /api/sources` 可看到每個來源目前是否啟用。
 - US-17 的排程擷取請用 `listIngestableSources()`（`backend/src/modules/sources/sources.service.ts`）取得來源，只會包含「已核准且啟用中」的來源，停用的來源不會被擷取。
 - 前端 `/admin/sources`：已核准的來源會顯示啟用狀態，可按鈕啟用或停用。
+
+## 來源風險提示（US-15）
+
+- 後端 API：`GET /api/sources/:sourceId/risk`。管理員可查看任何來源的風險等級、分數與原因；其他人（含訪客）只能查看已核准來源的風險等級（`{ "level" }`），未核准的來源回傳 `404`。`GET /api/sources` 的每個來源也帶有 `risk`（管理員為完整結果，其他人只有等級）；`GET /api/sources/mine` 只有已核准的來源帶風險等級，未核准為 `null`。
+- 規則式評估，規則與門檻定義在 `backend/src/modules/sources/sources.risk.ts`，修改時請同步更新此表：
+
+  | 規則                                        | 分數 |
+  | ------------------------------------------- | ---- |
+  | 已被管理員退回                              | 60   |
+  | 尚未通過管理員審核                          | 30   |
+  | 網址未使用 HTTPS                            | 20   |
+  | 最近連續 3 次以上擷取失敗（視為無法存取）   | 30   |
+  | 最近一次擷取失敗（連續未達 3 次）           | 20   |
+  | 最近 10 次擷取失敗率 ≥ 50%（至少 3 次紀錄） | 20   |
+  | 最近 10 次擷取失敗率 ≥ 20%（至少 3 次紀錄） | 10   |
+  | 已核准但已停用                              | 10   |
+  | 已核准但尚無擷取紀錄                        | 5    |
+
+- 擷取相關規則只套用在已核准的來源，資料來自 US-17 的 `ingestion_runs`（只計 `success`／`failure`，不計執行中）。可存取性以擷取結果判斷，不另外發送連線檢查。
+- 總分 0–19 為低風險、20–49 為中風險、50 以上為高風險；原因依分數由高到低排列，第一項為主要原因。
+- 風險只是提示，**不會**改變審核狀態或啟用狀態，也不影響擷取；最終決定仍由管理員審核。
+- 前端 `/admin/sources`：每個來源顯示風險等級與原因；`/sources/new` 的「我提交的來源」顯示已核准來源的風險等級。
 
 ## 類別公開行事曆（US-05）
 
@@ -186,6 +208,22 @@ npm run user:set-role -w backend -- someone@example.com admin
 - 活動頁的固定網址為 `<網站 origin>/events/:eventId`（`frontend/src/features/events/eventShare.ts`），不帶查詢字串或 hash，開啟不需登入。
 - 活動頁的「分享」按鈕會把固定網址複製到剪貼簿並顯示「已複製」；瀏覽器不允許存取剪貼簿時（例如非 HTTPS），改顯示網址讓使用者手動複製。
 
+## 跨來源重複活動偵測（US-20）
+
+- 新活動寫入（`processAnnouncement`）後，與開始日期前後 1 天內、其他已核准來源的已發布活動比對重複分數：高信心自動合併、中信心標記「可能重複」交給管理員。規則、門檻與 precision／recall 驗證結果見 [`docs/dedup.md`](docs/dedup.md)。
+- 合併掉的活動不會出現在 `published_events`，所以搜尋、行事曆與通知都自動排除；`GET /api/events/:eventId` 的 `sources` 列出活動的所有來源，活動頁顯示全部原始公告。
+- 管理員 API：`GET /api/events/duplicates`、`POST /api/events/duplicates/:eventId/merge`（確認合併）、`POST /api/events/duplicates/:eventId/split`（拆開或還原誤合併）；前端頁面 `/admin/duplicates`。
+- 門檻用 `DEDUP_HIGH_THRESHOLD`（預設 0.75）、`DEDUP_LOW_THRESHOLD`（預設 0.5）設定。
+- 資料（migration 12）：`events` 新增 `duplicate_of`、`dedup_status`、`dedup_score`，新增 `event_distinct_pairs`。
+
+## 自動擷取設定（US-18，第一部分）
+
+- 擷取設定改用統一格式 `ExtractionConfig`（`backend/src/modules/ingestion/ingestion.extraction.ts`）：靜態 HTML 沿用 US-17 的 `ScraperConfig`（`kind` 省略或 `'html'`），另有 `kind: 'feed'`（RSS／Atom）與 `kind: 'ical'`（iCalendar）。US-17 的 `IngestionService` 依 `kind` 選擇擷取器，輸出一律是 `RawAnnouncement`，人工寫的與自動產生的設定不需區分。
+- `detectSourceType` 依網址與回應內容判斷來源類型：iCalendar、RSS／Atom（含頁面宣告的 feed 連結）、一般 HTML、無法判斷（含需要執行 JavaScript 的頁面）。
+- `generateExtractionConfig` 抓取來源、偵測類型並產生設定；內容沒有可用項目，或類型無法判斷時，回傳 `manual_required` 與原因，不丟例外。
+- 目前尚未包含：靜態 HTML 的選擇器推測、核准後自動觸發、設定存檔、試跑預覽與管理介面（第二個 PR）。自動產生的設定在那之前不會被排程使用。
+- 詳細規則、限制與測試範例見 [`docs/ingestion.md`](docs/ingestion.md)。
+
 ## 功能入口與 TODO
 
 US-17 已提供每小時背景擷取、原始公告 upsert、擷取紀錄與 US-19 接合。管理員可使用 `POST /api/ingestion/:sourceId/fetch` 手動擷取，以及 `GET /api/ingestion/:sourceId/runs` 查看最近 100 筆紀錄。人工來源設定、環境變數與操作方式見 [`docs/ingestion.md`](docs/ingestion.md)。
@@ -203,3 +241,5 @@ git grep -n "TODO(#20)"
 ```
 
 API 路徑為暫定，實作時可依需求調整，但請同步更新前端呼叫與此 README。
+
+活動詳細頁的 `GET /api/map/events/:eventId/location` 只會查詢資料庫中已發布活動的地點，再由共用 `map.service.ts` 透過 OpenStreetMap Nominatim 轉為座標；查詢結果會在後端記憶體快取並以佇列限速。地圖使用 OpenStreetMap 圖磚。

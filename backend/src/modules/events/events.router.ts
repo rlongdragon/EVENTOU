@@ -1,11 +1,17 @@
 import { Router, type Response } from 'express';
 import { getDb } from '../../db/index.js';
-import { requireAuth } from '../auth/auth.middleware.js';
+import { requireAuth, requireRole } from '../auth/auth.middleware.js';
 import {
   createEventComment,
   listEventComments,
   validateCommentContent,
 } from './events.comments.js';
+import {
+  confirmDuplicate,
+  listDuplicatePairs,
+  listEventSources,
+  splitDuplicate,
+} from './events.dedup.js';
 import {
   RATING_MAX,
   RATING_MIN,
@@ -18,7 +24,7 @@ import { EVENT_CATEGORIES, EVENT_CATEGORY_LABELS, type PublishedEvent } from './
 
 // 活動（Event）：RawAnnouncement → Event，唯一鍵 source_id + original_url
 // US-19 轉換入口為 events.service.ts 的 processAnnouncement；資料格式見 events.types.ts。
-// TODO(#7): US-20 跨來源偵測可能重複的活動
+// US-20 跨來源重複偵測在 processAnnouncement 內進行（events.dedup.ts），管理員 API 在 /duplicates。
 export const eventsRouter = Router();
 
 const DEFAULT_PAGE_SIZE = 20;
@@ -49,25 +55,58 @@ eventsRouter.get('/', (req, res) => {
   });
 });
 
+// US-20 管理員的重複活動清單：可能重複（待確認）與已合併的配對
+eventsRouter.get('/duplicates', requireRole('admin'), (_req, res) => {
+  res.json({ pairs: listDuplicatePairs(getDb()) });
+});
+
+// US-20 管理員確認合併「可能重複」的活動，合併後不再出現在搜尋、行事曆與通知
+eventsRouter.post('/duplicates/:eventId/merge', requireRole('admin'), (req, res) => {
+  const eventId = parseEventId(req.params.eventId);
+  if (eventId === undefined || !confirmDuplicate(getDb(), eventId)) {
+    sendDuplicateNotFound(res);
+    return;
+  }
+  res.json({ pairs: listDuplicatePairs(getDb()) });
+});
+
+// US-20 管理員拆開配對（含還原誤合併）：兩筆恢復為獨立活動，之後重跑擷取也不會再合併
+eventsRouter.post('/duplicates/:eventId/split', requireRole('admin'), (req, res) => {
+  const eventId = parseEventId(req.params.eventId);
+  if (eventId === undefined || !splitDuplicate(getDb(), eventId, req.user?.id ?? null)) {
+    sendDuplicateNotFound(res);
+    return;
+  }
+  res.json({ pairs: listDuplicatePairs(getDb()) });
+});
+
+function parseEventId(value: unknown): number | undefined {
+  const id = Number(value);
+  return typeof value === 'string' && /^[1-9]\d*$/.test(value) && Number.isSafeInteger(id)
+    ? id
+    : undefined;
+}
+
+function sendDuplicateNotFound(res: Response) {
+  res.status(404).json({ error: 'not_found', message: '找不到這組可能重複或已合併的活動' });
+}
+
 /** 依路徑上的 eventId 讀取已發布活動；id 無效、不存在或待審時回 404 並回傳 undefined。 */
 function findPublishedEventOr404(eventId: unknown, res: Response): PublishedEvent | undefined {
-  const id = Number(eventId);
-  const event =
-    typeof eventId === 'string' && /^[1-9]\d*$/.test(eventId) && Number.isSafeInteger(id)
-      ? findPublishedEventById(getDb(), id)
-      : undefined;
+  const id = parseEventId(eventId);
+  const event = id === undefined ? undefined : findPublishedEventById(getDb(), id);
   if (!event) res.status(404).json({ error: 'not_found', message: '找不到這個活動' });
   return event;
 }
 
 // US-02 取得活動詳細資訊（未登入可用）；id 無效、不存在或待審的活動一律回 404
-// TODO(#18): US-03 回傳活動地點座標，供活動頁顯示地圖
 eventsRouter.get('/:eventId', (req, res) => {
   const event = findPublishedEventOr404(req.params.eventId, res);
   if (!event) return;
   // categoryLabel 取自 EVENT_CATEGORY_LABELS（類別顯示名稱的單一來源）；查無對照時顯示代碼
   const categoryLabel = EVENT_CATEGORY_LABELS[event.category] ?? event.category;
-  res.json({ event: { ...event, categoryLabel } });
+  // US-20 sources：自己的來源與合併進來的活動的來源，活動頁列出全部
+  res.json({ event: { ...event, categoryLabel, sources: listEventSources(getDb(), event.id) } });
 });
 
 // US-10 活動留言：未登入可看，留言需登入；依留言時間由舊到新排序

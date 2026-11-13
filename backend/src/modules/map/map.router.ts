@@ -1,7 +1,12 @@
 import { Router } from 'express';
 import { getDb } from '../../db/index.js';
 import { EVENT_CATEGORIES, EVENT_CATEGORY_LABELS } from '../events/events.types.js';
-import { findMapEvents, geocodeLocation, getCachedGeocodeLocation } from './map.service.js';
+import {
+  findMapEventLocation,
+  findMapEvents,
+  geocodeLocation,
+  getCachedGeocodeLocation,
+} from './map.service.js';
 
 export const mapRouter = Router();
 
@@ -10,6 +15,29 @@ function isCalendarDate(value: string): boolean {
   const date = new Date(`${value}T00:00:00.000Z`);
   return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
+
+// US-03：只對資料庫中已發布活動的地點進行地理編碼。
+mapRouter.get('/events/:eventId/location', async (req, res) => {
+  const id = Number(req.params.eventId);
+  if (!/^[1-9]\d*$/.test(req.params.eventId) || !Number.isSafeInteger(id)) {
+    res.status(404).json({ error: 'not_found' });
+    return;
+  }
+  const location = findMapEventLocation(getDb(), id);
+  if (location === undefined) {
+    res.status(404).json({ error: 'not_found' });
+    return;
+  }
+  if (!location?.trim()) {
+    res.json({ coordinates: null });
+    return;
+  }
+  try {
+    res.json({ coordinates: await geocodeLocation(location) });
+  } catch {
+    res.status(502).json({ error: 'geocoding_unavailable' });
+  }
+});
 
 // US-04：未登入可取得校園活動地圖資料，依台北日期與類別篩選。
 mapRouter.get('/events', async (req, res) => {

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router';
-import { TodoPlaceholder } from '../../shared/TodoPlaceholder';
 import type { EventDetail } from './api';
 import { fetchEvent } from './api';
+import { EventLocationMap } from './EventLocationMap';
 import { EventComments } from './EventComments';
 import { EventRating } from './EventRating';
 import { formatEventTime } from './eventTime';
@@ -66,17 +66,29 @@ export function EventDetailPage() {
       </dl>
       <h2>活動說明</h2>
       <p style={{ whiteSpace: 'pre-wrap' }}>{event.description || '未提供'}</p>
-      <p>
-        <a href={event.originalUrl} target="_blank" rel="noreferrer">
-          查看原始公告
-        </a>
-      </p>
+      {event.sources.length > 1 ? (
+        <>
+          {/* US-20：跨來源的重複公告已合併成這一筆，列出所有來源 */}
+          <h2>來源</h2>
+          <ul>
+            {event.sources.map((source) => (
+              <li key={source.originalUrl}>
+                <a href={source.originalUrl} target="_blank" rel="noreferrer">
+                  {source.sourceName}的原始公告
+                </a>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : (
+        <p>
+          <a href={event.originalUrl} target="_blank" rel="noreferrer">
+            查看原始公告
+          </a>
+        </p>
+      )}
       <ShareEventButton eventId={event.id} />
-      {/* TODO(#18): US-03 活動地點地圖 */}
-      <TodoPlaceholder
-        title="地點地圖"
-        issues={[{ number: 18, label: 'US-03 活動頁顯示地點地圖' }]}
-      />
+      <EventLocationMap key={event.id} eventId={event.id} location={event.location} />
       <EventRating eventId={eventId} />
       <EventComments eventId={eventId} />
     </>

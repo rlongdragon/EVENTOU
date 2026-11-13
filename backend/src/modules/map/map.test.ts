@@ -86,6 +86,13 @@ async function getMapEvents(query = '') {
   return { status: response.status, body: (await response.json()) as Record<string, unknown> };
 }
 
+function getEventId(title: string): number {
+  const row = getDb().prepare('SELECT id FROM published_events WHERE title = ?').get(title) as
+    { id: number } | undefined;
+  assert.ok(row);
+  return Number(row.id);
+}
+
 async function waitForMapEvents(query: string) {
   for (let attempt = 0; attempt < 8; attempt += 1) {
     const result = await getMapEvents(query);
@@ -135,5 +142,24 @@ describe('GET /api/map/events（US-04）', () => {
   test('拒絕不合法的日期與類別篩選值', async () => {
     assert.equal((await getMapEvents('?date=2099-02-30')).status, 400);
     assert.equal((await getMapEvents('?category=invalid')).status, 400);
+  });
+});
+
+describe('GET /api/map/events/:eventId/location（US-03）', () => {
+  test('只依已發布活動的地點回傳座標', async () => {
+    const eventId = getEventId('校園地圖講座');
+    const response = await fetch(`${baseUrl}/api/map/events/${eventId}/location`);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      coordinates: { latitude: 25.15, longitude: 121.77 },
+    });
+  });
+
+  test('沒有地點或不存在的活動不呼叫地理編碼服務', async () => {
+    const noLocationId = getEventId('沒有地點的活動');
+    const noLocationResponse = await fetch(`${baseUrl}/api/map/events/${noLocationId}/location`);
+    assert.equal(noLocationResponse.status, 200);
+    assert.deepEqual(await noLocationResponse.json(), { coordinates: null });
+    assert.equal((await fetch(`${baseUrl}/api/map/events/99999/location`)).status, 404);
   });
 });

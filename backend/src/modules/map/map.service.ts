@@ -16,6 +16,13 @@ export interface MapCoordinates {
   longitude: number;
 }
 
+/** 僅從已發布活動取得地點，避免任意字串觸發外部地理編碼。 */
+export function findMapEventLocation(db: DatabaseSync, eventId: number): string | null | undefined {
+  const row = db.prepare('SELECT location FROM published_events WHERE id = ?').get(eventId) as
+    { location: string | null } | undefined;
+  return row?.location;
+}
+
 export function findMapEvents(
   db: DatabaseSync,
   filters: { category: string; date: string },
