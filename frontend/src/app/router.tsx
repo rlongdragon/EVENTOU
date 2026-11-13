@@ -6,7 +6,6 @@ import { PersonalCalendarPage } from '../features/calendars/PersonalCalendarPage
 import { AdminDuplicatesPage } from '../features/events/AdminDuplicatesPage';
 import { EventDetailPage } from '../features/events/EventDetailPage';
 import { EventSearchPage } from '../features/events/EventSearchPage';
-import { CampusMapPage } from '../features/map/CampusMapPage';
 import { AdminSourcesPage } from '../features/sources/AdminSourcesPage';
 import { SubmitSourcePage } from '../features/sources/SubmitSourcePage';
 import { SubscriptionsPage } from '../features/subscriptions/SubscriptionsPage';
@@ -19,7 +18,12 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <EventSearchPage /> },
       { path: 'events/:eventId', element: <EventDetailPage /> },
-      { path: 'map', element: <CampusMapPage /> },
+      {
+        path: 'map',
+        lazy: async () => ({
+          Component: (await import('../features/map/CampusMapPage')).CampusMapPage,
+        }),
+      },
       { path: 'login', element: <LoginPage /> },
       {
         path: 'subscriptions',
