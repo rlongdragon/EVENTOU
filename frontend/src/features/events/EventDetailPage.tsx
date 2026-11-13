@@ -53,23 +53,37 @@ export function EventDetailPage() {
 
   return (
     <>
-      <h1>{event.title}</h1>
-      <dl>
-        <dt>時間</dt>
-        <dd>{formatEventTime(event)}</dd>
-        <dt>地點</dt>
-        <dd>{event.location ?? '未提供'}</dd>
-        <dt>類別</dt>
-        <dd>{event.categoryLabel}</dd>
-        <dt>主辦單位</dt>
-        <dd>{event.organizer ?? '未提供'}</dd>
+      <h1 className="event-title">
+        <span className="hero-title-line">
+          <span>{event.title}</span>
+        </span>
+      </h1>
+      <dl className="event-meta">
+        <div>
+          <dt>時間</dt>
+          <dd>{formatEventTime(event)}</dd>
+        </div>
+        <div>
+          <dt>地點</dt>
+          <dd>{event.location ?? '未提供'}</dd>
+        </div>
+        <div>
+          <dt>類別</dt>
+          <dd>{event.categoryLabel}</dd>
+        </div>
+        <div>
+          <dt>主辦單位</dt>
+          <dd>{event.organizer ?? '未提供'}</dd>
+        </div>
       </dl>
-      <h2>活動說明</h2>
-      <p style={{ whiteSpace: 'pre-wrap' }}>{event.description || '未提供'}</p>
-      {event.sources.length > 1 ? (
-        <>
-          {/* US-20：跨來源的重複公告已合併成這一筆，列出所有來源 */}
-          <h2>來源</h2>
+      <section>
+        <h2>活動說明</h2>
+        <p className="event-description">{event.description || '未提供'}</p>
+      </section>
+      <section>
+        <h2>來源</h2>
+        {/* US-20：跨來源的重複公告已合併成這一筆時，列出所有來源 */}
+        {event.sources.length > 1 ? (
           <ul>
             {event.sources.map((source) => (
               <li key={source.originalUrl}>
@@ -79,14 +93,14 @@ export function EventDetailPage() {
               </li>
             ))}
           </ul>
-        </>
-      ) : (
-        <p>
-          <a href={event.originalUrl} target="_blank" rel="noreferrer">
-            查看原始公告
-          </a>
-        </p>
-      )}
+        ) : (
+          <p>
+            <a href={event.originalUrl} target="_blank" rel="noreferrer">
+              查看原始公告
+            </a>
+          </p>
+        )}
+      </section>
       <ShareEventButton eventId={event.id} />
       <EventLocationMap key={event.id} eventId={event.id} location={event.location} />
       <EventRating eventId={eventId} />
