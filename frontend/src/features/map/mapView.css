@@ -1,7 +1,7 @@
 .map-view {
   width: 100%;
   height: clamp(18rem, 55vw, 36rem);
-  border-radius: 0.5rem;
+  border: 1px solid var(--color-line);
 }
 
 .map-view .leaflet-popup-content p {

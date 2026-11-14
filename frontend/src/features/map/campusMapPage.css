@@ -23,5 +23,5 @@
 }
 
 .campus-map-note {
-  color: #57606a;
+  color: var(--color-muted);
 }

@@ -270,14 +270,19 @@ input[type='range'] {
   animation: enter 0.7s var(--ease-out) backwards;
 }
 
-/* 頁面最外層的 section 呈現為紙卡：細線框、無圓角、無陰影 */
+/* 頁面最外層的 section 呈現為雜誌段落：上方一條墨線分隔，不加外框與底色 */
 .site-main > section:not(.cover, .issue, .closing) {
-  margin: 0 0 1rem;
-  padding: 1.5rem;
+  margin: 0 0 0.5rem;
+  padding: 1.25rem 0 1.75rem;
   overflow-x: auto;
-  border: 1px solid var(--color-line);
-  background: var(--color-surface);
+  border-top: 1px solid var(--color-text);
   animation: enter 0.7s var(--ease-out) backwards;
+}
+
+/* 頁面第一個段落緊接導覽線，不再重複畫分隔線 */
+.site-main > section:first-child {
+  padding-top: 0;
+  border-top: 0;
 }
 
 .site-main > section:nth-of-type(1) {
@@ -652,9 +657,9 @@ legend {
   display: block;
   margin-top: 0.4rem;
   font-family: var(--font-label);
-  font-size: 0.55rem;
+  font-size: 0.6rem;
   letter-spacing: 0.24em;
-  color: var(--color-muted);
+  color: var(--color-text);
 }
 
 .issue-arrow {
@@ -746,6 +751,12 @@ legend {
 }
 
 @media (max-width: 760px) {
+  .event-meta > div + div {
+    padding-left: 0;
+    border-top: 1px solid var(--color-line);
+    border-left: 0;
+  }
+
   .cover {
     grid-template-columns: 1fr;
     gap: 1.75rem;
