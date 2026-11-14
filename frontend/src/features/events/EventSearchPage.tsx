@@ -7,6 +7,7 @@ import ridgePhoto from '../../assets/photos/ridge.jpg';
 import wavesPhoto from '../../assets/photos/waves.jpg';
 import type { EventSearchResult } from './api';
 import { searchEvents } from './api';
+import { EventTicker } from './EventTicker';
 import { formatEventTime } from './eventTime';
 
 type LoadState =
@@ -76,6 +77,7 @@ export function EventSearchPage() {
 
   return (
     <>
+      <EventTicker />
       <section className="cover">
         <div className="cover-main">
           <span className="cover-kicker">本期 · 校園活動</span>

@@ -407,6 +407,111 @@ legend {
   animation: fade-in 0.8s ease 0.45s forwards;
 }
 
+/* ── 首頁：跑馬燈 ─────────────────────────────── */
+
+.ticker {
+  display: flex;
+  align-items: stretch;
+  margin-top: 0.5rem;
+  border-block: 1px solid var(--color-text);
+  font-size: 0.9rem;
+}
+
+.ticker-label {
+  display: flex;
+  flex: none;
+  gap: 0.4rem;
+  align-items: center;
+  padding: 0.5rem 1rem 0.5rem 0;
+  border-right: 1px solid var(--color-line);
+  font-family: var(--font-label);
+  font-size: 0.68rem;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.ticker-star {
+  color: var(--color-accent);
+}
+
+.ticker-viewport {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent,
+    #000 3rem,
+    #000 calc(100% - 3rem),
+    transparent
+  );
+  mask-image: linear-gradient(90deg, transparent, #000 3rem, #000 calc(100% - 3rem), transparent);
+}
+
+.ticker-track {
+  display: flex;
+  width: max-content;
+  animation: ticker var(--ticker-duration, 40s) linear infinite;
+}
+
+/* 滑鼠移入或鍵盤聚焦時暫停，方便閱讀與點選 */
+.ticker:hover .ticker-track,
+.ticker:focus-within .ticker-track {
+  animation-play-state: paused;
+}
+
+.ticker-items {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ticker-items li {
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+}
+
+/* 每則之間以細點分隔 */
+.ticker-items li::after {
+  content: '·';
+  padding: 0 1.25rem;
+  color: var(--color-muted);
+}
+
+.ticker-items a {
+  display: inline-flex;
+  gap: 0.6rem;
+  align-items: baseline;
+  padding: 0.5rem 0;
+  text-decoration: none;
+}
+
+.ticker-date {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.ticker-category {
+  color: var(--color-olive);
+  font-size: 0.8rem;
+}
+
+@media (max-width: 520px) {
+  .ticker-label-zh {
+    display: none;
+  }
+}
+
+@keyframes ticker {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
 /* ── 首頁：封面 ───────────────────────────────── */
 
 .cover {
@@ -824,5 +929,16 @@ legend {
   .fade-in {
     opacity: 1;
     transform: none;
+  }
+
+  /* 跑馬燈改為可水平捲動的靜態列，只留第一份 */
+  .ticker-viewport {
+    overflow-x: auto;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+
+  .ticker-items[aria-hidden='true'] {
+    display: none;
   }
 }
