@@ -2,8 +2,9 @@ import { useEffect, useId, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
-import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import 'leaflet.markercluster';
+import { categoryClassName, categoryGlyph } from './mapCategories';
+import { getTileLayerConfig } from './mapTiles';
 import './mapView.css';
 
 export interface MapMarker {
@@ -11,7 +12,12 @@ export interface MapMarker {
   latitude: number;
   longitude: number;
   label: string;
-  summary?: string;
+  /** 活動類別代碼，決定標記顏色與縮寫 */
+  category?: string;
+  /** 彈出視窗上方顯示的類別名稱 */
+  categoryLabel?: string;
+  /** 彈出視窗中標題下方的資訊，每項一行 */
+  details?: string[];
   href?: string;
 }
 
@@ -24,15 +30,28 @@ interface MapViewProps {
 
 const DEFAULT_ZOOM = 16;
 
-const markerIcon = new L.Icon({
-  iconUrl: new URL('leaflet/dist/images/marker-icon.png', import.meta.url).href,
-  iconRetinaUrl: new URL('leaflet/dist/images/marker-icon-2x.png', import.meta.url).href,
-  shadowUrl: new URL('leaflet/dist/images/marker-shadow.png', import.meta.url).href,
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41],
-});
+const tileLayerConfig = getTileLayerConfig(import.meta.env.VITE_CARTO_API_KEY);
+
+/** 依類別上色的水滴形標記；縮寫為固定常數，不含使用者輸入。 */
+function createPinIcon(marker: MapMarker): L.DivIcon {
+  return L.divIcon({
+    className: 'map-pin-icon',
+    html: `<span class="map-pin ${categoryClassName(marker.category)}"><span class="map-pin-glyph">${categoryGlyph(marker.category)}</span></span>`,
+    iconSize: [34, 42],
+    iconAnchor: [17, 42],
+    popupAnchor: [0, -38],
+  });
+}
+
+function createClusterIcon(cluster: L.MarkerCluster): L.DivIcon {
+  const count = cluster.getChildCount();
+  const size = count >= 50 ? 52 : count >= 10 ? 46 : 40;
+  return L.divIcon({
+    className: 'map-cluster-icon',
+    html: `<span class="map-cluster"><span>${count}</span></span>`,
+    iconSize: [size, size],
+  });
+}
 
 /** US-03 與 US-04 共用的 Leaflet 地圖，支援多筆標記與聚合。 */
 export function MapView({ markers, ariaLabel, emptyCenter }: MapViewProps) {
@@ -45,12 +64,12 @@ export function MapView({ markers, ariaLabel, emptyCenter }: MapViewProps) {
   useEffect(() => {
     const map = L.map(mapId, { scrollWheelZoom: false });
     const markerRecords = markerRecordsRef.current;
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',
+    const { url: tileUrl, ...tileOptions } = tileLayerConfig;
+    L.tileLayer(tileUrl, tileOptions).addTo(map);
+    const cluster = L.markerClusterGroup({
+      iconCreateFunction: createClusterIcon,
+      showCoverageOnHover: false,
     }).addTo(map);
-    const cluster = L.markerClusterGroup().addTo(map);
     const markUserInteraction = () => {
       userInteractedRef.current = true;
     };
@@ -95,6 +114,7 @@ export function MapView({ markers, ariaLabel, emptyCenter }: MapViewProps) {
       if (existing) {
         if (existing.signature !== signature) {
           existing.marker.setLatLng([marker.latitude, marker.longitude]);
+          existing.marker.setIcon(createPinIcon(marker));
           existing.marker.setPopupContent(createPopupContent(marker));
           existing.marker.getPopup()?.update();
           existing.signature = signature;
@@ -103,13 +123,16 @@ export function MapView({ markers, ariaLabel, emptyCenter }: MapViewProps) {
       }
 
       const leafletMarker = L.marker([marker.latitude, marker.longitude], {
-        icon: markerIcon,
-      }).bindPopup(createPopupContent(marker));
+        icon: createPinIcon(marker),
+        title: marker.label,
+      }).bindPopup(createPopupContent(marker), POPUP_OPTIONS);
       cluster.addLayer(leafletMarker);
       markerRecordsRef.current.set(id, { marker: leafletMarker, signature });
       addedCount += 1;
     }
 
+    // 容器可能在建立地圖後才有尺寸（例如分頁在背景載入），定位前先重新量測
+    map.invalidateSize();
     if (markers.length === 0) {
       // 地圖尚未定位，或標記全被篩選掉時，回到預設中心
       if (emptyCenter && (removedCount > 0 || !isMapPositioned(map))) {
@@ -138,20 +161,32 @@ function isMapPositioned(map: L.Map): boolean {
   }
 }
 
+const POPUP_OPTIONS: L.PopupOptions = { className: 'map-popup', minWidth: 220, maxWidth: 300 };
+
+/** 以 DOM API 組出彈出視窗，所有文字都用 textContent，不會被當成 HTML。 */
 function createPopupContent(marker: MapMarker): HTMLElement {
   const popup = document.createElement('div');
+  if (marker.categoryLabel) {
+    const chip = document.createElement('span');
+    chip.className = `map-popup-category ${categoryClassName(marker.category)}`;
+    chip.textContent = marker.categoryLabel;
+    popup.append(chip);
+  }
   const title = document.createElement('strong');
+  title.className = 'map-popup-title';
   title.textContent = marker.label;
   popup.append(title);
-  if (marker.summary) {
-    const summary = document.createElement('p');
-    summary.textContent = marker.summary;
-    popup.append(summary);
+  for (const detail of marker.details ?? []) {
+    const line = document.createElement('p');
+    line.className = 'map-popup-detail';
+    line.textContent = detail;
+    popup.append(line);
   }
   if (marker.href) {
     const link = document.createElement('a');
+    link.className = 'map-popup-link';
     link.href = marker.href;
-    link.textContent = '查看活動詳細資訊';
+    link.textContent = '查看活動詳細資訊 →';
     popup.append(link);
   }
   return popup;

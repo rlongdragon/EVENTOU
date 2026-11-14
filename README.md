@@ -81,7 +81,8 @@ backend/src/
 
 ## 校園活動地圖（US-04）
 
-- 前端頁面 `/map` 未登入即可瀏覽，使用共用 Leaflet `MapView` 顯示活動標記；標記密集時會聚合，點選後可查看活動摘要並前往詳細頁。地圖一律以海大為中心顯示，地點對不到校內建物的活動列在地圖下方。
+- 前端頁面 `/map` 未登入即可瀏覽，使用共用 Leaflet `MapView` 顯示活動標記；標記密集時會聚合，點選後可查看活動摘要並前往詳細頁。地圖一律以海大為中心顯示，地點對不到校內建物的活動列在地圖下方。標記依活動類別上色並附圖例。
+- 底圖：在 `frontend/.env` 設定 `VITE_CARTO_API_KEY` 時使用 CARTO Voyager 圖磚，未設定時使用 OpenStreetMap 標準圖磚。CARTO 金鑰非商業用途免費，到 https://carto.com/basemaps/apikey 用 email 申請；金鑰會出現在前端程式中，請在 CARTO 後台限制可使用的網站，本機開發與正式網站需分別申請。
 - `GET /api/map/events?from=YYYY-MM-DD&to=YYYY-MM-DD&category=lecture` 回傳有地點的已發布活動（含 `coordinates` 與對到的建物名稱 `placeName`，對不到時皆為 `null`）、校園中心點 `campus` 及類別選項。`from`、`to` 以台北時區活動開始日期篩選，範圍含兩端，任一端省略即不設限；開始日期晚於結束日期時回 400（`invalid_date_range`）。前端預設為今天起 7 天，並提供「今天」「未來 7 天」「未來 30 天」快速選擇，清除篩選後顯示所有日期。`category` 可省略以包含全部類別。
 - 座標來自 `backend/src/modules/map/map.places.ts` 的海大建物對照表（名稱、別名、座標，初始資料取自 OpenStreetMap），不呼叫外部地理編碼服務。活動地點文字包含任一別名即算對到，多個符合時取最長的別名。新地點對不到時，把建物或別名補進對照表即可。
 
@@ -242,4 +243,4 @@ git grep -n "TODO(#20)"
 
 API 路徑為暫定，實作時可依需求調整，但請同步更新前端呼叫與此 README。
 
-活動詳細頁的 `GET /api/map/events/:eventId/location` 依已發布活動的地點，從同一份建物對照表回傳 `{ coordinates, placeName }`；沒有地點或對不到建物時皆為 `null`。地圖使用 OpenStreetMap 圖磚。
+活動詳細頁的 `GET /api/map/events/:eventId/location` 依已發布活動的地點，從同一份建物對照表回傳 `{ coordinates, placeName }`；沒有地點或對不到建物時皆為 `null`。底圖設定同上方「校園活動地圖」一節。
