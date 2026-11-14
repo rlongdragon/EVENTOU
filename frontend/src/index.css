@@ -1,54 +1,63 @@
-/* 「海風」主題：淺色底、海藻青主色、珊瑚橘只用於警示 */
+/* 「雜誌」主題：紙感底色、墨色文字、細線分隔、橄欖灰輔色，橘色只用在小點綴與焦點 */
 :root {
-  --color-bg: #f5faf8;
-  --color-surface: #ffffff;
-  --color-text: #12303f;
-  --color-muted: #52677a;
-  --color-line: rgba(18, 48, 63, 0.12);
-  --color-primary: #08776c;
-  --color-primary-hover: #055c53;
-  --color-primary-soft: #e4f5f0;
+  --color-bg: #f2efe8;
+  --color-bg-deep: #e9e5dc;
+  --color-surface: #f8f6f1;
+  --color-text: #1c211f;
+  --color-muted: #6f7166;
+  --color-olive: #6b6e5c;
+  --color-line: rgba(28, 33, 31, 0.16);
+  --color-primary: #1c211f;
+  --color-primary-hover: #3a3f3a;
+  --color-accent: #e5652a;
   --color-warning: #c2410c;
-  --color-mint: #cfefe6;
-  --color-sky: #dceefb;
-  --color-peach: #ffe4d4;
-  --radius-card: 20px;
+  --color-on-dark: #f8f6f1;
+  --font-serif: 'Noto Serif TC', 'Songti TC', serif;
+  --font-display: 'Playfair Display', 'Noto Serif TC', Georgia, serif;
+  --font-label: 'Inter', 'Noto Sans TC', system-ui, sans-serif;
   --ease-out: cubic-bezier(0.2, 0.8, 0.1, 1);
 
   font-family:
-    'Space Grotesk',
     'Noto Sans TC',
     system-ui,
     -apple-system,
     'Segoe UI',
     sans-serif;
-  line-height: 1.6;
+  line-height: 1.65;
   color: var(--color-text);
   background-color: var(--color-bg);
 }
 
 body {
   margin: 0;
+  background:
+    radial-gradient(120% 50% at 100% 0%, var(--color-bg-deep), transparent 60%), var(--color-bg);
 }
 
 h1,
 h2,
 h3 {
+  font-family: var(--font-serif);
+  font-weight: 900;
   line-height: 1.2;
   letter-spacing: -0.01em;
+  text-wrap: balance;
 }
 
 a {
-  color: var(--color-primary);
+  color: var(--color-text);
+  text-decoration-color: var(--color-line);
+  text-underline-offset: 0.2em;
 }
 
 a:hover {
-  color: var(--color-primary-hover);
+  color: var(--color-accent);
+  text-decoration-color: currentColor;
 }
 
 :focus-visible {
-  outline: 3px solid rgba(8, 119, 108, 0.45);
-  outline-offset: 2px;
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
 }
 
 button,
@@ -62,31 +71,29 @@ textarea {
 button {
   min-height: 2.5rem;
   padding: 0 1.1rem;
-  border: 1px solid var(--color-line);
-  border-radius: 999px;
-  background: var(--color-surface);
+  border: 1px solid var(--color-text);
+  border-radius: 0;
+  background: transparent;
   cursor: pointer;
+  letter-spacing: 0.06em;
   transition:
-    transform 0.2s,
-    border-color 0.2s,
-    background-color 0.2s;
+    background-color 0.2s,
+    color 0.2s;
 }
 
 button:hover:not(:disabled) {
-  transform: translateY(-2px);
-  border-color: var(--color-primary);
+  background: var(--color-text);
+  color: var(--color-on-dark);
 }
 
 button:disabled {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
 button[type='submit'] {
-  border-color: var(--color-primary);
   background: var(--color-primary);
-  color: #ffffff;
-  font-weight: 700;
+  color: var(--color-on-dark);
 }
 
 button[type='submit']:hover:not(:disabled) {
@@ -97,57 +104,109 @@ input:not([type='checkbox'], [type='radio'], [type='range']),
 select,
 textarea {
   min-height: 2.5rem;
-  padding: 0.4rem 0.9rem;
+  padding: 0.4rem 0.75rem;
   border: 1px solid var(--color-line);
-  border-radius: 12px;
+  border-radius: 0;
   background: var(--color-surface);
   box-sizing: border-box;
-  transition:
-    border-color 0.2s,
-    box-shadow 0.2s;
+  transition: border-color 0.2s;
 }
 
 input:not([type='checkbox'], [type='radio'], [type='range']):focus,
 select:focus,
 textarea:focus {
   outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 4px rgba(8, 119, 108, 0.15);
+  border-color: var(--color-text);
 }
 
-/* ── 版面（Layout） ───────────────────────────── */
+input[type='checkbox'],
+input[type='radio'],
+input[type='range'] {
+  accent-color: var(--color-text);
+}
+
+/* 英文小標：字距拉開的大寫標籤 */
+.label {
+  font-family: var(--font-label);
+  font-size: 0.68rem;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+/* ── 版面（Layout）：刊頭與細線導覽 ─────────────── */
 
 .site-header {
-  position: sticky;
-  top: 0;
-  z-index: 1000;
-  border-bottom: 1px solid var(--color-line);
-  background: rgba(245, 250, 248, 0.85);
-  backdrop-filter: blur(12px);
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1.75rem 1rem 0;
+}
+
+.masthead {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.masthead-series {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.masthead-series::after {
+  content: '';
+  width: 140px;
+  height: 1px;
+  margin-top: 0.6rem;
+  background: var(--color-line);
+}
+
+.masthead-issue {
+  display: grid;
+  justify-items: end;
+  gap: 0.2rem;
+  text-align: right;
+}
+
+.masthead-issue b {
+  font-family: var(--font-display);
+  font-size: clamp(2.4rem, 6vw, 3.4rem);
+  font-weight: 700;
+  line-height: 1;
+  color: var(--color-olive);
+}
+
+.masthead-issue small {
+  color: var(--color-muted);
+  font-size: 0.8rem;
 }
 
 .site-nav {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.25rem 1.25rem;
+  gap: 0.25rem 1.4rem;
   align-items: center;
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0.6rem 1rem;
+  margin-top: 1.25rem;
+  padding: 0.55rem 0;
+  border-block: 1px solid var(--color-line);
+  background: var(--color-bg);
+  font-size: 0.9rem;
 }
 
 .site-logo {
-  display: inline-flex;
-  gap: 0.5rem;
-  align-items: center;
-  margin-right: 0.5rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  margin-right: 0.75rem;
+  font-family: var(--font-label);
+  font-weight: 500;
+  letter-spacing: 0.28em;
 }
 
 .site-nav a {
   position: relative;
-  padding: 0.5rem 0.15rem;
+  padding: 0.35rem 0;
   color: var(--color-muted);
   text-decoration: none;
 }
@@ -155,11 +214,11 @@ textarea:focus {
 .site-nav a::after {
   content: '';
   position: absolute;
-  right: 0.15rem;
-  bottom: 0.2rem;
-  left: 0.15rem;
+  right: 0;
+  bottom: 0.1rem;
+  left: 0;
   height: 2px;
-  background: var(--color-primary);
+  background: var(--color-accent);
   transform: scaleX(0);
   transform-origin: right;
   transition: transform 0.35s cubic-bezier(0.7, 0, 0.2, 1);
@@ -183,40 +242,47 @@ textarea:focus {
   margin-left: auto;
 }
 
+.site-nav-user button {
+  min-height: 2rem;
+  font-size: 0.85rem;
+}
+
 .site-main {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 1rem;
+  padding: 1rem 1rem 3rem;
 }
 
-/* ── 各頁共用：頁面標題、區塊卡片、表格、表單 ──── */
+/* ── 各頁共用：頁面標題、區塊、表格、表單 ─────── */
 
 /* 用 :where() 把權重壓低，個別頁面的 class 可以直接覆寫 */
 :where(.site-main) h1 {
-  margin: 1.5rem 0 1rem;
-  font-size: clamp(2rem, 4.5vw, 3rem);
-  font-weight: 900;
+  margin: 1.75rem 0 1.25rem;
+  font-size: clamp(2.1rem, 5vw, 3.4rem);
 }
 
 :where(.site-main) h2 {
   margin-top: 0;
-  font-size: 1.3rem;
+  font-size: 1.35rem;
 }
 
 .site-main > h1 {
   animation: enter 0.7s var(--ease-out) backwards;
 }
 
-/* 頁面最外層的 section 一律呈現為卡片，依序浮現 */
-.site-main > section:not(.hero) {
-  margin: 0 0 1rem;
-  padding: 1.5rem;
+/* 頁面最外層的 section 呈現為雜誌段落：上方一條墨線分隔，不加外框與底色 */
+.site-main > section:not(.cover, .issue, .closing) {
+  margin: 0 0 0.5rem;
+  padding: 1.25rem 0 1.75rem;
   overflow-x: auto;
-  border: 1px solid var(--color-line);
-  border-radius: var(--radius-card);
-  background: var(--color-surface);
-  box-shadow: 0 1px 2px rgba(18, 48, 63, 0.06);
+  border-top: 1px solid var(--color-text);
   animation: enter 0.7s var(--ease-out) backwards;
+}
+
+/* 頁面第一個段落緊接導覽線，不再重複畫分隔線 */
+.site-main > section:first-child {
+  padding-top: 0;
+  border-top: 0;
 }
 
 .site-main > section:nth-of-type(1) {
@@ -253,9 +319,12 @@ td {
 }
 
 thead th {
+  border-bottom-color: var(--color-text);
   color: var(--color-muted);
-  font-size: 0.85rem;
+  font-family: var(--font-label);
+  font-size: 0.75rem;
   font-weight: 500;
+  letter-spacing: 0.12em;
   white-space: nowrap;
 }
 
@@ -267,7 +336,6 @@ fieldset {
   margin: 0;
   padding: 0.75rem 1rem;
   border: 1px solid var(--color-line);
-  border-radius: 16px;
 }
 
 legend {
@@ -278,35 +346,37 @@ legend {
 /* ── 活動詳細頁 ───────────────────────────────── */
 
 .event-title {
-  margin: 1.5rem 0 1rem;
-  font-size: clamp(2rem, 5vw, 3.5rem);
-  letter-spacing: -0.02em;
+  margin: 1.75rem 0 1.25rem;
+  font-size: clamp(2rem, 5vw, 3.6rem);
+  line-height: 1.15;
 }
 
 .event-meta {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1px;
-  margin: 0 0 1rem;
-  overflow: hidden;
-  border: 1px solid var(--color-line);
-  border-radius: var(--radius-card);
-  background: var(--color-line);
+  margin: 0 0 1.5rem;
+  border-block: 1px solid var(--color-text);
   animation: enter 0.7s var(--ease-out) 0.2s backwards;
 }
 
 .event-meta > div {
-  padding: 1rem 1.25rem;
-  background: var(--color-surface);
+  padding: 0.9rem 1.25rem 0.9rem 0;
+}
+
+.event-meta > div + div {
+  padding-left: 1.25rem;
+  border-left: 1px solid var(--color-line);
 }
 
 .event-meta dt {
+  font-family: var(--font-label);
+  font-size: 0.68rem;
+  letter-spacing: 0.32em;
   color: var(--color-muted);
-  font-size: 0.85rem;
 }
 
 .event-meta dd {
-  margin: 0.2rem 0 0;
+  margin: 0.25rem 0 0;
   font-weight: 500;
 }
 
@@ -315,76 +385,11 @@ legend {
   white-space: pre-wrap;
 }
 
-/* ── 首頁：標題區與活動卡片 ───────────────────── */
-
-.hero {
-  position: relative;
-  padding: 3rem 0 2rem;
-}
-
-.hero-blobs {
-  position: absolute;
-  inset: 0 -1rem;
-  z-index: 0;
-  overflow: hidden;
-  pointer-events: none;
-}
-
-.hero-blob {
-  position: absolute;
-  border-radius: 42% 58% 63% 37% / 41% 44% 56% 59%;
-  animation:
-    blob-morph 14s ease-in-out infinite alternate,
-    blob-float 18s ease-in-out infinite alternate;
-}
-
-.hero-blob:nth-child(1) {
-  top: -40px;
-  right: -60px;
-  width: 360px;
-  height: 360px;
-  background: var(--color-mint);
-}
-
-.hero-blob:nth-child(2) {
-  top: 170px;
-  right: 250px;
-  width: 180px;
-  height: 180px;
-  background: var(--color-sky);
-  animation-delay:
-    -5s,
-    -7s;
-}
-
-.hero-blob:nth-child(3) {
-  top: 230px;
-  right: 60px;
-  width: 110px;
-  height: 110px;
-  background: var(--color-peach);
-  animation-delay:
-    -9s,
-    -3s;
-}
-
-.hero > :not(.hero-blobs) {
-  position: relative;
-  z-index: 1;
-}
-
-.hero-title {
-  margin: 0 0 1rem;
-  font-size: clamp(2.2rem, 6vw, 4.5rem);
-  font-weight: 900;
-  line-height: 1.1;
-  letter-spacing: -0.02em;
-}
-
+/* 標題逐行浮現（首頁封面與活動詳細頁共用） */
 .hero-title-line {
   display: block;
   overflow: hidden;
-  padding-bottom: 0.06em;
+  padding-bottom: 0.08em;
 }
 
 .hero-title-line > span {
@@ -394,149 +399,278 @@ legend {
 }
 
 .hero-title-line:nth-child(2) > span {
-  color: var(--color-primary);
   animation-delay: 0.13s;
-}
-
-.hero-title-line:nth-child(3) > span {
-  animation-delay: 0.26s;
-}
-
-.hero-lead {
-  max-width: 34rem;
-  margin: 0 0 1.5rem;
-  color: var(--color-muted);
-  font-size: 1.05rem;
 }
 
 .fade-in {
   opacity: 0;
-  animation: fade-in 0.8s ease 0.5s forwards;
+  animation: fade-in 0.8s ease 0.45s forwards;
+}
+
+/* ── 首頁：封面 ───────────────────────────────── */
+
+.cover {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 300px);
+  gap: 2.5rem;
+  align-items: end;
+  padding: 2rem 0 3rem;
+}
+
+.cover-main {
+  display: grid;
+  gap: 1.25rem;
+  min-width: 0;
+}
+
+.cover-kicker {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  font-family: var(--font-label);
+  font-size: 0.8rem;
+  letter-spacing: 0.24em;
+}
+
+.cover-kicker::after {
+  content: '';
+  width: 36px;
+  height: 2px;
+  background: var(--color-accent);
+}
+
+.cover-title {
+  margin: 0;
+  font-size: clamp(2.6rem, 8vw, 5.2rem);
+  line-height: 1.08;
+}
+
+.cover-title-soft {
+  background: linear-gradient(90deg, var(--color-text) 0%, var(--color-olive) 70%, #9a9a86 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.cover-star {
+  margin-left: 0.08em;
+  font-family: var(--font-display);
+  font-size: 0.5em;
+  vertical-align: 0.9em;
+  color: var(--color-accent);
+  -webkit-text-fill-color: var(--color-accent);
+}
+
+.cover-lead {
+  max-width: 34ch;
+  margin: 0;
+  font-size: 1.05rem;
 }
 
 .search-bar {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  max-width: 46rem;
-  padding: 0.4rem;
-  border: 1px solid var(--color-line);
-  border-radius: 28px;
-  background: var(--color-surface);
-  box-shadow: 0 12px 32px -16px rgba(18, 48, 63, 0.25);
-  transition:
-    border-color 0.3s,
-    box-shadow 0.3s;
-}
-
-.search-bar:focus-within {
-  border-color: var(--color-primary);
-  box-shadow:
-    0 12px 32px -16px rgba(18, 48, 63, 0.25),
-    0 0 0 6px rgba(8, 119, 108, 0.15);
+  gap: 0.5rem 0.75rem;
+  align-items: center;
+  max-width: 44rem;
+  padding: 0.35rem 0;
+  border-bottom: 1.5px solid var(--color-text);
 }
 
 .search-bar input,
 .search-bar select {
   border-color: transparent;
-  border-radius: 999px;
   background: transparent;
 }
 
 .search-bar input:focus,
 .search-bar select:focus {
   border-color: transparent;
-  box-shadow: none;
 }
 
 .search-bar input {
   flex: 1 1 16rem;
+  padding-left: 0;
 }
 
-.event-grid {
+.cover-photo {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 1rem;
-  margin: 1.5rem 0;
+  gap: 0.6rem;
+  margin: 0;
+}
+
+.cover-photo img {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  aspect-ratio: 4 / 5;
+  object-fit: cover;
+  object-position: 30% 50%;
+}
+
+.cover-photo figcaption {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+/* ── 首頁：本期活動列 ─────────────────────────── */
+
+.issue {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.issue-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.issue-head h2 {
+  margin: 0;
+  font-size: 1.6rem;
+}
+
+.issue-list {
+  display: grid;
+  gap: 0.9rem;
+  margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.event-card {
+.issue-row {
   opacity: 0;
-  transform: translateY(24px);
+  transform: translateY(18px);
   animation: card-up 0.7s var(--ease-out) forwards;
-  animation-delay: calc(var(--card-index, 0) * 70ms);
+  animation-delay: calc(var(--card-index, 0) * 60ms);
 }
 
-.event-card a {
-  --spot-x: 50%;
-  --spot-y: 50%;
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-  height: 100%;
-  min-height: 11rem;
-  padding: 1.25rem;
-  overflow: hidden;
+.issue-row a {
+  display: grid;
+  grid-template-columns: 3rem minmax(0, 1fr) 1.5rem;
+  gap: 1.25rem;
+  align-items: center;
+  padding: 1rem 1.25rem;
   border: 1px solid var(--color-line);
-  border-radius: var(--radius-card);
   background: var(--color-surface);
-  box-shadow: 0 1px 2px rgba(18, 48, 63, 0.06);
-  box-sizing: border-box;
   color: var(--color-text);
   text-decoration: none;
-  transition:
-    border-color 0.3s,
-    box-shadow 0.4s,
-    translate 0.4s;
+  transition: border-color 0.25s;
 }
 
-/* 游標聚光：位置由 EventSearchPage 的 onMouseMove 寫入 --spot-x／--spot-y */
-.event-card a::before {
+.issue-row.has-photo a {
+  grid-template-columns: 3rem minmax(0, 1fr) minmax(0, 1.15fr) 1.5rem;
+}
+
+.issue-row a:hover {
+  border-color: var(--color-text);
+}
+
+.issue-no {
+  align-self: stretch;
+  display: grid;
+  align-items: center;
+  border-right: 1px solid var(--color-line);
+  font-family: var(--font-display);
+  color: var(--color-muted);
+  font-variant-numeric: lining-nums;
+}
+
+.issue-text {
+  display: grid;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.issue-category {
+  display: inline-flex;
+  gap: 0.5rem;
+  align-items: center;
+  color: var(--color-olive);
+  font-size: 0.82rem;
+}
+
+.issue-category::before {
   content: '';
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(
-    320px circle at var(--spot-x) var(--spot-y),
-    rgba(8, 119, 108, 0.12),
-    transparent 60%
-  );
-  opacity: 0;
-  transition: opacity 0.3s;
-  pointer-events: none;
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
 }
 
-.event-card a:hover {
-  border-color: rgba(8, 119, 108, 0.5);
-  box-shadow: 0 24px 48px -24px rgba(8, 119, 108, 0.45);
-  translate: 0 -4px;
-}
-
-.event-card a:hover::before {
-  opacity: 1;
-}
-
-.event-card-category {
-  align-self: flex-start;
-  padding: 0.1rem 0.7rem;
-  border-radius: 999px;
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-  font-size: 0.8rem;
-}
-
-.event-card-title {
-  margin-top: auto;
-  font-size: 1.15rem;
-  font-weight: 700;
+.issue-title {
+  font-family: var(--font-serif);
+  font-size: 1.25rem;
+  font-weight: 900;
   line-height: 1.35;
 }
 
-.event-card-meta {
+.issue-bar {
+  width: 18px;
+  height: 2px;
+  background: var(--color-accent);
+}
+
+.issue-meta {
   color: var(--color-muted);
-  font-size: 0.9rem;
+  font-size: 0.86rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.issue-photo {
+  position: relative;
+  margin: 0;
+  aspect-ratio: 16 / 9;
+  max-width: 100%;
+  overflow: hidden;
+  background: var(--color-bg-deep);
+}
+
+.issue-photo img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.8s var(--ease-out);
+}
+
+.issue-row a:hover .issue-photo img {
+  transform: scale(1.03);
+}
+
+.issue-photo figcaption {
+  position: absolute;
+  top: 0.75rem;
+  left: 0.9rem;
+  max-width: 12ch;
+  font-family: var(--font-display);
+  line-height: 1.15;
+  text-shadow: 0 0 12px rgba(242, 239, 232, 0.7);
+}
+
+.issue-photo figcaption small {
+  display: block;
+  margin-top: 0.4rem;
+  font-family: var(--font-label);
+  font-size: 0.6rem;
+  letter-spacing: 0.24em;
+  color: var(--color-text);
+}
+
+.issue-arrow {
+  color: var(--color-muted);
+  text-align: center;
+  transition: transform 0.25s;
+}
+
+.issue-row a:hover .issue-arrow {
+  transform: translateX(4px);
+  color: var(--color-accent);
 }
 
 .pagination {
@@ -545,6 +679,109 @@ legend {
   gap: 1rem;
   align-items: center;
   color: var(--color-muted);
+}
+
+/* ── 首頁：底部標語帶 ─────────────────────────── */
+
+/* 文字全部留在紙色區，照片接在下方並由上緣淡入，避免小字壓在浪花上 */
+.closing {
+  position: relative;
+  display: grid;
+  margin-top: 3rem;
+  overflow: hidden;
+}
+
+.closing-photo {
+  display: block;
+  width: 100%;
+  height: clamp(200px, 32vw, 300px);
+  margin-top: -1.5rem;
+  object-fit: cover;
+  object-position: 50% 40%;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 45%);
+  mask-image: linear-gradient(180deg, transparent 0%, #000 45%);
+}
+
+.closing-text {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 0.75rem;
+  justify-items: center;
+  padding: 2.25rem 1.5rem 0;
+  text-align: center;
+}
+
+.closing-text h2 {
+  margin: 0;
+  font-size: clamp(1.7rem, 4.4vw, 2.7rem);
+  line-height: 1.3;
+}
+
+.closing-text em {
+  font-style: normal;
+  color: var(--color-accent);
+}
+
+.closing-sign {
+  position: absolute;
+  right: 1.5rem;
+  bottom: 1.25rem;
+  color: var(--color-on-dark);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.closing-sign::after {
+  content: '';
+  display: inline-block;
+  width: 22px;
+  height: 2px;
+  margin-left: 0.6rem;
+  background: var(--color-accent);
+  vertical-align: middle;
+}
+
+.photo-credits {
+  margin: 1rem 0 0;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--color-line);
+  color: var(--color-muted);
+  font-size: 0.78rem;
+}
+
+@media (max-width: 760px) {
+  .event-meta > div + div {
+    padding-left: 0;
+    border-top: 1px solid var(--color-line);
+    border-left: 0;
+  }
+
+  .cover {
+    grid-template-columns: 1fr;
+    gap: 1.75rem;
+  }
+
+  .cover-photo img {
+    aspect-ratio: 16 / 9;
+  }
+
+  .issue-row a,
+  .issue-row.has-photo a {
+    grid-template-columns: 2.25rem minmax(0, 1fr);
+  }
+
+  .issue-photo {
+    grid-column: 1 / -1;
+  }
+
+  .issue-arrow {
+    display: none;
+  }
+
+  .closing-sign {
+    display: none;
+  }
 }
 
 @keyframes rise {
@@ -573,28 +810,6 @@ legend {
   }
 }
 
-@keyframes blob-morph {
-  50% {
-    border-radius: 63% 37% 38% 62% / 55% 61% 39% 45%;
-  }
-
-  100% {
-    border-radius: 37% 63% 52% 48% / 38% 42% 58% 62%;
-  }
-}
-
-@keyframes blob-float {
-  to {
-    transform: translate(-30px, 24px) rotate(20deg);
-  }
-}
-
-@media (max-width: 640px) {
-  .hero-blob {
-    opacity: 0.5;
-  }
-}
-
 /* 使用者在系統關閉動畫時，不播放任何動畫並直接顯示內容 */
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -605,7 +820,7 @@ legend {
   }
 
   .hero-title-line > span,
-  .event-card,
+  .issue-row,
   .fade-in {
     opacity: 1;
     transform: none;
