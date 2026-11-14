@@ -128,7 +128,7 @@ export function LoginPage() {
           style={{
             background: 'none',
             border: 'none',
-            color: '#0969da',
+            color: 'var(--color-primary)',
             cursor: 'pointer',
             padding: 0,
           }}

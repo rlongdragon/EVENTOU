@@ -11,6 +11,7 @@ import {
   type RiskLevel,
   type SourceRisk,
 } from './api';
+import { formatSourceTime } from './sourceTime';
 
 const errorStyle = { color: '#cf222e', margin: 0 } as const;
 
@@ -253,14 +254,14 @@ export function AdminSourcesPage() {
                 </td>
                 <td>{TYPE_LABELS[source.type] ?? source.type}</td>
                 <td>{source.submitterName}</td>
-                <td>{source.createdAt} (UTC)</td>
+                <td>{formatSourceTime(source.createdAt)}</td>
                 <td>
                   {source.reviewStatus === 'pending' ? (
                     <ReviewForm source={source} onReviewed={handleReviewed} />
                   ) : (
                     <>
                       {REVIEW_STATUS_LABELS[source.reviewStatus]}
-                      {source.reviewedAt && <div>{source.reviewedAt} (UTC)</div>}
+                      {source.reviewedAt && <div>{formatSourceTime(source.reviewedAt)}</div>}
                       {source.ntouVerified !== null && (
                         <div>
                           {source.ntouVerified ? '已確認為海大單位或社團' : '未確認為海大單位'}
