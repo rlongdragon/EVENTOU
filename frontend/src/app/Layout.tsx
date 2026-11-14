@@ -21,15 +21,27 @@ export function Layout() {
 
   return (
     <>
-      <header style={{ borderBottom: '1px solid #d0d7de', padding: '0.75rem 1rem' }}>
-        <nav style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center' }}>
-          <strong>EVENTOU</strong>
+      <header className="site-header">
+        <nav className="site-nav">
+          <strong className="site-logo">
+            <svg width="24" height="24" viewBox="0 0 28 28" aria-hidden="true">
+              <circle cx="14" cy="14" r="12" fill="none" stroke="currentColor" strokeWidth="2" />
+              <path
+                d="M6 16c3-3 5-3 8 0s5 3 8 0"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              />
+            </svg>
+            EVENTOU
+          </strong>
           {navItems.map((item) => (
             <NavLink key={item.to} to={item.to} end={item.to === '/'}>
               {item.label}
             </NavLink>
           ))}
-          <span style={{ marginLeft: 'auto', display: 'flex', gap: '0.75rem' }}>
+          <span className="site-nav-user">
             {!loading && user && (
               <>
                 <span>
@@ -44,7 +56,7 @@ export function Layout() {
           </span>
         </nav>
       </header>
-      <main style={{ maxWidth: 960, margin: '0 auto', padding: '1rem' }}>
+      <main className="site-main">
         <Outlet />
       </main>
     </>
