@@ -1,6 +1,8 @@
 export interface TileLayerConfig {
   url: string;
   maxZoom: number;
+  /** 圖磚服務實際提供的最大層級；地圖放大超過時 Leaflet 會放大這一層的圖磚 */
+  maxNativeZoom?: number;
   subdomains?: string;
   attribution: string;
 }
@@ -25,6 +27,8 @@ export function getTileLayerConfig(cartoApiKey?: string): TileLayerConfig {
   return {
     url: `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=${encodeURIComponent(key)}`,
     maxZoom: 20,
+    // CARTO 點陣圖磚只到第 18 層，第 19 層以上會載入失敗、整張地圖空白
+    maxNativeZoom: 18,
     subdomains: 'abcd',
     attribution: `${OSM_ATTRIBUTION} &copy; <a href="https://carto.com/attributions">CARTO</a>`,
   };

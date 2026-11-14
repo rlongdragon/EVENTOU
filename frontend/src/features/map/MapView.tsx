@@ -166,6 +166,7 @@ const POPUP_OPTIONS: L.PopupOptions = { className: 'map-popup', minWidth: 220, m
 /** 以 DOM API 組出彈出視窗，所有文字都用 textContent，不會被當成 HTML。 */
 function createPopupContent(marker: MapMarker): HTMLElement {
   const popup = document.createElement('div');
+  popup.className = 'map-popup-body';
   if (marker.categoryLabel) {
     const chip = document.createElement('span');
     chip.className = `map-popup-category ${categoryClassName(marker.category)}`;

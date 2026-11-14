@@ -23,6 +23,10 @@ describe('getTileLayerConfig', () => {
     assert.equal(config.maxZoom, 20);
   });
 
+  test('CARTO 圖磚只到第 18 層，更大的層級改放大第 18 層的圖磚', () => {
+    assert.equal(getTileLayerConfig('key').maxNativeZoom, 18);
+  });
+
   test('CARTO 底圖必須同時標示 OpenStreetMap 與 CARTO 版權', () => {
     const { attribution } = getTileLayerConfig('key');
     assert.match(attribution, /OpenStreetMap contributors/);

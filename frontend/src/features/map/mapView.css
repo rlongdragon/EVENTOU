@@ -134,11 +134,14 @@
 }
 
 .map-popup .leaflet-popup-content {
-  display: grid;
-  gap: 0.35rem;
   margin: 0.9rem 1rem;
   font-size: 0.9rem;
   line-height: 1.5;
+}
+
+.map-popup-body {
+  display: grid;
+  gap: 0.35rem;
 }
 
 .map-popup .leaflet-popup-close-button {
