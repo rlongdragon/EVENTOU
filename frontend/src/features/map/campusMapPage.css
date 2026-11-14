@@ -31,3 +31,20 @@
   gap: 0.5rem;
   padding-inline-start: 1.25rem;
 }
+
+.campus-map-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-block-end: 1rem;
+}
+
+.campus-map-presets button {
+  min-height: 2.5rem;
+}
+
+.campus-map-presets button[aria-pressed='true'] {
+  font-weight: 600;
+  outline: 2px solid currentColor;
+  outline-offset: -2px;
+}

@@ -25,11 +25,12 @@ export interface MapEventResult {
 }
 
 export async function fetchMapEvents(
-  filters: { date: string; category: string },
+  filters: { from: string; to: string; category: string },
   signal?: AbortSignal,
 ): Promise<MapEventResult> {
   const query = new URLSearchParams();
-  if (filters.date) query.set('date', filters.date);
+  if (filters.from) query.set('from', filters.from);
+  if (filters.to) query.set('to', filters.to);
   if (filters.category) query.set('category', filters.category);
   const response = await fetch(`/api/map/events?${query}`, { signal });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);

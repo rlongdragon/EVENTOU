@@ -105,7 +105,7 @@ interface MapItem {
 
 describe('GET /api/map/events（US-04）', () => {
   test('依校內建物對照表回傳座標，對不到的活動座標為 null', async () => {
-    const { status, body } = await getMapEvents('?date=2099-03-02');
+    const { status, body } = await getMapEvents('?from=2099-03-02&to=2099-03-02');
     assert.equal(status, 200);
     const items = body.items as MapItem[];
     assert.deepEqual(
@@ -133,8 +133,25 @@ describe('GET /api/map/events（US-04）', () => {
     assert.deepEqual(items[2].coordinates, placeCoordinates('體育館'));
   });
 
-  test('可同時依台北日期與類別篩選，且不登入也能使用', async () => {
-    const { status, body } = await getMapEvents('?date=2099-03-03&category=sports');
+  test('依日期範圍篩選，範圍包含開始與結束日期', async () => {
+    const titles = async (query: string) => {
+      const { status, body } = await getMapEvents(query);
+      assert.equal(status, 200);
+      return (body.items as MapItem[]).map((item) => item.title);
+    };
+    assert.deepEqual(await titles('?from=2099-03-02&to=2099-03-03'), [
+      '校園地圖講座',
+      '無法定位的活動',
+      '校園地圖運動',
+    ]);
+    assert.deepEqual(await titles('?from=2099-03-03&to=2099-03-03'), ['校園地圖運動']);
+    // 只給開始或結束日期時，另一端不設限
+    assert.deepEqual(await titles('?from=2099-03-03'), ['校園地圖運動']);
+    assert.deepEqual(await titles('?to=2099-03-02'), ['校園地圖講座', '無法定位的活動']);
+  });
+
+  test('可同時依日期範圍與類別篩選，且不登入也能使用', async () => {
+    const { status, body } = await getMapEvents('?from=2099-03-01&to=2099-03-31&category=sports');
     assert.equal(status, 200);
     assert.deepEqual(
       (body.items as MapItem[]).map((item) => item.title),
@@ -143,14 +160,18 @@ describe('GET /api/map/events（US-04）', () => {
   });
 
   test('沒有符合條件的活動時仍回傳校園中心點', async () => {
-    const { status, body } = await getMapEvents('?date=2099-12-31');
+    const { status, body } = await getMapEvents('?from=2099-12-01&to=2099-12-31');
     assert.equal(status, 200);
     assert.deepEqual(body.items, []);
     assert.deepEqual(body.campus, CAMPUS_CENTER);
   });
 
-  test('拒絕不合法的日期與類別篩選值', async () => {
-    assert.equal((await getMapEvents('?date=2099-02-30')).status, 400);
+  test('拒絕不合法的日期、日期範圍與類別篩選值', async () => {
+    assert.equal((await getMapEvents('?from=2099-02-30')).status, 400);
+    assert.equal((await getMapEvents('?to=2099-3-1')).status, 400);
+    const reversed = await getMapEvents('?from=2099-03-03&to=2099-03-02');
+    assert.equal(reversed.status, 400);
+    assert.equal(reversed.body.error, 'invalid_date_range');
     assert.equal((await getMapEvents('?category=invalid')).status, 400);
   });
 });

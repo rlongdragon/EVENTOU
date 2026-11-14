@@ -25,7 +25,7 @@ export function findMapEventLocation(db: DatabaseSync, eventId: number): string 
 
 export function findMapEvents(
   db: DatabaseSync,
-  filters: { category: string; date: string },
+  filters: { category: string; from: string; to: string },
 ): MapEvent[] {
   const conditions = ['location IS NOT NULL', 'length(trim(location)) > 0'];
   const params: string[] = [];
@@ -33,9 +33,14 @@ export function findMapEvents(
     conditions.push('category = ?');
     params.push(filters.category);
   }
-  if (filters.date) {
-    conditions.push('substr(start_time, 1, 10) = ?');
-    params.push(filters.date);
+  // 以活動開始日期（台北時區，start_time 前 10 碼）判斷，範圍含兩端
+  if (filters.from) {
+    conditions.push('substr(start_time, 1, 10) >= ?');
+    params.push(filters.from);
+  }
+  if (filters.to) {
+    conditions.push('substr(start_time, 1, 10) <= ?');
+    params.push(filters.to);
   }
 
   const rows = db
