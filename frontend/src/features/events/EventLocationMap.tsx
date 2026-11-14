@@ -7,6 +7,8 @@ type LocationState = 'loading' | 'found' | 'not_found' | 'error';
 interface EventLocationMapProps {
   eventId: number;
   location: string | null;
+  /** 活動類別代碼，決定標記顏色 */
+  category?: string;
 }
 
 interface LocationResult {
@@ -17,7 +19,7 @@ interface LocationResult {
   placeName: string | null;
 }
 
-export function EventLocationMap({ eventId, location }: EventLocationMapProps) {
+export function EventLocationMap({ eventId, location, category }: EventLocationMapProps) {
   const [result, setResult] = useState<LocationResult | null>(null);
   const query = location?.trim() ?? '';
 
@@ -70,8 +72,9 @@ export function EventLocationMap({ eventId, location }: EventLocationMapProps) {
               id: eventId,
               ...current.coordinates,
               label: query,
-              summary:
-                current.placeName && current.placeName !== query ? current.placeName : undefined,
+              category,
+              details:
+                current.placeName && current.placeName !== query ? [current.placeName] : undefined,
             },
           ]}
           ariaLabel={`${query}地圖`}

@@ -23,7 +23,7 @@
 }
 
 .campus-map-note {
-  color: #57606a;
+  color: var(--color-muted);
 }
 
 .campus-map-unlocated ul {
@@ -44,7 +44,8 @@
 }
 
 .campus-map-presets button[aria-pressed='true'] {
-  font-weight: 600;
-  outline: 2px solid currentColor;
-  outline-offset: -2px;
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-weight: 700;
 }
