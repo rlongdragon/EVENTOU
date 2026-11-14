@@ -7,24 +7,25 @@ import { closeDb, getDb, migrate } from '../../db/index.js';
 import { processAnnouncement } from '../events/events.service.js';
 import type { RawAnnouncement } from '../events/events.types.js';
 import { seedSources } from '../sources/sources.testHelpers.js';
+import { CAMPUS_CENTER, CAMPUS_PLACES } from './map.places.js';
 
 process.env.DATABASE_PATH = ':memory:';
 
 let server: Server;
 let baseUrl: string;
 const originalFetch = globalThis.fetch;
+const externalRequests: string[] = [];
+
+function placeCoordinates(name: string) {
+  const place = CAMPUS_PLACES.find((item) => item.name === name);
+  assert.ok(place, `對照表缺少 ${name}`);
+  return { latitude: place.latitude, longitude: place.longitude };
+}
 
 before(async () => {
+  // 地圖不應呼叫任何外部地理編碼服務；記錄非本機請求以便驗證
   globalThis.fetch = (async (input, init) => {
-    if (String(input).startsWith('https://nominatim.openstreetmap.org/')) {
-      if (new URL(String(input)).searchParams.get('q')?.includes('失敗會場')) {
-        return new Response('', { status: 503 });
-      }
-      return new Response(JSON.stringify([{ lat: '25.15', lon: '121.77' }]), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
+    if (!String(input).startsWith('http://localhost:')) externalRequests.push(String(input));
     return originalFetch(input, init);
   }) as typeof fetch;
 
@@ -34,7 +35,7 @@ before(async () => {
     sourceId: 1,
     url: 'https://example.com/map-event-1',
     title: '校園地圖講座',
-    rawContent: '活動日期：2099/03/02 14:00-16:00\n地點：測試會場',
+    rawContent: '活動日期：2099/03/02 14:00-16:00\n地點：食品科學系甲子廳',
     publishedAt: '2099-02-01T09:00:00+08:00',
     fetchedAt: '2099-02-01T09:01:00+08:00',
   };
@@ -45,7 +46,7 @@ before(async () => {
       ...base,
       url: 'https://example.com/map-event-2',
       title: '校園地圖運動',
-      rawContent: '活動日期：2099/03/03 14:00-16:00\n地點：測試會場',
+      rawContent: '活動日期：2099/03/03 14:00-16:00\n地點：體育館',
     },
     { defaultCategory: 'sports' },
   );
@@ -64,8 +65,8 @@ before(async () => {
     {
       ...base,
       url: 'https://example.com/map-event-4',
-      title: '地理編碼失敗的活動',
-      rawContent: '活動日期：2099/03/02 14:00-16:00\n地點：失敗會場',
+      title: '無法定位的活動',
+      rawContent: '活動日期：2099/03/02 14:00-16:00\n地點：綜合二館3樓303R',
     },
     { defaultCategory: 'lecture' },
   );
@@ -79,6 +80,7 @@ after(() => {
   server.close();
   closeDb();
   globalThis.fetch = originalFetch;
+  assert.deepEqual(externalRequests, []);
 });
 
 async function getMapEvents(query = '') {
@@ -93,73 +95,105 @@ function getEventId(title: string): number {
   return Number(row.id);
 }
 
-async function waitForMapEvents(query: string) {
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    const result = await getMapEvents(query);
-    assert.equal(result.status, 200);
-    if (!result.body.geocodingPending) return result;
-    await new Promise((resolve) => setTimeout(resolve, 1100));
-  }
-  assert.fail('地理編碼佇列未在預期時間內完成');
+interface MapItem {
+  title: string;
+  location: string;
+  categoryLabel: string;
+  coordinates: { latitude: number; longitude: number } | null;
+  placeName: string | null;
 }
 
 describe('GET /api/map/events（US-04）', () => {
-  test('單筆地理編碼失敗時仍回傳其他已定位活動', async () => {
-    const { status, body } = await waitForMapEvents('?date=2099-03-02');
+  test('依校內建物對照表回傳座標，對不到的活動座標為 null', async () => {
+    const { status, body } = await getMapEvents('?from=2099-03-02&to=2099-03-02');
     assert.equal(status, 200);
-    const items = body.items as {
-      title: string;
-      location: string;
-      categoryLabel: string;
-      coordinates: { latitude: number; longitude: number } | null;
-    }[];
-    assert.equal(items.length, 2);
-    assert.equal(items[0].title, '校園地圖講座');
-    assert.equal(items[0].location, '測試會場');
+    const items = body.items as MapItem[];
+    assert.deepEqual(
+      items.map((item) => item.title),
+      ['校園地圖講座', '無法定位的活動'],
+    );
+    assert.equal(items[0].location, '食品科學系甲子廳');
     assert.equal(items[0].categoryLabel, '講座');
-    assert.deepEqual(items[0].coordinates, { latitude: 25.15, longitude: 121.77 });
+    assert.equal(items[0].placeName, '食品科學學系館');
+    assert.deepEqual(items[0].coordinates, placeCoordinates('食品科學學系館'));
     assert.equal(items[1].coordinates, null);
+    assert.equal(items[1].placeName, null);
+    assert.deepEqual(body.campus, CAMPUS_CENTER);
     assert.ok(Array.isArray(body.categories));
   });
 
   test('未指定日期時回傳所有日期且有地點資料的活動', async () => {
-    const { status, body } = await waitForMapEvents('');
+    const { status, body } = await getMapEvents('');
     assert.equal(status, 200);
-    assert.equal((body.items as unknown[]).length, 3);
-    assert.equal(body.geocodingPending, false);
-  });
-
-  test('可同時依台北日期與類別篩選，且不登入也能使用', async () => {
-    const { status, body } = await getMapEvents('?date=2099-03-02&category=lecture');
-    assert.equal(status, 200);
-    const items = body.items as { title: string }[];
+    const items = body.items as MapItem[];
     assert.deepEqual(
       items.map((item) => item.title),
-      ['校園地圖講座', '地理編碼失敗的活動'],
+      ['校園地圖講座', '無法定位的活動', '校園地圖運動'],
+    );
+    assert.deepEqual(items[2].coordinates, placeCoordinates('體育館'));
+  });
+
+  test('依日期範圍篩選，範圍包含開始與結束日期', async () => {
+    const titles = async (query: string) => {
+      const { status, body } = await getMapEvents(query);
+      assert.equal(status, 200);
+      return (body.items as MapItem[]).map((item) => item.title);
+    };
+    assert.deepEqual(await titles('?from=2099-03-02&to=2099-03-03'), [
+      '校園地圖講座',
+      '無法定位的活動',
+      '校園地圖運動',
+    ]);
+    assert.deepEqual(await titles('?from=2099-03-03&to=2099-03-03'), ['校園地圖運動']);
+    // 只給開始或結束日期時，另一端不設限
+    assert.deepEqual(await titles('?from=2099-03-03'), ['校園地圖運動']);
+    assert.deepEqual(await titles('?to=2099-03-02'), ['校園地圖講座', '無法定位的活動']);
+  });
+
+  test('可同時依日期範圍與類別篩選，且不登入也能使用', async () => {
+    const { status, body } = await getMapEvents('?from=2099-03-01&to=2099-03-31&category=sports');
+    assert.equal(status, 200);
+    assert.deepEqual(
+      (body.items as MapItem[]).map((item) => item.title),
+      ['校園地圖運動'],
     );
   });
 
-  test('拒絕不合法的日期與類別篩選值', async () => {
-    assert.equal((await getMapEvents('?date=2099-02-30')).status, 400);
+  test('沒有符合條件的活動時仍回傳校園中心點', async () => {
+    const { status, body } = await getMapEvents('?from=2099-12-01&to=2099-12-31');
+    assert.equal(status, 200);
+    assert.deepEqual(body.items, []);
+    assert.deepEqual(body.campus, CAMPUS_CENTER);
+  });
+
+  test('拒絕不合法的日期、日期範圍與類別篩選值', async () => {
+    assert.equal((await getMapEvents('?from=2099-02-30')).status, 400);
+    assert.equal((await getMapEvents('?to=2099-3-1')).status, 400);
+    const reversed = await getMapEvents('?from=2099-03-03&to=2099-03-02');
+    assert.equal(reversed.status, 400);
+    assert.equal(reversed.body.error, 'invalid_date_range');
     assert.equal((await getMapEvents('?category=invalid')).status, 400);
   });
 });
 
 describe('GET /api/map/events/:eventId/location（US-03）', () => {
-  test('只依已發布活動的地點回傳座標', async () => {
+  test('依已發布活動的地點回傳對應建物與座標', async () => {
     const eventId = getEventId('校園地圖講座');
     const response = await fetch(`${baseUrl}/api/map/events/${eventId}/location`);
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), {
-      coordinates: { latitude: 25.15, longitude: 121.77 },
+      coordinates: placeCoordinates('食品科學學系館'),
+      placeName: '食品科學學系館',
     });
   });
 
-  test('沒有地點或不存在的活動不呼叫地理編碼服務', async () => {
-    const noLocationId = getEventId('沒有地點的活動');
-    const noLocationResponse = await fetch(`${baseUrl}/api/map/events/${noLocationId}/location`);
-    assert.equal(noLocationResponse.status, 200);
-    assert.deepEqual(await noLocationResponse.json(), { coordinates: null });
+  test('沒有地點或對不到建物時回傳 null，不存在的活動回 404', async () => {
+    for (const title of ['沒有地點的活動', '無法定位的活動']) {
+      const response = await fetch(`${baseUrl}/api/map/events/${getEventId(title)}/location`);
+      assert.equal(response.status, 200);
+      assert.deepEqual(await response.json(), { coordinates: null, placeName: null });
+    }
     assert.equal((await fetch(`${baseUrl}/api/map/events/99999/location`)).status, 404);
+    assert.equal((await fetch(`${baseUrl}/api/map/events/abc/location`)).status, 404);
   });
 });

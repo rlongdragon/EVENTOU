@@ -81,9 +81,9 @@ backend/src/
 
 ## 校園活動地圖（US-04）
 
-- 前端頁面 `/map` 未登入即可瀏覽，使用共用 Leaflet `MapView` 顯示活動標記；標記密集時會聚合，點選後可查看活動摘要並前往詳細頁。
-- `GET /api/map/events?date=YYYY-MM-DD&category=lecture` 回傳有地點的已發布活動、已快取座標及類別選項。`date` 以台北時區活動開始日期篩選，省略時包含所有日期；前端預設顯示今天，清除篩選後顯示所有日期。`category` 可省略以包含全部類別。
-- 尚未快取的座標會由後端背景依序向 OpenStreetMap Nominatim 查詢，查詢結果保存在記憶體快取；前端會逐步更新地圖。查詢失敗或無法定位的活動不會出現在地圖上。
+- 前端頁面 `/map` 未登入即可瀏覽，使用共用 Leaflet `MapView` 顯示活動標記；標記密集時會聚合，點選後可查看活動摘要並前往詳細頁。地圖一律以海大為中心顯示，地點對不到校內建物的活動列在地圖下方。
+- `GET /api/map/events?from=YYYY-MM-DD&to=YYYY-MM-DD&category=lecture` 回傳有地點的已發布活動（含 `coordinates` 與對到的建物名稱 `placeName`，對不到時皆為 `null`）、校園中心點 `campus` 及類別選項。`from`、`to` 以台北時區活動開始日期篩選，範圍含兩端，任一端省略即不設限；開始日期晚於結束日期時回 400（`invalid_date_range`）。前端預設為今天起 7 天，並提供「今天」「未來 7 天」「未來 30 天」快速選擇，清除篩選後顯示所有日期。`category` 可省略以包含全部類別。
+- 座標來自 `backend/src/modules/map/map.places.ts` 的海大建物對照表（名稱、別名、座標，初始資料取自 OpenStreetMap），不呼叫外部地理編碼服務。活動地點文字包含任一別名即算對到，多個符合時取最長的別名。新地點對不到時，把建物或別名補進對照表即可。
 
 ## 帳號與權限（US-06）
 
@@ -242,4 +242,4 @@ git grep -n "TODO(#20)"
 
 API 路徑為暫定，實作時可依需求調整，但請同步更新前端呼叫與此 README。
 
-活動詳細頁的 `GET /api/map/events/:eventId/location` 只會查詢資料庫中已發布活動的地點，再由共用 `map.service.ts` 透過 OpenStreetMap Nominatim 轉為座標；查詢結果會在後端記憶體快取並以佇列限速。地圖使用 OpenStreetMap 圖磚。
+活動詳細頁的 `GET /api/map/events/:eventId/location` 依已發布活動的地點，從同一份建物對照表回傳 `{ coordinates, placeName }`；沒有地點或對不到建物時皆為 `null`。地圖使用 OpenStreetMap 圖磚。
