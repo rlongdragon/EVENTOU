@@ -43,9 +43,9 @@
   min-height: 2.5rem;
 }
 
+/* 目前選取的日期快速選擇：墨色實底 */
 .campus-map-presets button[aria-pressed='true'] {
-  border-color: var(--color-primary);
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-  font-weight: 700;
+  border-color: var(--color-text);
+  background: var(--color-text);
+  color: var(--color-on-dark);
 }
