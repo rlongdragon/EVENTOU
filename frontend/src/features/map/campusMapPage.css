@@ -23,7 +23,7 @@
 }
 
 .campus-map-note {
-  color: #57606a;
+  color: var(--color-muted);
 }
 
 .campus-map-unlocated ul {
@@ -43,8 +43,9 @@
   min-height: 2.5rem;
 }
 
+/* 目前選取的日期快速選擇：墨色實底 */
 .campus-map-presets button[aria-pressed='true'] {
-  font-weight: 600;
-  outline: 2px solid currentColor;
-  outline-offset: -2px;
+  border-color: var(--color-text);
+  background: var(--color-text);
+  color: var(--color-on-dark);
 }

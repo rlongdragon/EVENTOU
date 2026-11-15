@@ -4,6 +4,8 @@ import type { AddressInfo } from 'node:net';
 import { after, before, describe, test } from 'node:test';
 import { createApp } from '../../app.js';
 import { closeDb, getDb, migrate } from '../../db/index.js';
+import { convertAnnouncement } from '../events/events.converter.js';
+import { upsertEvent } from '../events/events.repository.js';
 import { processAnnouncement } from '../events/events.service.js';
 import type { RawAnnouncement } from '../events/events.types.js';
 import { seedSources } from '../sources/sources.testHelpers.js';
@@ -71,6 +73,31 @@ before(async () => {
     { defaultCategory: 'lecture' },
   );
 
+  // 跨多天的活動：直接指定開始與結束時間，避免依賴公告文字的日期解析
+  const seedPeriodEvent = (
+    title: string,
+    startTime: string,
+    endTime: string | null,
+    allDay: boolean,
+  ) => {
+    const converted = convertAnnouncement(
+      {
+        ...base,
+        url: `https://example.com/map-period-${encodeURIComponent(title)}`,
+        title,
+        rawContent: '活動日期：2099/04/10\n地點：體育館',
+      },
+      { defaultCategory: 'exhibition' },
+    );
+    const event = upsertEvent(getDb(), { ...converted, startTime, endTime, allDay });
+    assert.equal(event.status, 'published', title);
+  };
+  seedPeriodEvent('跨日展覽', '2099-04-10T09:00:00+08:00', '2099-04-20T17:00:00+08:00', false);
+  // 全天活動的 end_time 是結束日隔天 00:00：此活動為 4/10～4/12
+  seedPeriodEvent('全天跨日活動', '2099-04-10T00:00:00+08:00', '2099-04-13T00:00:00+08:00', true);
+  // 到午夜結束的活動只算當天
+  seedPeriodEvent('午夜結束活動', '2099-04-15T20:00:00+08:00', '2099-04-16T00:00:00+08:00', false);
+
   server = createApp().listen(0);
   await new Promise((resolve) => server.once('listening', resolve));
   baseUrl = `http://localhost:${(server.address() as AddressInfo).port}`;
@@ -128,9 +155,41 @@ describe('GET /api/map/events（US-04）', () => {
     const items = body.items as MapItem[];
     assert.deepEqual(
       items.map((item) => item.title),
-      ['校園地圖講座', '無法定位的活動', '校園地圖運動'],
+      [
+        '校園地圖講座',
+        '無法定位的活動',
+        '校園地圖運動',
+        '全天跨日活動',
+        '跨日展覽',
+        '午夜結束活動',
+      ],
     );
     assert.deepEqual(items[2].coordinates, placeCoordinates('體育館'));
+  });
+
+  test('跨多天的活動只要期間與篩選範圍有重疊就顯示', async () => {
+    const titles = async (query: string) => {
+      const { status, body } = await getMapEvents(query);
+      assert.equal(status, 200);
+      return (body.items as MapItem[]).map((item) => item.title);
+    };
+    // 範圍落在活動期間中間
+    assert.deepEqual(await titles('?from=2099-04-15&to=2099-04-15'), ['跨日展覽', '午夜結束活動']);
+    // 範圍跨過活動開始日
+    assert.deepEqual(await titles('?from=2099-04-01&to=2099-04-10'), ['全天跨日活動', '跨日展覽']);
+    // 活動最後一天與範圍開始日同一天仍算重疊
+    assert.deepEqual(await titles('?from=2099-04-20'), ['跨日展覽']);
+    assert.deepEqual(await titles('?from=2099-04-21'), []);
+  });
+
+  test('全天活動與到午夜結束的活動，結束時間的 00:00 不算進最後一天', async () => {
+    const titles = async (query: string) =>
+      ((await getMapEvents(query)).body.items as MapItem[]).map((item) => item.title);
+    // 全天跨日活動為 4/10～4/12：4/12 有、4/13 沒有
+    assert.ok((await titles('?from=2099-04-12&to=2099-04-12')).includes('全天跨日活動'));
+    assert.ok(!(await titles('?from=2099-04-13&to=2099-04-13')).includes('全天跨日活動'));
+    // 午夜結束活動只在 4/15
+    assert.ok(!(await titles('?from=2099-04-16&to=2099-04-16')).includes('午夜結束活動'));
   });
 
   test('依日期範圍篩選，範圍包含開始與結束日期', async () => {
@@ -146,7 +205,12 @@ describe('GET /api/map/events（US-04）', () => {
     ]);
     assert.deepEqual(await titles('?from=2099-03-03&to=2099-03-03'), ['校園地圖運動']);
     // 只給開始或結束日期時，另一端不設限
-    assert.deepEqual(await titles('?from=2099-03-03'), ['校園地圖運動']);
+    assert.deepEqual(await titles('?from=2099-03-03'), [
+      '校園地圖運動',
+      '全天跨日活動',
+      '跨日展覽',
+      '午夜結束活動',
+    ]);
     assert.deepEqual(await titles('?to=2099-03-02'), ['校園地圖講座', '無法定位的活動']);
   });
 

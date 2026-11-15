@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { formatEventTime } from '../events/eventTime';
 import { MapView, type MapMarker } from './MapView';
+import { categoryClassName, categoryGlyph } from './mapCategories';
 import { fetchMapEvents, type MapEventResult } from './api';
 import {
   DATE_RANGE_PRESETS,
@@ -60,7 +61,14 @@ export function CampusMapPage() {
                 id: event.id,
                 ...event.coordinates,
                 label: event.title,
-                summary: `${formatEventTime(event)}｜${event.categoryLabel}｜${event.location}`,
+                category: event.category,
+                categoryLabel: event.categoryLabel,
+                details: [
+                  formatEventTime(event),
+                  event.placeName && !event.location.includes(event.placeName)
+                    ? `${event.location}（${event.placeName}）`
+                    : event.location,
+                ],
                 href: `/events/${event.id}`,
               },
             ]
@@ -137,7 +145,24 @@ export function CampusMapPage() {
             : `地圖顯示 ${markers.length} 筆活動，點選標記可查看摘要與詳細頁連結。`}
         </p>
       )}
-      {result && <MapView markers={markers} ariaLabel="校園活動地圖" emptyCenter={result.campus} />}
+      {result && (
+        <>
+          <ul className="map-legend" aria-label="圖例">
+            {result.categories.map((option) => (
+              <li key={option.code}>
+                <span
+                  className={`map-legend-swatch ${categoryClassName(option.code)}`}
+                  aria-hidden="true"
+                >
+                  {categoryGlyph(option.code)}
+                </span>
+                {option.label}
+              </li>
+            ))}
+          </ul>
+          <MapView markers={markers} ariaLabel="校園活動地圖" emptyCenter={result.campus} />
+        </>
+      )}
       {unlocatedEvents.length > 0 && (
         <section className="campus-map-unlocated" aria-labelledby="campus-map-unlocated-heading">
           <h2 id="campus-map-unlocated-heading">無法定位的活動（{unlocatedEvents.length}）</h2>
