@@ -5,6 +5,8 @@ import { searchEvents } from './api';
 
 /** 跑馬燈最多顯示的活動數 */
 const TICKER_LIMIT = 10;
+/** 每則活動捲過所需秒數（原本 6 秒，速度調為 0.7 × 0.7 倍，約 12.2 秒） */
+const SECONDS_PER_ITEM = 6 / (0.7 * 0.7);
 
 /** 開始時間存成 +08:00 的 ISO 字串，直接取出台北日期的「月/日」 */
 function shortDate(startTime: string): string {
@@ -53,7 +55,7 @@ export function EventTicker() {
       <div className="ticker-viewport">
         <div
           className="ticker-track"
-          style={{ '--ticker-duration': `${items.length * 6}s` } as CSSProperties}
+          style={{ '--ticker-duration': `${items.length * SECONDS_PER_ITEM}s` } as CSSProperties}
         >
           <TickerItems items={items} hidden={false} />
           <TickerItems items={items} hidden />
