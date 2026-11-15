@@ -13,6 +13,14 @@ import {
   splitDuplicate,
 } from './events.dedup.js';
 import {
+  REPORT_NOTE_MAX_LENGTH,
+  createCommentReport,
+  isReportReason,
+  listPendingReports,
+  reviewCommentReports,
+  type ReviewAction,
+} from './events.reports.js';
+import {
   RATING_MAX,
   RATING_MIN,
   getEventRatingSummary,
@@ -80,6 +88,34 @@ eventsRouter.post('/duplicates/:eventId/split', requireRole('admin'), (req, res)
   res.json({ pairs: listDuplicatePairs(getDb()) });
 });
 
+// #65 管理員的留言檢舉審核：列出有待審檢舉的留言
+eventsRouter.get('/comment-reports', requireRole('admin'), (_req, res) => {
+  res.json({ reports: listPendingReports(getDb()) });
+});
+
+// #65 管理員審核一則留言的檢舉：hide 隱藏留言、dismiss 駁回；同一則留言的待審檢舉一併結案
+eventsRouter.post('/comment-reports/:commentId/:action', requireRole('admin'), (req, res) => {
+  const commentId = parseEventId(req.params.commentId);
+  const action = req.params.action;
+  if (action !== 'hide' && action !== 'dismiss') {
+    res.status(404).json({ error: 'not_found', message: '不支援的審核動作' });
+    return;
+  }
+  if (
+    commentId === undefined ||
+    !req.user ||
+    !reviewCommentReports(getDb(), {
+      commentId,
+      action: action satisfies ReviewAction,
+      reviewerId: req.user.id,
+    })
+  ) {
+    res.status(404).json({ error: 'not_found', message: '這則留言沒有待審的檢舉' });
+    return;
+  }
+  res.json({ reports: listPendingReports(getDb()) });
+});
+
 function parseEventId(value: unknown): number | undefined {
   const id = Number(value);
   return typeof value === 'string' && /^[1-9]\d*$/.test(value) && Number.isSafeInteger(id)
@@ -138,6 +174,52 @@ eventsRouter.post('/:eventId/comments', requireAuth, (req, res) => {
     content,
   });
   res.status(201).json({ comment });
+});
+
+// #65 檢舉留言：需登入，不能檢舉自己的留言，同一人對同一則只能檢舉一次
+eventsRouter.post('/:eventId/comments/:commentId/reports', requireAuth, (req, res) => {
+  const event = findPublishedEventOr404(req.params.eventId, res);
+  if (!event || !req.user) return;
+  const commentId = parseEventId(req.params.commentId);
+  const body: unknown = req.body;
+  const field = (name: string) =>
+    typeof body === 'object' && body !== null && name in body
+      ? (body as Record<string, unknown>)[name]
+      : undefined;
+  const reason = field('reason');
+  const rawNote = field('note');
+  const note = typeof rawNote === 'string' ? rawNote.trim() : '';
+  const fields: Record<string, string> = {};
+  if (!isReportReason(reason)) fields.reason = '請選擇檢舉原因';
+  if (rawNote !== undefined && rawNote !== null && typeof rawNote !== 'string') {
+    fields.note = '補充說明格式有誤';
+  } else if (note.length > REPORT_NOTE_MAX_LENGTH) {
+    fields.note = `補充說明不可超過 ${REPORT_NOTE_MAX_LENGTH} 個字元`;
+  }
+  if (commentId === undefined) {
+    res.status(404).json({ error: 'not_found', message: '找不到這則留言' });
+    return;
+  }
+  if (!isReportReason(reason) || Object.keys(fields).length > 0) {
+    res.status(400).json({ error: 'validation_error', message: '檢舉資料有誤', fields });
+    return;
+  }
+  const result = createCommentReport(getDb(), {
+    eventId: event.id,
+    commentId,
+    reporterId: req.user.id,
+    reason,
+    note: note || null,
+  });
+  if (result.ok) {
+    res.status(201).json({ ok: true });
+  } else if (result.error === 'comment_not_found') {
+    res.status(404).json({ error: 'not_found', message: '找不到這則留言' });
+  } else if (result.error === 'own_comment') {
+    res.status(400).json({ error: 'own_comment', message: '不能檢舉自己的留言' });
+  } else {
+    res.status(409).json({ error: 'already_reported', message: '你已經檢舉過這則留言' });
+  }
 });
 
 // US-11 活動評價：未登入可看平均分數與人數，評分需登入；每人每活動一筆，再次評分即修改

@@ -340,4 +340,28 @@ export const migrations: Migration[] = [
         );
     `,
   },
+  {
+    id: 13,
+    name: 'create_comment_reports',
+    // #65 留言檢舉：使用者檢舉留言，管理員審核後隱藏留言或駁回。
+    // 同一位使用者對同一則留言只能檢舉一次；被隱藏的留言保留在資料庫，hidden_at 有值時不對外顯示。
+    up: `
+      ALTER TABLE event_comments ADD COLUMN hidden_at TEXT;
+      ALTER TABLE event_comments ADD COLUMN hidden_by INTEGER REFERENCES users (id) ON DELETE SET NULL;
+
+      CREATE TABLE comment_reports (
+        id INTEGER PRIMARY KEY,
+        comment_id INTEGER NOT NULL REFERENCES event_comments (id) ON DELETE CASCADE,
+        reporter_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+        reason TEXT NOT NULL CHECK (reason IN ('spam', 'abusive', 'off_topic', 'other')),
+        note TEXT,
+        status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'hidden', 'dismissed')),
+        created_at TEXT NOT NULL,
+        reviewed_by INTEGER REFERENCES users (id) ON DELETE SET NULL,
+        reviewed_at TEXT,
+        UNIQUE (comment_id, reporter_id)
+      );
+      CREATE INDEX comment_reports_status ON comment_reports (status, comment_id);
+    `,
+  },
 ];

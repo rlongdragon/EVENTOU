@@ -11,6 +11,7 @@ const NAV_ITEMS: { to: string; label: string; role?: Role }[] = [
   { to: '/sources/new', label: '提交來源' },
   { to: '/admin/sources', label: '來源管理', role: 'admin' },
   { to: '/admin/duplicates', label: '重複活動', role: 'admin' },
+  { to: '/admin/comment-reports', label: '留言檢舉', role: 'admin' },
 ];
 
 const ROLE_LABELS: Record<Role, string> = { user: '一般使用者', admin: '管理員' };

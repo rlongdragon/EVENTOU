@@ -39,12 +39,12 @@ export function validateCommentContent(content: string): string | undefined {
   return undefined;
 }
 
-/** 列出活動的所有留言，依留言時間由舊到新排序。 */
+/** 列出活動的留言，依留言時間由舊到新排序；管理員隱藏的留言（#65）不列出。 */
 export function listEventComments(db: DatabaseSync, eventId: number): EventComment[] {
   return db
     .prepare(
       `${SELECT_COMMENT}
-      WHERE event_comments.event_id = ?
+      WHERE event_comments.event_id = ? AND event_comments.hidden_at IS NULL
       ORDER BY event_comments.created_at, event_comments.id`,
     )
     .all(eventId)
