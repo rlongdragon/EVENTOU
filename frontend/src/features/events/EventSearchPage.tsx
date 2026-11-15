@@ -80,19 +80,24 @@ export function EventSearchPage() {
       <EventTicker />
       <section className="cover">
         <div className="cover-main">
-          <span className="cover-kicker">本期 · 校園活動</span>
+          <span className="cover-kicker">EVENT ∩ NTOU / EVENT TO U</span>
           <h1 className="cover-title">
             <span className="hero-title-line">
-              <span>海大的活動，</span>
+              {/* 字標：EVENT 上方、NTOU 下方各一條線，兩者在 NT 重疊；報讀器只唸一次 EVENTOU */}
+              <span className="cover-wordmark" role="img" aria-label="EVENTOU">
+                <span className="wordmark-event">EVE</span>
+                <span className="wordmark-shared">NT</span>
+                <span className="wordmark-ntou">OU</span>
+              </span>
             </span>
             <span className="hero-title-line">
               <span className="cover-title-soft">
-                一次看完<span className="cover-star">✦</span>
+                活動與海大，在這裡交會<span className="cover-star">✦</span>
               </span>
             </span>
           </h1>
           <p className="cover-lead fade-in">
-            學校首頁與各處室的公告自動整理成同一份清單。可以搜尋、加進行事曆，有新活動就通知你。
+            為你彙整海大的活動；學校首頁與各處室的公告自動整理成同一份清單。可以搜尋、加進行事曆，有新活動就通知你。
           </p>
           {/* key 讓網址條件改變（例如按上一頁）時表單跟著重設 */}
           <form

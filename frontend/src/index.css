@@ -550,7 +550,45 @@ legend {
   line-height: 1.08;
 }
 
+/* 字標 EVENTOU：EVENT 上線、NTOU 下線，共用的 NT 以橘色標出 */
+.cover-wordmark {
+  display: inline-flex;
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+/* 每組字母是 inline-block，上下線才會落在標題行的範圍內，不被 overflow 裁掉 */
+.hero-title-line > .cover-wordmark {
+  display: inline-flex;
+}
+
+.cover-wordmark > span {
+  display: inline-block;
+  line-height: 1;
+  padding-block: 0.08em;
+  border-color: var(--color-text);
+  border-style: solid;
+  border-width: 0;
+}
+
+.cover-wordmark > .wordmark-event {
+  border-top-width: 3px;
+}
+
+.cover-wordmark > .wordmark-shared {
+  border-top-width: 3px;
+  border-bottom-width: 3px;
+  color: var(--color-accent);
+}
+
+.cover-wordmark > .wordmark-ntou {
+  border-bottom-width: 3px;
+}
+
 .cover-title-soft {
+  font-size: 0.56em;
   background: linear-gradient(90deg, var(--color-text) 0%, var(--color-olive) 70%, #9a9a86 100%);
   -webkit-background-clip: text;
   background-clip: text;
