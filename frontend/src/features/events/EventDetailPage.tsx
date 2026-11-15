@@ -102,7 +102,12 @@ export function EventDetailPage() {
         )}
       </section>
       <ShareEventButton eventId={event.id} />
-      <EventLocationMap key={event.id} eventId={event.id} location={event.location} />
+      <EventLocationMap
+        key={event.id}
+        eventId={event.id}
+        location={event.location}
+        category={event.category}
+      />
       <EventRating eventId={eventId} />
       <EventComments eventId={eventId} />
     </>
