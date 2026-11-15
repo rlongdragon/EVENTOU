@@ -4,6 +4,7 @@ import { RequireAuth } from '../features/auth/RequireAuth';
 import { CalendarsPage } from '../features/calendars/CalendarsPage';
 import { PersonalCalendarPage } from '../features/calendars/PersonalCalendarPage';
 import { AdminDuplicatesPage } from '../features/events/AdminDuplicatesPage';
+import { AdminCommentReportsPage } from '../features/events/AdminCommentReportsPage';
 import { EventDetailPage } from '../features/events/EventDetailPage';
 import { EventSearchPage } from '../features/events/EventSearchPage';
 import { AdminSourcesPage } from '../features/sources/AdminSourcesPage';
@@ -63,6 +64,14 @@ export const router = createBrowserRouter([
         element: (
           <RequireAuth role="admin">
             <AdminDuplicatesPage />
+          </RequireAuth>
+        ),
+      },
+      {
+        path: 'admin/comment-reports',
+        element: (
+          <RequireAuth role="admin">
+            <AdminCommentReportsPage />
           </RequireAuth>
         ),
       },

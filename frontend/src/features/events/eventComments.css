@@ -72,3 +72,66 @@
   gap: 0.5rem;
   justify-content: flex-end;
 }
+
+.comment-report-error {
+  margin: 0;
+  color: #b42318;
+}
+
+/* #65 管理員留言檢舉審核頁 */
+.report-list {
+  display: grid;
+  gap: 1rem;
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.report-item {
+  display: grid;
+  gap: 0.6rem;
+  padding: 1rem 0;
+  border-top: 1px solid var(--color-line);
+}
+
+.report-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  color: var(--color-muted);
+  font-size: 0.85rem;
+}
+
+.report-count {
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+.report-comment {
+  margin: 0;
+  padding: 0.5rem 0 0.5rem 1rem;
+  border-left: 2px solid var(--color-text);
+}
+
+.report-comment p {
+  margin: 0 0 0.35rem;
+  white-space: pre-wrap;
+}
+
+.report-comment footer {
+  color: var(--color-muted);
+  font-size: 0.85rem;
+}
+
+.report-notes {
+  margin: 0;
+  padding-left: 1.25rem;
+  color: var(--color-muted);
+  font-size: 0.9rem;
+}
+
+.report-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}

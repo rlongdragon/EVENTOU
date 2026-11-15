@@ -121,6 +121,65 @@ export async function postEventComment(eventId: string, content: string): Promis
   return (await readJson<{ comment: EventComment }>(response)).comment;
 }
 
+/** #65 留言檢舉原因，對應 backend/src/modules/events/events.reports.ts 的 REPORT_REASONS */
+export type ReportReason = 'spam' | 'abusive' | 'off_topic' | 'other';
+
+export const REPORT_REASON_LABELS: Record<ReportReason, string> = {
+  spam: '垃圾訊息或廣告',
+  abusive: '不當或攻擊性言論',
+  off_topic: '與活動無關',
+  other: '其他',
+};
+
+/** 檢舉留言（需登入）；重複檢舉回 409 already_reported，檢舉自己的留言回 400 own_comment。 */
+export async function reportEventComment(
+  eventId: string,
+  commentId: number,
+  input: { reason: ReportReason; note: string },
+): Promise<void> {
+  const response = await fetch(
+    `/api/events/${encodeURIComponent(eventId)}/comments/${commentId}/reports`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    },
+  );
+  await readJson<{ ok: true }>(response);
+}
+
+/** 管理員審核頁的一筆被檢舉的留言，對應後端 ReportedComment */
+export interface ReportedComment {
+  comment: {
+    id: number;
+    content: string;
+    createdAt: string;
+    author: { id: number; displayName: string };
+  };
+  event: { id: number; title: string };
+  reportCount: number;
+  reasons: Partial<Record<ReportReason, number>>;
+  notes: string[];
+  firstReportedAt: string;
+}
+
+/** 取得待審的留言檢舉（管理員）。 */
+export async function fetchCommentReports(signal?: AbortSignal): Promise<ReportedComment[]> {
+  const response = await fetch('/api/events/comment-reports', { signal });
+  return (await readJson<{ reports: ReportedComment[] }>(response)).reports;
+}
+
+/** 審核一則留言的檢舉（管理員）：hide 隱藏留言、dismiss 駁回；回傳更新後的待審清單。 */
+export async function reviewCommentReport(
+  commentId: number,
+  action: 'hide' | 'dismiss',
+): Promise<ReportedComment[]> {
+  const response = await fetch(`/api/events/comment-reports/${commentId}/${action}`, {
+    method: 'POST',
+  });
+  return (await readJson<{ reports: ReportedComment[] }>(response)).reports;
+}
+
 /** 活動評價摘要（US-11），對應 backend/src/modules/events/events.ratings.ts 的 EventRatingSummary */
 export interface EventRatingSummary {
   /** 平均分數（小數第一位），沒有評價時為 null */

@@ -40,7 +40,7 @@ export function EventComments({ eventId }: { eventId: string }) {
   const [content, setContent] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  // 正在檢舉的留言；目前只有畫面，之後串接檢舉 API
+  // 正在檢舉的留言（#65）
   const [reporting, setReporting] = useState<EventComment | null>(null);
 
   useEffect(() => {
@@ -168,6 +168,8 @@ export function EventComments({ eventId }: { eventId: string }) {
       )}
       {reporting && (
         <CommentReportDialog
+          eventId={eventId}
+          commentId={reporting.id}
           authorName={reporting.author.displayName}
           onClose={() => setReporting(null)}
         />

@@ -1,35 +1,57 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { ApiError } from '../auth/api';
+import { REPORT_REASON_LABELS, reportEventComment, type ReportReason } from './api';
 
-/** 檢舉原因；之後串接後端時沿用同一組代碼 */
-const REPORT_REASONS = [
-  { code: 'spam', label: '垃圾訊息或廣告' },
-  { code: 'abusive', label: '不當或攻擊性言論' },
-  { code: 'off_topic', label: '與活動無關' },
-  { code: 'other', label: '其他' },
-] as const;
+const REPORT_REASONS = Object.keys(REPORT_REASON_LABELS) as ReportReason[];
 
-/**
- * 留言檢舉視窗（目前只有畫面）。
- * TODO(#65)：串接檢舉 API，送出後改為真正寫入後端並由管理員審核。
- */
+/** 與後端 REPORT_NOTE_MAX_LENGTH 相同 */
+const NOTE_MAX_LENGTH = 500;
+
+/** #65 留言檢舉視窗：選擇原因與補充說明，送出後由管理員審核。 */
 export function CommentReportDialog({
+  eventId,
+  commentId,
   authorName,
   onClose,
 }: {
+  eventId: string;
+  commentId: number;
   authorName: string;
   onClose: () => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
-  const [submitted, setSubmitted] = useState(false);
+  const [result, setResult] = useState<'sent' | 'already' | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const dialog = dialogRef.current;
     if (dialog && !dialog.open) dialog.showModal();
   }, []);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setSubmitted(true);
+    const form = new FormData(event.currentTarget);
+    const reason = String(form.get('reason') ?? '') as ReportReason;
+    const note = String(form.get('note') ?? '').trim();
+    setError(null);
+    setSubmitting(true);
+    try {
+      await reportEventComment(eventId, commentId, { reason, note });
+      setResult('sent');
+    } catch (caught) {
+      if (caught instanceof ApiError && caught.code === 'already_reported') {
+        setResult('already');
+      } else if (caught instanceof ApiError && caught.status === 401) {
+        setError('登入已過期，請重新登入後再檢舉');
+      } else if (caught instanceof ApiError) {
+        setError(caught.fields.note ?? caught.fields.reason ?? caught.message);
+      } else {
+        setError('無法連線到伺服器，請稍後再試');
+      }
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -40,9 +62,13 @@ export function CommentReportDialog({
       onClose={onClose}
     >
       <h3 id="comment-report-title">檢舉 {authorName} 的留言</h3>
-      {submitted ? (
+      {result ? (
         <>
-          <p role="status">感謝回報！檢舉功能即將上線，這次的檢舉還不會送出。</p>
+          <p role="status">
+            {result === 'sent'
+              ? '感謝回報！管理員會盡快審核這則留言。'
+              : '你已經檢舉過這則留言，管理員會盡快審核。'}
+          </p>
           <div className="comment-report-actions">
             <button type="button" onClick={() => dialogRef.current?.close()}>
               關閉
@@ -50,29 +76,36 @@ export function CommentReportDialog({
           </div>
         </>
       ) : (
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={(event) => void handleSubmit(event)}>
           <fieldset>
             <legend>檢舉原因</legend>
             {REPORT_REASONS.map((reason, index) => (
-              <label key={reason.code} className="comment-report-reason">
+              <label key={reason} className="comment-report-reason">
                 <input
                   type="radio"
                   name="reason"
-                  value={reason.code}
+                  value={reason}
                   required
                   defaultChecked={index === 0}
                 />
-                {reason.label}
+                {REPORT_REASON_LABELS[reason]}
               </label>
             ))}
           </fieldset>
           <label htmlFor="comment-report-note">補充說明（選填）</label>
-          <textarea id="comment-report-note" name="note" rows={3} maxLength={500} />
+          <textarea id="comment-report-note" name="note" rows={3} maxLength={NOTE_MAX_LENGTH} />
+          {error && (
+            <p role="alert" className="comment-report-error">
+              {error}
+            </p>
+          )}
           <div className="comment-report-actions">
             <button type="button" onClick={() => dialogRef.current?.close()}>
               取消
             </button>
-            <button type="submit">送出檢舉</button>
+            <button type="submit" disabled={submitting}>
+              {submitting ? '送出中…' : '送出檢舉'}
+            </button>
           </div>
         </form>
       )}
