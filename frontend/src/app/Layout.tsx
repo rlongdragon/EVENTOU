@@ -19,23 +19,27 @@ export function Layout() {
   const { user, loading, logout } = useAuth();
   const navItems = NAV_ITEMS.filter((item) => !item.role || item.role === user?.role);
 
+  // 刊頭期數：以當月作為「本期」
+  const today = new Date();
+  const issueMonth = String(today.getMonth() + 1).padStart(2, '0');
+
   return (
     <>
       <header className="site-header">
+        <div className="masthead">
+          <div className="masthead-series label">
+            <span>NTOU · Event To U</span>
+            <span>Campus Events Issue</span>
+          </div>
+          <div className="masthead-issue">
+            <b>{issueMonth}</b>
+            <small>
+              {today.getFullYear()} 年 {today.getMonth() + 1} 月號
+            </small>
+          </div>
+        </div>
         <nav className="site-nav">
-          <strong className="site-logo">
-            <svg width="24" height="24" viewBox="0 0 28 28" aria-hidden="true">
-              <circle cx="14" cy="14" r="12" fill="none" stroke="currentColor" strokeWidth="2" />
-              <path
-                d="M6 16c3-3 5-3 8 0s5 3 8 0"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-              />
-            </svg>
-            EVENTOU
-          </strong>
+          <strong className="site-logo">EVENTOU</strong>
           {navItems.map((item) => (
             <NavLink key={item.to} to={item.to} end={item.to === '/'}>
               {item.label}
