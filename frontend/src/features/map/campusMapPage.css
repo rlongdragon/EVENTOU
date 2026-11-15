@@ -23,5 +23,29 @@
 }
 
 .campus-map-note {
-  color: #57606a;
+  color: var(--color-muted);
+}
+
+.campus-map-unlocated ul {
+  display: grid;
+  gap: 0.5rem;
+  padding-inline-start: 1.25rem;
+}
+
+.campus-map-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-block-end: 1rem;
+}
+
+.campus-map-presets button {
+  min-height: 2.5rem;
+}
+
+/* 目前選取的日期快速選擇：墨色實底 */
+.campus-map-presets button[aria-pressed='true'] {
+  border-color: var(--color-text);
+  background: var(--color-text);
+  color: var(--color-on-dark);
 }

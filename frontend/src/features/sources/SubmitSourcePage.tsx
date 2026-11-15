@@ -8,6 +8,7 @@ import {
   type ReviewStatus,
   type Source,
 } from './api';
+import { formatSourceTime } from './sourceTime';
 
 const fieldStyle = { display: 'flex', flexDirection: 'column', gap: '0.25rem' } as const;
 const errorStyle = { color: '#cf222e', margin: 0 } as const;
@@ -167,7 +168,7 @@ export function SubmitSourcePage() {
                   </a>
                 </td>
                 <td>{TYPE_LABELS[source.type] ?? source.type}</td>
-                <td>{source.createdAt} (UTC)</td>
+                <td>{formatSourceTime(source.createdAt)}</td>
                 <td>{statusLabel(source)}</td>
                 <td>{source.risk ? RISK_LEVEL_LABELS[source.risk.level] : '—'}</td>
               </tr>

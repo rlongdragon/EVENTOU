@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import type { EventDetail } from './api';
 import { fetchEvent } from './api';
+import { DEFAULT_PHOTOS } from './defaultPhotos';
+import { pickEventImages } from './eventImage';
 import { EventLocationMap } from './EventLocationMap';
 import { EventComments } from './EventComments';
 import { EventRating } from './EventRating';
@@ -50,6 +52,8 @@ export function EventDetailPage() {
   }
 
   const { event } = state;
+  // 主圖：活動有自己的圖就用原圖，沒有就依 id 固定挑一張預設圖
+  const [photo] = pickEventImages([event], DEFAULT_PHOTOS);
 
   return (
     <>
@@ -76,6 +80,10 @@ export function EventDetailPage() {
           <dd>{event.organizer ?? '未提供'}</dd>
         </div>
       </dl>
+      <figure className="event-photo" aria-hidden="true">
+        <img src={photo.src} alt="" />
+        {photo.place && <figcaption className="label">{photo.place}</figcaption>}
+      </figure>
       <section>
         <h2>活動說明</h2>
         <p className="event-description">{event.description || '未提供'}</p>
@@ -102,7 +110,12 @@ export function EventDetailPage() {
         )}
       </section>
       <ShareEventButton eventId={event.id} />
-      <EventLocationMap key={event.id} eventId={event.id} location={event.location} />
+      <EventLocationMap
+        key={event.id}
+        eventId={event.id}
+        location={event.location}
+        category={event.category}
+      />
       <EventRating eventId={eventId} />
       <EventComments eventId={eventId} />
     </>
