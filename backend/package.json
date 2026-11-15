@@ -12,6 +12,7 @@
     "db:migrate": "tsx --env-file-if-exists=.env src/db/cli.ts",
     "test": "node --import tsx --test \"src/**/*.test.ts\"",
     "user:set-role": "tsx --env-file-if-exists=.env src/modules/auth/setRole.cli.ts",
+    "sources:seed-ntou": "tsx --env-file-if-exists=.env src/modules/sources/seedNtou.cli.ts",
     "notifications:retry": "tsx --env-file-if-exists=.env src/modules/subscriptions/retryNotifications.cli.ts"
   },
   "dependencies": {

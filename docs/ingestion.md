@@ -30,7 +30,7 @@
 
 新增來源後每輪擷取的請求數隨列表數增加（每個列表最多 1 + 20 次，同網域間隔至少 1 秒），必要時可調整 `maxAnnouncements`。離線測試使用 `fixtures/ntou-*.html`，為自上述網站存下並裁短的真實頁面結構。
 
-來源仍須存在資料庫且 `review_status='approved' AND enabled=1`。US-14 已提供來源審核，US-16 目前仍是佔位，開發時可人工更新啟用欄位；設定檔本身不會核准或建立 Source。
+來源仍須存在資料庫且 `review_status='approved' AND enabled=1`。US-14 已提供來源審核，US-16 目前仍是佔位，開發時可人工更新啟用欄位；設定檔本身不會核准或建立 Source。新環境可執行 `npm run sources:seed-ntou -w backend -- <管理員 email>`，一次建立 `NTOU_SOURCES`（`sources/ntouSources.ts`）中所有海大官方列表的來源並設為已核准、啟用中，等同為學校官方網站跳過提交與審核；新增 `scraperConfigs` 的列表時，請同步加進 `NTOU_SOURCES`（測試會檢查兩邊一致）。
 
 ## 資料接合
 
