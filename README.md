@@ -191,9 +191,10 @@ npm run user:set-role -w backend -- someone@example.com admin
 - 後端 API：`GET /api/events/:eventId/comments`（未登入可看）、`POST /api/events/:eventId/comments`（需登入，body 為 `{ "content": string }`）。
 - 只有已發布的活動能看與留言；活動不存在、待審（`needs_review`）或 id 無效時回傳 `404`。
 - 留言內容會去除前後空白，空白留言回傳 `400 validation_error`（`fields.content`），上限 1000 字元。
-- 留言依時間由舊到新排序；每則留言回傳 `id`、`content`、`createdAt`（`+08:00` 的 ISO 字串）與留言者 `author`（`id`、`displayName`，不含 email）。
+- 留言依時間由舊到新排序；每則留言回傳 `id`、`content`、`createdAt`（`+08:00` 的 ISO 字串）與留言者 `author`（`id`、`displayName`，不含 email），以及留言者目前對該活動的評分 `rating`（1–5，未評分為 `null`，來自 US-11 的 `event_ratings`）。
 - 資料表（migration 9）：`event_comments`，活動或使用者刪除時留言一併刪除。
-- 前端在活動頁（`/events/:eventId`）下方顯示留言列表；訪客看到登入提示，登入後才出現留言輸入框。
+- 前端在活動頁（`/events/:eventId`）下方顯示留言列表，每則留言旁顯示留言者的星等；訪客看到登入提示，登入後才出現留言輸入框。
+- 登入後可在別人的留言旁按「檢舉」選擇原因；目前只有前端畫面，尚未送到後端。
 
 ## 活動評價（US-11）
 

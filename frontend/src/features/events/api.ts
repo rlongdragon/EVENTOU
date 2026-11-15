@@ -84,6 +84,8 @@ export interface EventComment {
   /** Asia/Taipei ISO 8601 */
   createdAt: string;
   author: { id: number; displayName: string };
+  /** 留言者目前對這個活動的評分（1–5），未評分為 null */
+  rating: number | null;
 }
 
 async function readJson<T>(response: Response): Promise<T> {

@@ -11,12 +11,16 @@ export interface EventComment {
   /** Asia/Taipei ISO 8601 */
   createdAt: string;
   author: { id: number; displayName: string };
+  /** 留言者目前對這個活動的評分（US-11，1–5）；未評分為 null。改分數後舊留言也顯示新分數 */
+  rating: number | null;
 }
 
 const SELECT_COMMENT = `
   SELECT event_comments.id, event_comments.content, event_comments.created_at,
-    users.id AS user_id, users.display_name
-  FROM event_comments JOIN users ON users.id = event_comments.user_id`;
+    users.id AS user_id, users.display_name, event_ratings.score AS rating
+  FROM event_comments JOIN users ON users.id = event_comments.user_id
+  LEFT JOIN event_ratings ON event_ratings.event_id = event_comments.event_id
+    AND event_ratings.user_id = event_comments.user_id`;
 
 function toComment(row: Record<string, unknown>): EventComment {
   return {
@@ -24,6 +28,7 @@ function toComment(row: Record<string, unknown>): EventComment {
     content: String(row.content),
     createdAt: String(row.created_at),
     author: { id: Number(row.user_id), displayName: String(row.display_name) },
+    rating: row.rating === null || row.rating === undefined ? null : Number(row.rating),
   };
 }
 
