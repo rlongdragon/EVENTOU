@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { mock, test } from 'node:test';
 import { migrate, getDb, closeDb } from '../../db/index.js';
@@ -431,4 +432,62 @@ test('正式選擇器將列表發布日期存入資料庫，US-19 依該年份�
       db.close();
     }
   }
+});
+
+test('學校首頁與各處室列表：沿用正式選擇器，日期列表與圖文列表都能擷取，略過非公告連結', async () => {
+  // 範例檔為 2026-11-13 自海大網站存下並裁短的真實頁面結構。
+  const fixture = (name: string) =>
+    readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8');
+  const configFor = (listUrl: string) => {
+    const found = scraperConfigs.find((item) => item.listUrl === listUrl);
+    assert.ok(found, `缺少設定：${listUrl}`);
+    return found;
+  };
+  const clientFor = (listUrl: string, listHtml: string) =>
+    new ScraperClient(
+      async (input) =>
+        new Response(
+          String(input).endsWith('robots.txt')
+            ? 'User-agent: *\nAllow: /'
+            : String(input) === listUrl
+              ? listHtml
+              : fixture('ntou-detail.html'),
+        ),
+      0,
+    );
+  const scrape = async (listUrl: string, listHtml: string) => {
+    const raws = [];
+    for await (const raw of scrapeAnnouncements(
+      1,
+      configFor(listUrl),
+      clientFor(listUrl, listHtml),
+    ))
+      raws.push(raw);
+    return raws;
+  };
+
+  const stuUrl = 'https://stu.ntou.edu.tw/p/403-1023-1023.php?Lang=zh-tw';
+  const dated = await scrape(stuUrl, fixture('ntou-list-dated.html'));
+  assert.deepEqual(
+    dated.map((raw) => [raw.url, raw.publishedAt]),
+    [
+      ['https://stu.ntou.edu.tw/p/406-1023-131216,r1023.php?Lang=zh-tw', '2026-11-10'],
+      ['https://stu.ntou.edu.tw/p/406-1023-130488,r1023.php?Lang=zh-tw', '2026-10-27'],
+    ],
+  );
+  assert.equal(
+    dated[0].title,
+    '【愛滋防治】115年11月30日「從情感關係到愛滋及性傳染病防治」講座，歡迎師生同仁參加。',
+  );
+  assert.match(dated[0].rawContent, /地點：本校學生活動中心地下一樓原民廳/);
+
+  const mprpUrl = 'https://mprp.ntou.edu.tw/p/403-1017-1031.php?Lang=zh-tw';
+  const gallery = await scrape(mprpUrl, fixture('ntou-list-gallery.html'));
+  assert.deepEqual(
+    gallery.map((raw) => [raw.url, raw.publishedAt]),
+    [
+      ['https://mprp.ntou.edu.tw/p/406-1017-131368,r1031.php?Lang=zh-tw', null],
+      ['https://mprp.ntou.edu.tw/p/406-1017-131206,r1031.php?Lang=zh-tw', null],
+    ],
+  );
 });

@@ -8,6 +8,28 @@
 
 預設含食品系演講公告與國際事務處最新消息。2026-10-13 使用正式擷取器，各完成 robots.txt、列表與一則內文驗證，取得非空標題與原始 HTML；離線測試不依賴網站即時狀態。
 
+2026-11-13 新增學校首頁與各行政處室的公告列表（#55），皆沿用同一組選擇器，並以同樣方式完成 robots.txt（各網域皆允許）、列表與一則內文驗證：
+
+| 單位 | 列表 | 網址 | 列表有發布日期 |
+| --- | --- | --- | --- |
+| 學校首頁 | 海大快訊（媒體公關暨出版中心） | `https://mprp.ntou.edu.tw/p/403-1017-1031.php?Lang=zh-tw` | 否 |
+| 學務處 | 處本部最新消息 | `https://stu.ntou.edu.tw/p/403-1023-1023.php?Lang=zh-tw` | 是 |
+| 學務處 | 課外活動指導組最新消息 | `https://stu.ntou.edu.tw/p/403-1023-1024.php?Lang=zh-tw` | 是 |
+| 總務處 | 最新消息（處本部） | `https://ga.ntou.edu.tw/p/403-1015-1063.php?Lang=zh-tw` | 否 |
+| 研發處 | 最新消息 | `https://research.ntou.edu.tw/p/403-1021-1027.php?Lang=zh-tw` | 是 |
+| 研發處 | 校外活動資訊 | `https://research.ntou.edu.tw/p/403-1021-1057.php?Lang=zh-tw` | 否 |
+| 圖書暨資訊處 | 最新消息 | `https://li.ntou.edu.tw/p/403-1029-11.php?Lang=zh-tw` | 是 |
+| 主計室 | 最新消息 | `https://acc.ntou.edu.tw/p/403-1088-1034.php?Lang=zh-tw` | 是 |
+| 人事室 | 最新消息 | `https://personnel.ntou.edu.tw/p/403-1007-11.php?Lang=zh-tw` | 否 |
+| 體育室 | 最新消息 | `https://peadmin.ntou.edu.tw/p/403-1012-559.php?Lang=zh-tw` | 否 |
+
+列表沒有發布日期的單位，`published_at` 保留 null。列表中指向校外網站的連結（非 `/p/406-` 公告頁）不符合 linkSelector，會被略過。尚未加入：
+
+- 教務處：首頁公告由 JavaScript 動態載入外部 RSS 模組，靜態頁面找不到公告列表網址，需另行確認。
+- 秘書室：首頁為靜態入口頁，沒有公告列表。
+
+新增來源後每輪擷取的請求數隨列表數增加（每個列表最多 1 + 20 次，同網域間隔至少 1 秒），必要時可調整 `maxAnnouncements`。離線測試使用 `fixtures/ntou-*.html`，為自上述網站存下並裁短的真實頁面結構。
+
 來源仍須存在資料庫且 `review_status='approved' AND enabled=1`。US-14 已提供來源審核，US-16 目前仍是佔位，開發時可人工更新啟用欄位；設定檔本身不會核准或建立 Source。
 
 ## 資料接合
