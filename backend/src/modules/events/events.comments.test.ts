@@ -159,6 +159,33 @@ describe('活動留言（US-10）', () => {
     assert.equal(maxLength.status, 201);
   });
 
+  test('留言附上留言者目前對該活動的評分，沒評分為 null，改分數後跟著更新', async () => {
+    const erin = await registerUser('erin@example.com', 'Erin');
+    const frank = await registerUser('frank@example.com', 'Frank');
+    const rated = await postComment(otherEventId, '很推薦', erin.cookie);
+    assert.equal(rated.body.comment?.rating, null);
+    const rate = (score: number) =>
+      request('PUT', `/api/events/${otherEventId}/ratings`, {
+        cookie: erin.cookie,
+        body: { score },
+      });
+    assert.equal((await rate(4)).status, 200);
+    await postComment(otherEventId, '沒有評分', frank.cookie);
+    // 在其他活動評分不影響這個活動的留言
+    await request('PUT', `/api/events/${eventId}/ratings`, {
+      cookie: frank.cookie,
+      body: { score: 1 },
+    });
+    const ratingOf = async (name: string) => {
+      const { body } = await request('GET', `/api/events/${otherEventId}/comments`);
+      return body.comments?.find((comment) => comment.author.displayName === name)?.rating;
+    };
+    assert.equal(await ratingOf('Erin'), 4);
+    assert.equal(await ratingOf('Frank'), null);
+    await rate(2);
+    assert.equal(await ratingOf('Erin'), 2);
+  });
+
   test('不存在、待審或無效的活動回傳 404', async () => {
     const { cookie } = await registerUser('dave@example.com', 'Dave');
     for (const id of ['999999', String(reviewId), 'abc']) {

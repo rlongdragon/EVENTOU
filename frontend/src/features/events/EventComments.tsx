@@ -3,6 +3,8 @@ import { Link, useLocation } from 'react-router';
 import { ApiError } from '../auth/api';
 import { useAuth } from '../auth/AuthContext';
 import { fetchEventComments, postEventComment, type EventComment } from './api';
+import { CommentReportDialog } from './CommentReportDialog';
+import './eventComments.css';
 
 /** 與後端 COMMENT_MAX_LENGTH 相同 */
 const COMMENT_MAX_LENGTH = 1000;
@@ -19,6 +21,11 @@ const commentTimeFormat = new Intl.DateTimeFormat('zh-TW', {
   hourCycle: 'h23',
 });
 
+/** 例：★★★★☆；留言者的評分顯示在名字旁，像地圖評論一樣 */
+function commentStars(rating: number): string {
+  return '★'.repeat(rating) + '☆'.repeat(5 - rating);
+}
+
 type LoadState =
   | { status: 'loading' }
   | { status: 'error'; message: string }
@@ -33,6 +40,8 @@ export function EventComments({ eventId }: { eventId: string }) {
   const [content, setContent] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // 正在檢舉的留言；目前只有畫面，之後串接檢舉 API
+  const [reporting, setReporting] = useState<EventComment | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -92,14 +101,35 @@ export function EventComments({ eventId }: { eventId: string }) {
         (state.comments.length === 0 ? (
           <p>目前還沒有留言。</p>
         ) : (
-          <ol style={{ listStyle: 'none', padding: 0 }}>
+          <ol className="comment-list">
             {state.comments.map((comment) => (
-              <li key={comment.id} style={{ marginBottom: '1rem' }}>
-                <strong>{comment.author.displayName}</strong>{' '}
-                <time dateTime={comment.createdAt} style={{ color: '#59636e' }}>
-                  {commentTimeFormat.format(new Date(comment.createdAt))}
-                </time>
-                <p style={{ whiteSpace: 'pre-wrap', margin: '0.25rem 0 0' }}>{comment.content}</p>
+              <li key={comment.id} className="comment-item">
+                <div className="comment-head">
+                  <strong>{comment.author.displayName}</strong>
+                  {comment.rating !== null && (
+                    <span
+                      className="comment-rating"
+                      role="img"
+                      aria-label={`評分 ${comment.rating} / 5`}
+                    >
+                      {commentStars(comment.rating)}
+                    </span>
+                  )}
+                  <time dateTime={comment.createdAt} className="comment-time">
+                    {commentTimeFormat.format(new Date(comment.createdAt))}
+                  </time>
+                  {/* 登入後才能檢舉，且不能檢舉自己的留言 */}
+                  {user && user.id !== comment.author.id && (
+                    <button
+                      type="button"
+                      className="comment-report-button"
+                      onClick={() => setReporting(comment)}
+                    >
+                      檢舉
+                    </button>
+                  )}
+                </div>
+                <p className="comment-content">{comment.content}</p>
               </li>
             ))}
           </ol>
@@ -135,6 +165,12 @@ export function EventComments({ eventId }: { eventId: string }) {
         <p>
           <Link to={loginUrl}>登入</Link>後即可留言。
         </p>
+      )}
+      {reporting && (
+        <CommentReportDialog
+          authorName={reporting.author.displayName}
+          onClose={() => setReporting(null)}
+        />
       )}
     </section>
   );
