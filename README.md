@@ -101,6 +101,12 @@ npm run user:set-role -w backend -- someone@example.com admin
 
 資料庫為 SQLite（`backend/data/eventou.db`，可用 `DATABASE_PATH` 調整），後端啟動時會自動執行 migration。
 
+資料庫在各自的電腦上，不在 repo 中，新環境一開始沒有任何來源。要擷取學校公告，先把自己的帳號設為管理員，再一次建立擷取設定中所有海大官方公告列表的來源（已核准、啟用中；已存在相同網址的來源會略過，可重複執行），重開後端後就會開始擷取：
+
+```bash
+npm run sources:seed-ntou -w backend -- someone@example.com
+```
+
 ## 來源提交（US-13）
 
 - 後端 API：`POST /api/sources`（需登入，提交來源）、`GET /api/sources/mine`（需登入，自己提交的來源與審核狀態）、`GET /api/sources`（訪客與一般使用者只看到已核准的來源，管理員看全部）。
