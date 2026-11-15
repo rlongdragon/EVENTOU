@@ -380,6 +380,21 @@ legend {
   font-weight: 500;
 }
 
+/* 活動主圖：寬幅裁切，下方小字標地點 */
+.event-photo {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0 0 1.5rem;
+}
+
+.event-photo img {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  aspect-ratio: 21 / 9;
+  object-fit: cover;
+}
+
 .event-description {
   max-width: 46rem;
   white-space: pre-wrap;

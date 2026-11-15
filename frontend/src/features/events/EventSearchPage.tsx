@@ -1,12 +1,11 @@
 import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router';
-import coastPhoto from '../../assets/photos/coast.jpg';
 import concretePhoto from '../../assets/photos/concrete.jpg';
-import harborPhoto from '../../assets/photos/harbor.jpg';
-import ridgePhoto from '../../assets/photos/ridge.jpg';
 import wavesPhoto from '../../assets/photos/waves.jpg';
 import type { EventSearchResult } from './api';
 import { searchEvents } from './api';
+import { DEFAULT_PHOTOS, PHOTO_CREDITS } from './defaultPhotos';
+import { pickEventImages } from './eventImage';
 import { EventTicker } from './EventTicker';
 import { formatEventTime } from './eventTime';
 
@@ -14,13 +13,6 @@ type LoadState =
   | { status: 'loading' }
   | { status: 'error'; message: string }
   | { status: 'ok'; result: EventSearchResult };
-
-/** 首頁前三筆活動搭配的風景照與圖說（照片來源與授權見頁尾） */
-const ISSUE_PHOTOS = [
-  { src: coastPhoto, caption: 'The Quiet Coast', place: '和平島 · Keelung' },
-  { src: ridgePhoto, caption: 'Less, but Better', place: '合歡山 · Hehuanshan' },
-  { src: harborPhoto, caption: 'Into a Wider World', place: '基隆嶼 · Keelung Islet' },
-];
 
 /** 只接受正整數頁碼，其他一律視為第 1 頁 */
 function parsePage(value: string | null): number {
@@ -140,9 +132,7 @@ export function EventSearchPage() {
         </div>
         {state.status === 'loading' && <p>載入中…</p>}
         {state.status === 'error' && <p role="alert">無法載入活動：{state.message}</p>}
-        {state.status === 'ok' && (
-          <SearchResults result={state.result} withPhotos={!filtered} onPageChange={goToPage} />
-        )}
+        {state.status === 'ok' && <SearchResults result={state.result} onPageChange={goToPage} />}
       </section>
 
       <section className="closing">
@@ -157,39 +147,34 @@ export function EventSearchPage() {
         <img className="closing-photo" src={wavesPhoto} alt="鼻頭角的礁岩與浪花" />
         <span className="closing-sign">EVENTOU</span>
       </section>
-      <p className="photo-credits">
-        照片來源 Wikimedia Commons，已裁切並調整色調：和平島海岸 lienyuan lee（CC BY
-        3.0）、合歡山雲海 Quintin Lin（CC BY-SA 2.0）、基隆嶼 Taiwankengo（CC BY-SA
-        4.0）、清水模牆面 Gryffindor（CC0）、鼻頭角 Liu Dyson（CC BY 3.0）。
-      </p>
+      <p className="photo-credits">{PHOTO_CREDITS}</p>
     </>
   );
 }
 
 function SearchResults({
   result,
-  withPhotos,
   onPageChange,
 }: {
   result: EventSearchResult;
-  withPhotos: boolean;
   onPageChange: (page: number) => void;
 }) {
   const { items, page, pageSize, total } = result;
   if (total === 0) return <p>找不到符合條件的活動。</p>;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  // 每一列都配圖：活動有自己的圖就用原圖，沒有就用預設圖（相鄰兩列不重複）
+  const images = pickEventImages(items, DEFAULT_PHOTOS);
 
   return (
     <>
       <ol className="issue-list">
         {items.map((item, index) => {
-          // 只有第一頁、未篩選時，前三筆搭配照片
-          const photo = withPhotos && page === 1 ? ISSUE_PHOTOS[index] : undefined;
+          const photo = images[index];
           const number = (page - 1) * pageSize + index + 1;
           return (
             <li
               key={item.id}
-              className={photo ? 'issue-row has-photo' : 'issue-row'}
+              className="issue-row has-photo"
               style={{ '--card-index': index } as CSSProperties}
             >
               <Link to={`/events/${item.id}`}>
@@ -204,15 +189,14 @@ function SearchResults({
                     {item.location ?? '地點未提供'}
                   </span>
                 </span>
-                {photo && (
-                  <figure className="issue-photo" aria-hidden="true">
-                    <img src={photo.src} alt="" />
+                <figure className="issue-photo" aria-hidden="true">
+                  <img src={photo.src} alt="" loading="lazy" />
+                  {photo.place && (
                     <figcaption>
-                      {photo.caption}
                       <small>{photo.place}</small>
                     </figcaption>
-                  </figure>
-                )}
+                  )}
+                </figure>
                 <span className="issue-arrow" aria-hidden="true">
                   →
                 </span>
