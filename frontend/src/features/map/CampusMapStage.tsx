@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type L from 'leaflet';
 import { Campus3DView } from './Campus3DView';
 import { MapView, type MapMarker } from './MapView';
+import { categoryGlyph } from './mapCategories';
 import './campusMapStage.css';
 
 export type MapMode = '3d' | '2d';
@@ -44,6 +45,8 @@ export function CampusMapStage({ mode, map2d }: CampusMapStageProps) {
   const waitersRef = useRef(new Map<string, (reply: Reply) => void>());
   const [shown, setShown] = useState<MapMode>(mode);
   const shownRef = useRef<MapMode>(mode);
+  // 3D 模型每次載入完成就加一，用來重送活動標記
+  const [frameLoads, setFrameLoads] = useState(0);
 
   const show = useCallback((next: MapMode) => {
     shownRef.current = next;
@@ -56,6 +59,7 @@ export function CampusMapStage({ mode, map2d }: CampusMapStageProps) {
       if (event.source !== iframeRef.current?.contentWindow) return;
       const reply = event.data as Reply | null;
       if (!reply || typeof reply.type !== 'string') return;
+      if (reply.type === 'eventou:3d-loaded') setFrameLoads((n) => n + 1);
       const waiter = waitersRef.current.get(reply.type);
       if (waiter) {
         waitersRef.current.delete(reply.type);
@@ -135,6 +139,25 @@ export function CampusMapStage({ mode, map2d }: CampusMapStageProps) {
       location.origin,
     );
   }, [shown]);
+
+  // 把篩選後的活動傳給 3D 模型畫標記（與平面地圖同一份資料）
+  const markers = map2d?.markers;
+  useEffect(() => {
+    const win = iframeRef.current?.contentWindow as (Window & { __ready?: boolean }) | null;
+    if (!win?.__ready) return;
+    const events = (markers ?? []).map((m) => ({
+      id: m.id,
+      lat: m.latitude,
+      lng: m.longitude,
+      title: m.label,
+      category: m.category,
+      categoryLabel: m.categoryLabel,
+      glyph: categoryGlyph(m.category),
+      details: m.details,
+      href: m.href,
+    }));
+    win.postMessage({ type: 'eventou:events', events }, location.origin);
+  }, [markers, frameLoads]);
 
   const onMapReady = useCallback((map: L.Map | null) => {
     leafletRef.current = map;

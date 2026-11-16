@@ -4523,6 +4523,117 @@ window.addEventListener('message', (e) => {
 });
 document.addEventListener('visibilitychange', () => invalidate());
 
+// ---------- 活動標記 ----------
+// 外層地圖頁把篩選後的活動（經緯度＋摘要）傳進來；同一個地點的活動合成一個標記，點開看清單。
+// 活動標題、地點都來自擷取的公告，一律用 textContent 放進畫面；連結只接受站內路徑。
+const eventLayer = new THREE.Group();
+scene.add(eventLayer);
+const hitMeshes = [];
+scene.traverse((o) => {
+  if (o.isMesh) hitMeshes.push(o);
+});
+const rayDown = new THREE.Raycaster();
+// 標記放在該點最高的表面上（屋頂或地面）
+function surfaceY(x, z) {
+  rayDown.set(new THREE.Vector3(x, 500, z), new THREE.Vector3(0, -1, 0));
+  const hit = rayDown.intersectObjects(hitMeshes, false).find((h) => h.object.visible);
+  return hit ? hit.point.y : 0;
+}
+const EVENT_CATEGORIES = new Set(['lecture', 'workshop', 'exhibition', 'sports', 'welfare']);
+const safeHref = (href) =>
+  typeof href === 'string' && href.startsWith('/') && !href.startsWith('//') ? href : null;
+const eventsCard = document.createElement('div');
+eventsCard.id = 'eventsCard';
+eventsCard.className = 'card';
+eventsCard.hidden = true;
+document.body.append(eventsCard);
+
+function showEventList(list) {
+  const head = document.createElement('div');
+  head.className = 'title-row';
+  const heading = document.createElement('strong');
+  heading.textContent = list.length > 1 ? `這裡有 ${list.length} 個活動` : '活動';
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.textContent = '關閉';
+  close.addEventListener('click', () => {
+    eventsCard.hidden = true;
+  });
+  head.append(heading, close);
+  const ul = document.createElement('ul');
+  for (const ev of list) {
+    const li = document.createElement('li');
+    if (ev.categoryLabel) {
+      const chip = document.createElement('span');
+      chip.className =
+        'ev-cat cat-' + (EVENT_CATEGORIES.has(ev.category) ? ev.category : 'default');
+      chip.textContent = String(ev.categoryLabel);
+      li.append(chip);
+    }
+    const href = safeHref(ev.href);
+    const title = document.createElement(href ? 'a' : 'span');
+    title.className = 'ev-title';
+    title.textContent = String(ev.title ?? '');
+    if (href) {
+      title.href = href;
+      title.target = '_top'; // 在外層頁面開啟活動詳細頁
+    }
+    li.append(title);
+    for (const line of Array.isArray(ev.details) ? ev.details : []) {
+      if (!line) continue;
+      const p = document.createElement('p');
+      p.className = 'ev-detail';
+      p.textContent = String(line);
+      li.append(p);
+    }
+    ul.append(li);
+  }
+  eventsCard.replaceChildren(head, ul);
+  eventsCard.hidden = false;
+  infoEl.style.display = 'none';
+}
+
+function setEvents(events) {
+  eventLayer.clear(); // CSS2DObject 被移除時會一併移除自己的 DOM 元素
+  eventsCard.hidden = true;
+  const groups = new Map();
+  for (const ev of events) {
+    if (!Number.isFinite(ev?.lat) || !Number.isFinite(ev?.lng)) continue;
+    const key = `${ev.lat.toFixed(5)},${ev.lng.toFixed(5)}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(ev);
+  }
+  for (const list of groups.values()) {
+    const p = latLngToWorld(list[0].lat, list[0].lng);
+    const anchor = document.createElement('div');
+    anchor.className = 'ev-anchor';
+    const pin = document.createElement('button');
+    pin.type = 'button';
+    const cat = EVENT_CATEGORIES.has(list[0].category) ? list[0].category : 'default';
+    pin.className = 'ev-pin cat-' + cat;
+    pin.textContent =
+      list.length > 1 ? String(list.length) : String(list[0].glyph ?? '●').slice(0, 2);
+    const titles = list.map((ev) => String(ev.title ?? ''));
+    pin.title = titles.join('\n');
+    pin.setAttribute('aria-label', `${list.length} 個活動：${titles.join('、')}`);
+    pin.addEventListener('click', (e) => {
+      e.stopPropagation();
+      showEventList(list);
+      invalidate();
+    });
+    anchor.append(pin);
+    const obj = new CSS2DObject(anchor);
+    obj.position.set(p.x, surfaceY(p.x, p.z) + 2, p.z);
+    eventLayer.add(obj);
+  }
+  invalidate();
+}
+window.addEventListener('message', (e) => {
+  if (e.origin !== location.origin || e.source !== window.parent) return;
+  if (e.data?.type === 'eventou:events' && Array.isArray(e.data.events))
+    setEvents(e.data.events.slice(0, 500));
+});
+
 const clock = new THREE.Clock();
 const ease = (t) => 1 - Math.pow(1 - t, 3);
 renderer.setAnimationLoop(() => {

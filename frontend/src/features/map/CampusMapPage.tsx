@@ -167,7 +167,7 @@ export function CampusMapPage() {
       )}
       {mode === '3d' && (
         <p className="campus-map-note">
-          立體模型目前顯示建物、樓層與常辦活動的場地；活動標記請切換到平面地圖查看。
+          立體模型標出有活動的地點，點標記可看活動清單；常辦活動的場地可展開樓層。
         </p>
       )}
       {mode === '2d' && result && (

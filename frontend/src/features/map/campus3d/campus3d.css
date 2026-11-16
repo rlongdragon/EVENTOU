@@ -269,3 +269,106 @@ button#editToggle.on {
   color: #fff;
   border-color: var(--accent);
 }
+/* 活動標記：顏色與平面地圖 mapView.css 的 .map-cat--* 相同，改色時兩邊一起改 */
+.ev-anchor {
+  pointer-events: none;
+}
+.cat-default {
+  --cat: #6b6e5c;
+}
+.cat-lecture {
+  --cat: #2f3d3a;
+}
+.cat-workshop {
+  --cat: #46657f;
+}
+.cat-exhibition {
+  --cat: #775a74;
+}
+.cat-sports {
+  --cat: #5f7234;
+}
+.cat-welfare {
+  --cat: #9a5b52;
+}
+button.ev-pin {
+  position: relative;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 7px;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: var(--cat);
+  color: #fff;
+  font:
+    700 13px/1 'Noto Sans TC',
+    system-ui,
+    sans-serif;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+  pointer-events: auto;
+  transform: translateY(-22px);
+}
+button.ev-pin::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  width: 2px;
+  height: 10px;
+  background: var(--cat);
+  transform: translateX(-50%);
+}
+button.ev-pin:hover,
+button.ev-pin:focus-visible {
+  background: var(--cat);
+  color: #fff;
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+#eventsCard {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  width: 320px;
+  max-width: calc(100vw - 32px);
+  max-height: 55vh;
+  overflow: auto;
+}
+#eventsCard[hidden] {
+  display: none;
+}
+#eventsCard ul {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+#eventsCard li {
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+#eventsCard .ev-cat {
+  display: inline-block;
+  margin-bottom: 4px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--cat);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+}
+#eventsCard .ev-title {
+  display: block;
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 1.4;
+}
+#eventsCard a.ev-title:hover {
+  color: var(--accent);
+}
+#eventsCard .ev-detail {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
