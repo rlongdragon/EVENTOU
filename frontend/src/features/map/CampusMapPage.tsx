@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { formatEventTime } from '../events/eventTime';
-import { Campus3DView } from './Campus3DView';
-import { MapView, type MapMarker } from './MapView';
+import { CampusMapStage, type MapMode } from './CampusMapStage';
+import type { MapMarker } from './MapView';
 import { categoryClassName, categoryGlyph } from './mapCategories';
 import { fetchMapEvents, type MapEventResult } from './api';
 import {
@@ -14,8 +14,6 @@ import {
   type DateRange,
 } from './dateRange';
 import './campusMapPage.css';
-
-type MapMode = '3d' | '2d';
 
 const MAP_MODES: { mode: MapMode; label: string }[] = [
   { mode: '3d', label: '立體' },
@@ -168,31 +166,29 @@ export function CampusMapPage() {
         </p>
       )}
       {mode === '3d' && (
-        <>
-          <p className="campus-map-note">
-            立體模型目前顯示建物、樓層與常辦活動的場地；活動標記請切換到平面地圖查看。
-          </p>
-          <Campus3DView title="3D 校園模型" />
-        </>
+        <p className="campus-map-note">
+          立體模型目前顯示建物、樓層與常辦活動的場地；活動標記請切換到平面地圖查看。
+        </p>
       )}
       {mode === '2d' && result && (
-        <>
-          <ul className="map-legend" aria-label="圖例">
-            {result.categories.map((option) => (
-              <li key={option.code}>
-                <span
-                  className={`map-legend-swatch ${categoryClassName(option.code)}`}
-                  aria-hidden="true"
-                >
-                  {categoryGlyph(option.code)}
-                </span>
-                {option.label}
-              </li>
-            ))}
-          </ul>
-          <MapView markers={markers} ariaLabel="校園活動地圖" emptyCenter={result.campus} />
-        </>
+        <ul className="map-legend" aria-label="圖例">
+          {result.categories.map((option) => (
+            <li key={option.code}>
+              <span
+                className={`map-legend-swatch ${categoryClassName(option.code)}`}
+                aria-hidden="true"
+              >
+                {categoryGlyph(option.code)}
+              </span>
+              {option.label}
+            </li>
+          ))}
+        </ul>
       )}
+      <CampusMapStage
+        mode={mode}
+        map2d={result ? { markers, ariaLabel: '校園活動地圖', emptyCenter: result.campus } : null}
+      />
       {unlocatedEvents.length > 0 && (
         <section className="campus-map-unlocated" aria-labelledby="campus-map-unlocated-heading">
           <h2 id="campus-map-unlocated-heading">無法定位的活動（{unlocatedEvents.length}）</h2>
