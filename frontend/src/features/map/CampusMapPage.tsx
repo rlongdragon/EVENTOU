@@ -130,31 +130,31 @@ export function CampusMapPage() {
             ))}
           </select>
         </label>
-      </div>
-      <div className="campus-map-presets" role="group" aria-label="快速選擇日期範圍">
-        {DATE_RANGE_PRESETS.map((preset) => {
-          const presetRange = rangeFromToday(today, preset.days);
-          const active = presetRange.from === from && presetRange.to === to;
-          return (
-            <button
-              key={preset.days}
-              type="button"
-              aria-pressed={active}
-              onClick={() => setRange(presetRange)}
-            >
-              {preset.label}
-            </button>
-          );
-        })}
-        <button
-          type="button"
-          onClick={() => {
-            setRange({ from: '', to: '' });
-            setCategory('');
-          }}
-        >
-          清除篩選
-        </button>
+        <div className="campus-map-presets" role="group" aria-label="快速選擇日期範圍">
+          {DATE_RANGE_PRESETS.map((preset) => {
+            const presetRange = rangeFromToday(today, preset.days);
+            const active = presetRange.from === from && presetRange.to === to;
+            return (
+              <button
+                key={preset.days}
+                type="button"
+                aria-pressed={active}
+                onClick={() => setRange(presetRange)}
+              >
+                {preset.label}
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => {
+              setRange({ from: '', to: '' });
+              setCategory('');
+            }}
+          >
+            清除篩選
+          </button>
+        </div>
       </div>
       {matchingError && <p role="alert">{matchingError}</p>}
       {!matchingError && isLoading && <p role="status">正在載入活動地圖…</p>}
