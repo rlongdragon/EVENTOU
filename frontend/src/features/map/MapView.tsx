@@ -4,7 +4,7 @@ import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster';
 import { categoryClassName, categoryGlyph } from './mapCategories';
-import { getTileLayerConfig } from './mapTiles';
+import { addBasemap } from './basemap';
 import './mapView.css';
 
 export interface MapMarker {
@@ -26,11 +26,11 @@ interface MapViewProps {
   ariaLabel: string;
   /** 沒有任何標記時的地圖中心；未提供時地圖要等有標記才會定位 */
   emptyCenter?: { latitude: number; longitude: number };
+  /** 地圖建立後回傳 Leaflet 實例、移除時回傳 null；給立體／平面切換對齊畫面用 */
+  onReady?: (map: L.Map | null) => void;
 }
 
 const DEFAULT_ZOOM = 16;
-
-const tileLayerConfig = getTileLayerConfig(import.meta.env.VITE_CARTO_API_KEY);
 
 /** 依類別上色的水滴形標記；縮寫為固定常數，不含使用者輸入。 */
 function createPinIcon(marker: MapMarker): L.DivIcon {
@@ -54,18 +54,22 @@ function createClusterIcon(cluster: L.MarkerCluster): L.DivIcon {
 }
 
 /** US-03 與 US-04 共用的 Leaflet 地圖，支援多筆標記與聚合。 */
-export function MapView({ markers, ariaLabel, emptyCenter }: MapViewProps) {
+export function MapView({ markers, ariaLabel, emptyCenter, onReady }: MapViewProps) {
   const mapId = useId();
   const mapRef = useRef<L.Map | null>(null);
   const clusterRef = useRef<L.MarkerClusterGroup | null>(null);
   const markerRecordsRef = useRef(new Map<string, { marker: L.Marker; signature: string }>());
   const userInteractedRef = useRef(false);
+  const onReadyRef = useRef(onReady);
+  useEffect(() => {
+    onReadyRef.current = onReady;
+  }, [onReady]);
 
   useEffect(() => {
-    const map = L.map(mapId, { scrollWheelZoom: false });
+    // 底圖是非同步載入的，maxZoom 要直接設在地圖上，markercluster 建立時就需要
+    const map = L.map(mapId, { scrollWheelZoom: false, maxZoom: 19 });
     const markerRecords = markerRecordsRef.current;
-    const { url: tileUrl, ...tileOptions } = tileLayerConfig;
-    L.tileLayer(tileUrl, tileOptions).addTo(map);
+    const removeBasemap = addBasemap(map);
     const cluster = L.markerClusterGroup({
       iconCreateFunction: createClusterIcon,
       showCoverageOnHover: false,
@@ -78,8 +82,11 @@ export function MapView({ markers, ariaLabel, emptyCenter }: MapViewProps) {
     map.getContainer().addEventListener('keydown', markUserInteraction);
     mapRef.current = map;
     clusterRef.current = cluster;
+    onReadyRef.current?.(map);
 
     return () => {
+      onReadyRef.current?.(null);
+      removeBasemap();
       map.getContainer().removeEventListener('pointerdown', markUserInteraction);
       map.getContainer().removeEventListener('wheel', markUserInteraction);
       map.getContainer().removeEventListener('keydown', markUserInteraction);
