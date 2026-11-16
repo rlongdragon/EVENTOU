@@ -4644,7 +4644,7 @@ window.addEventListener('message', (e) => {
 const TILT_NEAR = 150; // 相機距離小於這個值時效果全開
 const TILT_FAR = 280; // 大於這個值時完全關閉（約為看得清整棟行政大樓的距離）
 const TILT_FOCUS = 0.5; // 清楚帶的中心（畫面由下往上 0–1）
-const TILT_BAND = 0.1; // 清楚帶的半寬
+const TILT_BAND = 0.14; // 清楚帶的半寬
 const tiltBlurShader = {
   uniforms: {
     tDiffuse: { value: null },
@@ -4707,7 +4707,7 @@ composer.addPass(new OutputPass());
 function resizeComposer() {
   composer.setPixelRatio(renderer.getPixelRatio());
   composer.setSize(window.innerWidth, window.innerHeight);
-  const blurPx = 3; // 每輪取樣間距（像素），三輪疊加
+  const blurPx = 1.8; // 每輪取樣間距（像素），三輪疊加
   for (const pass of blurPasses) {
     pass.uniforms.dir.value.set(
       pass.axis === 'x' ? blurPx / window.innerWidth : 0,
