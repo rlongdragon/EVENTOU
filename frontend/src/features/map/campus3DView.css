@@ -1,0 +1,13 @@
+.campus-3d-view {
+  overflow: hidden;
+  border: 1px solid var(--color-line);
+  border-radius: 0.5rem;
+}
+
+.campus-3d-view iframe {
+  display: block;
+  width: 100%;
+  height: min(75vh, 720px);
+  min-height: 420px;
+  border: 0;
+}

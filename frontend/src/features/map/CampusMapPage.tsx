@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { formatEventTime } from '../events/eventTime';
+import { Campus3DView } from './Campus3DView';
 import { MapView, type MapMarker } from './MapView';
 import { categoryClassName, categoryGlyph } from './mapCategories';
 import { fetchMapEvents, type MapEventResult } from './api';
@@ -14,6 +15,13 @@ import {
 } from './dateRange';
 import './campusMapPage.css';
 
+type MapMode = '3d' | '2d';
+
+const MAP_MODES: { mode: MapMode; label: string }[] = [
+  { mode: '3d', label: '立體' },
+  { mode: '2d', label: '平面' },
+];
+
 interface LoadedMapEvents {
   key: string;
   result: MapEventResult;
@@ -23,6 +31,8 @@ export function CampusMapPage() {
   const [today] = useState(() => getTaipeiToday());
   const [range, setRange] = useState<DateRange>(() => rangeFromToday(today, DEFAULT_RANGE_DAYS));
   const [category, setCategory] = useState('');
+  // 預設立體（組內 11/16 決議），可切換回平面地圖
+  const [mode, setMode] = useState<MapMode>('3d');
   const [loaded, setLoaded] = useState<LoadedMapEvents | null>(null);
   const [error, setError] = useState<{ key: string; message: string } | null>(null);
   const { from, to } = range;
@@ -80,6 +90,18 @@ export function CampusMapPage() {
   return (
     <section className="campus-map-page">
       <h1>校園活動地圖</h1>
+      <div className="campus-map-modes" role="group" aria-label="地圖檢視">
+        {MAP_MODES.map((option) => (
+          <button
+            key={option.mode}
+            type="button"
+            aria-pressed={mode === option.mode}
+            onClick={() => setMode(option.mode)}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
       <div className="campus-map-filters">
         <label>
           開始日期
@@ -145,7 +167,15 @@ export function CampusMapPage() {
             : `地圖顯示 ${markers.length} 筆活動，點選標記可查看摘要與詳細頁連結。`}
         </p>
       )}
-      {result && (
+      {mode === '3d' && (
+        <>
+          <p className="campus-map-note">
+            立體模型目前顯示建物、樓層與常辦活動的場地；活動標記請切換到平面地圖查看。
+          </p>
+          <Campus3DView title="3D 校園模型" />
+        </>
+      )}
+      {mode === '2d' && result && (
         <>
           <ul className="map-legend" aria-label="圖例">
             {result.categories.map((option) => (
