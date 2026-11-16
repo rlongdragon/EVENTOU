@@ -12,7 +12,13 @@ import {
   retryFailedNotifications,
   runNotificationCycle,
 } from './subscriptions.notifier.js';
-import { subscribeCategory, unsubscribeCategory } from './subscriptions.service.js';
+import { setEmailNotifications } from '../calendars/calendars.mine.js';
+import {
+  followSource,
+  subscribeCategory,
+  unfollowSource,
+  unsubscribeCategory,
+} from './subscriptions.service.js';
 
 process.env.DATABASE_PATH = ':memory:';
 
@@ -86,6 +92,8 @@ beforeEach(() => {
   db.exec('DELETE FROM event_notifications');
   db.exec('DELETE FROM event_notification_dispatches');
   db.exec('DELETE FROM category_subscriptions');
+  db.exec('DELETE FROM source_follows');
+  db.exec('DELETE FROM user_calendar_settings');
   db.exec('DELETE FROM events');
 });
 
@@ -112,7 +120,7 @@ describe('新活動 Email 通知（US-08）', () => {
       assert.match(body, /14:00 – 16:00/);
       assert.match(body, /甲子廳/);
       assert.ok(body.includes(`${BASE_URL}/events/${event.id}`));
-      assert.ok(body.includes(`${BASE_URL}/subscriptions`), '需附取消訂閱連結');
+      assert.ok(body.includes(`${BASE_URL}/calendars`), '需附取消追蹤的連結');
     }
     const [record] = notifications();
     assert.equal(record.user_id, alice);
@@ -256,6 +264,59 @@ describe('新活動 Email 通知（US-08）', () => {
     assert.equal(result.skipped, 1);
     assert.equal(sent.length, 0);
     assert.equal(notifications()[0].status, 'skipped');
+  });
+
+  test('追蹤來源的使用者會收到該來源的新活動，信中說明是因為追蹤來源', async () => {
+    assert.equal(followSource(alice, 1), true);
+    createEvent('sports');
+    const { sent, mailer } = createFakeMailer();
+    const result = await runNotificationCycle(mailer, BASE_URL, now);
+    assert.equal(result.sent, 1);
+    assert.equal(sent[0].to, 'alice@example.com');
+    assert.match(sent[0].text, /你追蹤的來源「測試來源 1」有新活動/);
+  });
+
+  test('同時追蹤類別與來源時只寄一封，並以類別說明原因', async () => {
+    subscribeCategory(alice, 'lecture');
+    followSource(alice, 1);
+    createEvent('lecture');
+    const { sent, mailer } = createFakeMailer();
+    await runNotificationCycle(mailer, BASE_URL, now);
+    assert.equal(sent.length, 1);
+    assert.match(sent[0].text, /你追蹤的「講座」類別有新活動/);
+  });
+
+  test('關閉 Email 通知的使用者不會收到通知，重新開啟後只收到之後的新活動', async () => {
+    subscribeCategory(alice, 'lecture');
+    setEmailNotifications(getDb(), alice, false);
+    createEvent('lecture');
+    const { sent, mailer } = createFakeMailer();
+    await runNotificationCycle(mailer, BASE_URL, now);
+    assert.equal(sent.length, 0);
+    assert.equal(notifications().length, 0);
+
+    setEmailNotifications(getDb(), alice, true);
+    await runNotificationCycle(mailer, BASE_URL, now);
+    assert.equal(sent.length, 0, '舊活動不補寄');
+    createEvent('lecture');
+    await runNotificationCycle(mailer, BASE_URL, now);
+    assert.equal(sent.length, 1);
+  });
+
+  test('寄出前關閉通知或取消追蹤來源的待寄通知改為 skipped', async () => {
+    followSource(alice, 1);
+    followSource(bob, 1);
+    createEvent('sports');
+    const { sent, mailer } = createFakeMailer();
+    mailer.failing = true;
+    await runNotificationCycle(mailer, BASE_URL, now);
+
+    setEmailNotifications(getDb(), alice, false);
+    unfollowSource(bob, 1);
+    mailer.failing = false;
+    const result = await runNotificationCycle(mailer, BASE_URL, now);
+    assert.equal(result.skipped, 2);
+    assert.equal(sent.length, 0);
   });
 });
 

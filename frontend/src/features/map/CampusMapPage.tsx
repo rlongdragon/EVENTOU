@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { formatEventTime } from '../events/eventTime';
 import { MapView, type MapMarker } from './MapView';
-import { categoryClassName, categoryGlyph } from './mapCategories';
+import { categoryClassName, categoryGlyph } from '../../shared/eventCategories';
 import { fetchMapEvents, type MapEventResult } from './api';
 import {
   DATE_RANGE_PRESETS,

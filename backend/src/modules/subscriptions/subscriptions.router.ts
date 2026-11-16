@@ -1,21 +1,26 @@
 import type { Request, Response } from 'express';
 import { Router } from 'express';
+import { getDb } from '../../db/index.js';
 import { requireAuth } from '../auth/auth.middleware.js';
+import { getCalendarSettings, setEmailNotifications } from '../calendars/calendars.mine.js';
 import type { EventCategory } from '../events/events.types.js';
 import { EVENT_CATEGORIES, EVENT_CATEGORY_LABELS } from '../events/events.types.js';
 import {
+  followSource,
   isEventCategory,
+  listSourceFollows,
   listSubscribedCategories,
   subscribeCategory,
+  unfollowSource,
   unsubscribeCategory,
 } from './subscriptions.service.js';
 
-// 訂閱與通知
+// 追蹤與通知：追蹤的類別與來源決定「我的行事曆」的內容，也決定新活動 Email 通知的對象
 export const subscriptionsRouter = Router();
 
 subscriptionsRouter.use(requireAuth);
 
-/** 所有類別與目前使用者的訂閱狀態；訂閱按鈕與「我的訂閱」共用同一份回應。 */
+/** 所有類別、可追蹤的來源與目前使用者的追蹤狀態；每個異動 API 都回傳同一份，前端不必再查一次。 */
 function sendSubscriptions(res: Response, userId: number): void {
   const subscribed = new Set(listSubscribedCategories(userId));
   res.json({
@@ -24,6 +29,8 @@ function sendSubscriptions(res: Response, userId: number): void {
       label: EVENT_CATEGORY_LABELS[category],
       subscribed: subscribed.has(category),
     })),
+    sources: listSourceFollows(userId),
+    emailNotifications: getCalendarSettings(getDb(), userId).emailNotifications,
   });
 }
 
@@ -42,14 +49,67 @@ function parseCategory(req: Request, res: Response): EventCategory | undefined {
   return undefined;
 }
 
-// US-07 列出所有活動類別與自己的訂閱狀態（需登入）
+function sendSourceNotFound(res: Response): void {
+  res.status(404).json({ error: 'not_found', message: '找不到這個來源' });
+}
+
+function parseSourceId(req: Request): number | undefined {
+  const value = req.params.sourceId;
+  const id = Number(value);
+  return typeof value === 'string' && /^[1-9]\d*$/.test(value) && Number.isSafeInteger(id)
+    ? id
+    : undefined;
+}
+
+// 列出所有活動類別、可追蹤的來源、自己的追蹤狀態與 Email 通知開關（需登入）
 subscriptionsRouter.get('/', (req, res) => {
   const userId = currentUserId(req, res);
   if (userId === undefined) return;
   sendSubscriptions(res, userId);
 });
 
-// US-07 訂閱類別（需登入）；重複訂閱不會產生第二筆
+// Email 通知總開關：關閉後，追蹤的類別或來源有新活動也不寄信
+subscriptionsRouter.patch('/settings', (req, res) => {
+  const userId = currentUserId(req, res);
+  if (userId === undefined) return;
+  const enabled: unknown = (req.body as { emailNotifications?: unknown } | undefined)
+    ?.emailNotifications;
+  if (typeof enabled !== 'boolean') {
+    res
+      .status(400)
+      .json({ error: 'validation_error', message: 'emailNotifications 請使用 true 或 false' });
+    return;
+  }
+  setEmailNotifications(getDb(), userId, enabled);
+  sendSubscriptions(res, userId);
+});
+
+// 追蹤來源（需登入）；只能追蹤已核准的來源，重複追蹤不會產生第二筆
+subscriptionsRouter.put('/sources/:sourceId', (req, res) => {
+  const userId = currentUserId(req, res);
+  if (userId === undefined) return;
+  const sourceId = parseSourceId(req);
+  if (sourceId === undefined || !followSource(userId, sourceId)) {
+    sendSourceNotFound(res);
+    return;
+  }
+  sendSubscriptions(res, userId);
+});
+
+// 取消追蹤來源（需登入）；原本沒追蹤也視為成功
+subscriptionsRouter.delete('/sources/:sourceId', (req, res) => {
+  const userId = currentUserId(req, res);
+  if (userId === undefined) return;
+  const sourceId = parseSourceId(req);
+  if (sourceId === undefined) {
+    sendSourceNotFound(res);
+    return;
+  }
+  unfollowSource(userId, sourceId);
+  sendSubscriptions(res, userId);
+});
+
+// US-07 追蹤類別（需登入）；重複追蹤不會產生第二筆
 subscriptionsRouter.put('/:category', (req, res) => {
   const userId = currentUserId(req, res);
   if (userId === undefined) return;
@@ -59,7 +119,7 @@ subscriptionsRouter.put('/:category', (req, res) => {
   sendSubscriptions(res, userId);
 });
 
-// US-07 取消訂閱（需登入）；原本沒訂閱也視為成功
+// US-07 取消追蹤類別（需登入）；原本沒追蹤也視為成功
 subscriptionsRouter.delete('/:category', (req, res) => {
   const userId = currentUserId(req, res);
   if (userId === undefined) return;

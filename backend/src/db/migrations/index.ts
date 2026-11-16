@@ -364,4 +364,46 @@ export const migrations: Migration[] = [
       CREATE INDEX comment_reports_status ON comment_reports (status, comment_id);
     `,
   },
+  {
+    id: 14,
+    name: 'revamp_calendar_follows',
+    // #76 整併行事曆與訂閱：每位使用者只有一個「我的行事曆」，內容由追蹤決定。
+    // - source_follows：追蹤的來源（追蹤的類別沿用 category_subscriptions）。
+    // - calendar_event_marks：對單一活動的標記，added 為手動加入、hidden 為從行事曆隱藏（即使有追蹤到）。
+    // - user_calendar_settings：同步網址用的隨機 token（行事曆軟體無法登入，以不可猜的 token 取代登入）
+    //   與 Email 通知總開關；沒有資料列時視為通知開啟，第一次需要 token 時才建立。
+    // 多個個人行事曆與標籤條件（migration 11）不再使用，一併移除；舊的個人行事曆同步網址隨之失效。
+    up: `
+      CREATE TABLE source_follows (
+        user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+        source_id INTEGER NOT NULL REFERENCES sources (id) ON DELETE CASCADE,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY (user_id, source_id)
+      );
+
+      CREATE INDEX source_follows_source ON source_follows (source_id);
+
+      CREATE TABLE calendar_event_marks (
+        user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+        event_id INTEGER NOT NULL REFERENCES events (id) ON DELETE CASCADE,
+        state TEXT NOT NULL CHECK (state IN ('added', 'hidden')),
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY (user_id, event_id)
+      );
+
+      CREATE INDEX calendar_event_marks_event ON calendar_event_marks (event_id);
+
+      CREATE TABLE user_calendar_settings (
+        user_id INTEGER PRIMARY KEY REFERENCES users (id) ON DELETE CASCADE,
+        feed_token TEXT NOT NULL UNIQUE,
+        email_notifications INTEGER NOT NULL DEFAULT 1 CHECK (email_notifications IN (0, 1)),
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      DROP TABLE personal_calendar_tags;
+      DROP TABLE personal_calendar_categories;
+      DROP TABLE personal_calendars;
+    `,
+  },
 ];
