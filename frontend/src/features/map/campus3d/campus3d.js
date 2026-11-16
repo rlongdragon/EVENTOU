@@ -2,6 +2,10 @@ import './campus3d.css';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 // 平面圖（300dpi 點陣）像素座標 → 公尺（約 0.5 m/px，以操場跑道長度估算）
 const S = 0.5;
@@ -4634,6 +4638,97 @@ window.addEventListener('message', (e) => {
     setEvents(e.data.events.slice(0, 500));
 });
 
+// ---------- 移軸鏡頭效果 ----------
+// 拉近時模仿移軸攝影：畫面中間一條清楚的帶狀區域，上下逐漸散焦，模糊處再帶一點色散，讓校園看起來像模型。
+// 遠景或切換動畫時不套用，直接畫，避免多花效能。
+const TILT_NEAR = 150; // 相機距離小於這個值時效果全開
+const TILT_FAR = 280; // 大於這個值時完全關閉（約為看得清整棟行政大樓的距離）
+const TILT_FOCUS = 0.5; // 清楚帶的中心（畫面由下往上 0–1）
+const TILT_BAND = 0.1; // 清楚帶的半寬
+const tiltBlurShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    dir: { value: new THREE.Vector2() },
+    amount: { value: 0 },
+    focus: { value: TILT_FOCUS },
+    band: { value: TILT_BAND },
+  },
+  vertexShader: /* glsl */ `
+    varying vec2 vUv;
+    void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: /* glsl */ `
+    uniform sampler2D tDiffuse;
+    uniform vec2 dir;
+    uniform float amount, focus, band;
+    varying vec2 vUv;
+    void main() {
+      float k = amount * smoothstep(band, band + 0.32, abs(vUv.y - focus));
+      vec4 sum = texture2D(tDiffuse, vUv) * 0.2270270270;
+      vec2 o1 = dir * k * 1.3846153846, o2 = dir * k * 3.2307692308;
+      sum += (texture2D(tDiffuse, vUv + o1) + texture2D(tDiffuse, vUv - o1)) * 0.3162162162;
+      sum += (texture2D(tDiffuse, vUv + o2) + texture2D(tDiffuse, vUv - o2)) * 0.0702702703;
+      gl_FragColor = sum;
+    }`,
+};
+const chromaShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    amount: { value: 0 },
+    focus: { value: TILT_FOCUS },
+    band: { value: TILT_BAND },
+  },
+  vertexShader: tiltBlurShader.vertexShader,
+  fragmentShader: /* glsl */ `
+    uniform sampler2D tDiffuse;
+    uniform float amount, focus, band;
+    varying vec2 vUv;
+    void main() {
+      float k = amount * smoothstep(band, band + 0.4, abs(vUv.y - focus));
+      vec2 off = (vUv - vec2(0.5, focus)) * k * 0.006;
+      vec4 c = texture2D(tDiffuse, vUv);
+      gl_FragColor = vec4(texture2D(tDiffuse, vUv + off).r, c.g, texture2D(tDiffuse, vUv - off).b, c.a);
+    }`,
+};
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+// 可分離模糊（水平、垂直）做三輪，取樣間距小、不會出現重影
+const blurPasses = [];
+for (let i = 0; i < 3; i++) {
+  for (const axis of ['x', 'y']) {
+    const pass = new ShaderPass(tiltBlurShader);
+    pass.axis = axis;
+    blurPasses.push(pass);
+    composer.addPass(pass);
+  }
+}
+const chromaPass = new ShaderPass(chromaShader);
+composer.addPass(chromaPass);
+composer.addPass(new OutputPass());
+function resizeComposer() {
+  composer.setPixelRatio(renderer.getPixelRatio());
+  composer.setSize(window.innerWidth, window.innerHeight);
+  const blurPx = 3; // 每輪取樣間距（像素），三輪疊加
+  for (const pass of blurPasses) {
+    pass.uniforms.dir.value.set(
+      pass.axis === 'x' ? blurPx / window.innerWidth : 0,
+      pass.axis === 'y' ? blurPx / window.innerHeight : 0,
+    );
+  }
+}
+resizeComposer();
+window.addEventListener('resize', resizeComposer);
+function renderView() {
+  const dist = camera.position.distanceTo(controls.target);
+  const strength = 1 - THREE.MathUtils.smoothstep(dist, TILT_NEAR, TILT_FAR);
+  if (strength < 0.01) {
+    renderer.render(scene, camera);
+    return;
+  }
+  for (const pass of blurPasses) pass.uniforms.amount.value = strength;
+  chromaPass.uniforms.amount.value = strength;
+  composer.render();
+}
+
 const clock = new THREE.Clock();
 const ease = (t) => 1 - Math.pow(1 - t, 3);
 renderer.setAnimationLoop(() => {
@@ -4701,7 +4796,7 @@ renderer.setAnimationLoop(() => {
     renderer.shadowMap.needsUpdate = true;
     shadowDirty = false;
   }
-  renderer.render(scene, camera);
+  renderView();
   labelRenderer.render(scene, camera);
 });
 window.__ready = true;
