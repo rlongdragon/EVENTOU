@@ -1,0 +1,23 @@
+.map-mode-toggle {
+  display: inline-flex;
+  gap: 0.5rem;
+  margin-block-end: 0.5rem;
+}
+
+/* 切換後的說明文字（例如立體模型能定位到哪裡） */
+.map-mode-note {
+  margin: 0 0 0.5rem;
+  color: var(--color-muted);
+}
+
+.map-mode-toggle button {
+  min-height: 2.5rem;
+  min-width: 4rem;
+}
+
+/* 目前的地圖檢視：墨色實底，與日期快速選擇一致 */
+.map-mode-toggle button[aria-pressed='true'] {
+  border-color: var(--color-text);
+  background: var(--color-text);
+  color: var(--color-on-dark);
+}
