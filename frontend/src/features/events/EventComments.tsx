@@ -1,172 +1,198 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router';
 import { ApiError } from '../auth/api';
 import { useAuth } from '../auth/AuthContext';
-import { fetchEventComments, postEventComment, type EventComment } from './api';
+import {
+  deleteEventComment,
+  fetchEventComments,
+  postEventComment,
+  setCommentLike,
+  updateEventComment,
+  type CommentSort,
+  type EventComment,
+} from './api';
+import { CommentComposer } from './CommentComposer';
 import { CommentReportDialog } from './CommentReportDialog';
+import { CommentThread, type CommentActions } from './CommentThread';
+import {
+  addComment,
+  addReply,
+  countComments,
+  removeComment,
+  replaceComment,
+  updateComment,
+} from './commentList';
 import './eventComments.css';
 
-/** 與後端 COMMENT_MAX_LENGTH 相同 */
-const COMMENT_MAX_LENGTH = 1000;
-
-const errorStyle = { color: '#cf222e', margin: 0 } as const;
-
-const commentTimeFormat = new Intl.DateTimeFormat('zh-TW', {
-  timeZone: 'Asia/Taipei',
-  year: 'numeric',
-  month: 'numeric',
-  day: 'numeric',
-  hour: '2-digit',
-  minute: '2-digit',
-  hourCycle: 'h23',
-});
-
-/** 例：★★★★☆；留言者的評分顯示在名字旁，像地圖評論一樣 */
-function commentStars(rating: number): string {
-  return '★'.repeat(rating) + '☆'.repeat(5 - rating);
-}
+const SORT_OPTIONS: { value: CommentSort; label: string }[] = [
+  { value: 'oldest', label: '最舊' },
+  { value: 'newest', label: '最新' },
+  { value: 'top', label: '最多讚' },
+];
 
 type LoadState =
   | { status: 'loading' }
   | { status: 'error'; message: string }
   | { status: 'ok'; comments: EventComment[] };
 
-/** US-10 活動留言：訪客可看留言，登入後才能發表。 */
+function errorMessage(error: unknown, fallback: string): string {
+  if (error instanceof ApiError) {
+    return error.status === 401 ? '登入已過期，請重新登入' : error.message;
+  }
+  return fallback;
+}
+
+/**
+ * US-10 活動留言：訪客可看留言與讚數，登入後可留言、回覆、按讚與檢舉；
+ * #79 留言者可編輯、刪除自己的留言，管理員可刪除任何留言。
+ */
 export function EventComments({ eventId }: { eventId: string }) {
   const { user, loading: authLoading } = useAuth();
   const location = useLocation();
-  // 記錄是哪個 eventId 的結果，切換活動時直接視為載入中
-  const [result, setResult] = useState<{ eventId: string; state: LoadState } | null>(null);
-  const [content, setContent] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  // 正在檢舉的留言（#65）
+  const [sort, setSort] = useState<CommentSort>('oldest');
+  // 記錄是哪個活動、排序與登入者的結果；條件改變時直接視為載入中
+  const queryKey = `${eventId}|${sort}|${user?.id ?? ''}`;
+  const [result, setResult] = useState<{ key: string; state: LoadState } | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
   const [reporting, setReporting] = useState<EventComment | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (authLoading) return;
     const controller = new AbortController();
-    fetchEventComments(eventId, controller.signal)
-      .then((comments) => setResult({ eventId, state: { status: 'ok', comments } }))
+    fetchEventComments(eventId, sort, controller.signal)
+      .then(({ comments }) => setResult({ key: queryKey, state: { status: 'ok', comments } }))
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
         const message = error instanceof ApiError ? error.message : String(error);
-        setResult({ eventId, state: { status: 'error', message } });
+        setResult({ key: queryKey, state: { status: 'error', message } });
       });
     return () => controller.abort();
-  }, [eventId]);
+  }, [eventId, sort, queryKey, authLoading]);
 
-  const state: LoadState = result?.eventId === eventId ? result.state : { status: 'loading' };
+  const state: LoadState = result?.key === queryKey ? result.state : { status: 'loading' };
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const trimmed = content.trim();
-    if (!trimmed) {
-      setSubmitError('請輸入留言內容');
-      return;
-    }
-    setSubmitError(null);
-    setSubmitting(true);
-    try {
-      const comment = await postEventComment(eventId, trimmed);
-      setResult((previous) =>
-        previous?.eventId === eventId && previous.state.status === 'ok'
-          ? { eventId, state: { status: 'ok', comments: [...previous.state.comments, comment] } }
-          : { eventId, state: { status: 'ok', comments: [comment] } },
-      );
-      setContent('');
-    } catch (error) {
-      if (error instanceof ApiError) {
-        setSubmitError(
-          error.status === 401 ? '登入已過期，請重新登入' : (error.fields.content ?? error.message),
-        );
-      } else {
-        setSubmitError('留言失敗，請稍後再試');
-      }
-    } finally {
-      setSubmitting(false);
-    }
+  /** 對已載入的留言串套用本地更新 */
+  function updateList(change: (comments: EventComment[]) => EventComment[]) {
+    setResult((previous) =>
+      previous?.key === queryKey && previous.state.status === 'ok'
+        ? { key: queryKey, state: { status: 'ok', comments: change(previous.state.comments) } }
+        : previous,
+    );
   }
 
   const loginUrl = `/login?redirect=${encodeURIComponent(location.pathname + location.search)}`;
 
+  const actions: CommentActions = {
+    user,
+    loginUrl,
+    editingId,
+    setEditingId,
+    async onEdit(comment, content) {
+      const updated = await updateEventComment(eventId, comment.id, content);
+      updateList((comments) => replaceComment(comments, updated));
+      setEditingId(null);
+    },
+    onDelete(comment) {
+      const own = comment.author?.id === user?.id;
+      const message = own
+        ? '確定要刪除這則留言嗎？刪除後無法復原。'
+        : `確定要以管理員身分刪除 ${comment.author?.displayName ?? ''} 的留言嗎？`;
+      if (!window.confirm(message)) return;
+      setActionError(null);
+      deleteEventComment(eventId, comment.id)
+        .then(() => updateList((comments) => removeComment(comments, comment.id)))
+        .catch((error: unknown) => setActionError(errorMessage(error, '刪除失敗，請稍後再試')));
+    },
+    onLike(comment) {
+      const liked = !comment.likedByMe;
+      setActionError(null);
+      // 先更新畫面，失敗時還原
+      const optimistic = (item: EventComment) => ({
+        ...item,
+        likedByMe: liked,
+        likeCount: Math.max(0, item.likeCount + (liked ? 1 : -1)),
+      });
+      updateList((comments) => updateComment(comments, comment.id, optimistic));
+      setCommentLike(eventId, comment.id, liked)
+        .then((like) =>
+          updateList((comments) =>
+            updateComment(comments, comment.id, (item) => ({ ...item, ...like })),
+          ),
+        )
+        .catch((error: unknown) => {
+          updateList((comments) =>
+            updateComment(comments, comment.id, (item) => ({
+              ...item,
+              likedByMe: comment.likedByMe,
+              likeCount: comment.likeCount,
+            })),
+          );
+          setActionError(errorMessage(error, '按讚失敗，請稍後再試'));
+        });
+    },
+    onReport: setReporting,
+    async onReply(parentId, content) {
+      const reply = await postEventComment(eventId, content, parentId);
+      updateList((comments) => addReply(comments, reply));
+    },
+  };
+
+  async function handleNewComment(content: string) {
+    const comment = await postEventComment(eventId, content);
+    updateList((comments) => addComment(comments, comment, sort));
+  }
+
   return (
-    <section aria-labelledby="event-comments-heading">
-      <h2 id="event-comments-heading">
-        留言{state.status === 'ok' ? `（${state.comments.length}）` : ''}
-      </h2>
+    <section className="event-comments" aria-labelledby="event-comments-heading">
+      <div className="comment-section-head">
+        <h2 id="event-comments-heading">
+          留言{state.status === 'ok' ? `（${countComments(state.comments)}）` : ''}
+        </h2>
+        <label className="comment-sort">
+          排序
+          <select value={sort} onChange={(event) => setSort(event.target.value as CommentSort)}>
+            {SORT_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      {authLoading ? null : user ? (
+        <CommentComposer
+          label={`以 ${user.displayName} 身分留言`}
+          submitLabel="送出留言"
+          onSubmit={handleNewComment}
+        />
+      ) : (
+        <p className="comment-login">
+          <Link to={loginUrl}>登入</Link>後即可留言、回覆與按讚。
+        </p>
+      )}
+
+      {actionError && (
+        <p role="alert" className="comment-error">
+          {actionError}
+        </p>
+      )}
 
       {state.status === 'loading' && <p>載入留言中…</p>}
       {state.status === 'error' && <p role="alert">無法載入留言：{state.message}</p>}
       {state.status === 'ok' &&
         (state.comments.length === 0 ? (
-          <p>目前還沒有留言。</p>
+          <p className="comment-empty">目前還沒有留言，來當第一個留言的人吧。</p>
         ) : (
           <ol className="comment-list">
             {state.comments.map((comment) => (
-              <li key={comment.id} className="comment-item">
-                <div className="comment-head">
-                  <strong>{comment.author.displayName}</strong>
-                  {comment.rating !== null && (
-                    <span
-                      className="comment-rating"
-                      role="img"
-                      aria-label={`評分 ${comment.rating} / 5`}
-                    >
-                      {commentStars(comment.rating)}
-                    </span>
-                  )}
-                  <time dateTime={comment.createdAt} className="comment-time">
-                    {commentTimeFormat.format(new Date(comment.createdAt))}
-                  </time>
-                  {/* 登入後才能檢舉，且不能檢舉自己的留言 */}
-                  {user && user.id !== comment.author.id && (
-                    <button
-                      type="button"
-                      className="comment-report-button"
-                      onClick={() => setReporting(comment)}
-                    >
-                      檢舉
-                    </button>
-                  )}
-                </div>
-                <p className="comment-content">{comment.content}</p>
-              </li>
+              <CommentThread key={comment.id} comment={comment} actions={actions} />
             ))}
           </ol>
         ))}
 
-      {authLoading ? null : user ? (
-        <form
-          onSubmit={handleSubmit}
-          style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}
-        >
-          <label htmlFor="event-comment-content">以 {user.displayName} 身分留言</label>
-          <textarea
-            id="event-comment-content"
-            value={content}
-            onChange={(event) => setContent(event.target.value)}
-            maxLength={COMMENT_MAX_LENGTH}
-            rows={3}
-            aria-invalid={submitError ? true : undefined}
-            aria-describedby={submitError ? 'event-comment-error' : undefined}
-          />
-          {submitError && (
-            <p id="event-comment-error" role="alert" style={errorStyle}>
-              {submitError}
-            </p>
-          )}
-          <div>
-            <button type="submit" disabled={submitting || !content.trim()}>
-              {submitting ? '送出中…' : '送出留言'}
-            </button>
-          </div>
-        </form>
-      ) : (
-        <p>
-          <Link to={loginUrl}>登入</Link>後即可留言。
-        </p>
-      )}
-      {reporting && (
+      {reporting?.author && (
         <CommentReportDialog
           eventId={eventId}
           commentId={reporting.id}
