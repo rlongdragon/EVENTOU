@@ -77,15 +77,34 @@ export async function searchEvents(
   return (await response.json()) as EventSearchResult;
 }
 
-/** 活動留言（US-10），對應 backend/src/modules/events/events.comments.ts 的 EventComment */
+/** 活動留言（US-10、#79），對應 backend/src/modules/events/events.comments.ts 的 EventComment */
 export interface EventComment {
   id: number;
-  content: string;
+  /** 回覆的上層留言；頂層留言為 null */
+  parentId: number | null;
+  /** 已刪除或隱藏的佔位為 null */
+  content: string | null;
   /** Asia/Taipei ISO 8601 */
   createdAt: string;
-  author: { id: number; displayName: string };
+  editedAt: string | null;
+  /** 已刪除或隱藏的佔位為 null */
+  author: { id: number; displayName: string } | null;
   /** 留言者目前對這個活動的評分（1–5），未評分為 null */
   rating: number | null;
+  likeCount: number;
+  likedByMe: boolean;
+  /** 已被刪除或隱藏，只為了保留回覆的位置 */
+  removed: boolean;
+  /** 頂層留言的回覆，由舊到新 */
+  replies: EventComment[];
+}
+
+export type CommentSort = 'oldest' | 'newest' | 'top';
+
+export interface EventCommentList {
+  comments: EventComment[];
+  /** 對外顯示的留言數（含回覆） */
+  total: number;
 }
 
 async function readJson<T>(response: Response): Promise<T> {
@@ -102,23 +121,63 @@ async function readJson<T>(response: Response): Promise<T> {
   return body as T;
 }
 
-/** 取得活動留言，依留言時間由舊到新排序（未登入可用）。 */
+const commentsPath = (eventId: string) => `/api/events/${encodeURIComponent(eventId)}/comments`;
+
+const jsonInit = (method: string, body: unknown): RequestInit => ({
+  method,
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(body),
+});
+
+/** 取得活動留言（未登入可用）；頂層依 sort 排序，回覆附在各留言的 replies。 */
 export async function fetchEventComments(
   eventId: string,
+  sort: CommentSort,
   signal?: AbortSignal,
-): Promise<EventComment[]> {
-  const response = await fetch(`/api/events/${encodeURIComponent(eventId)}/comments`, { signal });
-  return (await readJson<{ comments: EventComment[] }>(response)).comments;
+): Promise<EventCommentList> {
+  const response = await fetch(`${commentsPath(eventId)}?sort=${sort}`, { signal });
+  return readJson<EventCommentList>(response);
 }
 
-/** 新增留言（需登入），空白留言由後端回傳 validation_error。 */
-export async function postEventComment(eventId: string, content: string): Promise<EventComment> {
-  const response = await fetch(`/api/events/${encodeURIComponent(eventId)}/comments`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content }),
-  });
+/** 新增留言或回覆（需登入），空白留言由後端回傳 validation_error。 */
+export async function postEventComment(
+  eventId: string,
+  content: string,
+  parentId: number | null = null,
+): Promise<EventComment> {
+  const response = await fetch(commentsPath(eventId), jsonInit('POST', { content, parentId }));
   return (await readJson<{ comment: EventComment }>(response)).comment;
+}
+
+/** 編輯自己的留言。 */
+export async function updateEventComment(
+  eventId: string,
+  commentId: number,
+  content: string,
+): Promise<EventComment> {
+  const response = await fetch(
+    `${commentsPath(eventId)}/${commentId}`,
+    jsonInit('PATCH', { content }),
+  );
+  return (await readJson<{ comment: EventComment }>(response)).comment;
+}
+
+/** 刪除留言：自己的留言，或管理員刪除任何留言。 */
+export async function deleteEventComment(eventId: string, commentId: number): Promise<void> {
+  const response = await fetch(`${commentsPath(eventId)}/${commentId}`, { method: 'DELETE' });
+  await readJson<undefined>(response);
+}
+
+/** 按讚或取消讚，回傳最新讚數。 */
+export async function setCommentLike(
+  eventId: string,
+  commentId: number,
+  liked: boolean,
+): Promise<{ likeCount: number; likedByMe: boolean }> {
+  const response = await fetch(`${commentsPath(eventId)}/${commentId}/like`, {
+    method: liked ? 'PUT' : 'DELETE',
+  });
+  return readJson<{ likeCount: number; likedByMe: boolean }>(response);
 }
 
 /** #65 留言檢舉原因，對應 backend/src/modules/events/events.reports.ts 的 REPORT_REASONS */

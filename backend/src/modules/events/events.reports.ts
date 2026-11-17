@@ -18,7 +18,7 @@ export type CreateReportResult =
   { ok: true } | { ok: false; error: 'comment_not_found' | 'own_comment' | 'already_reported' };
 
 /**
- * 檢舉留言；留言須屬於該活動且未被隱藏，不能檢舉自己的留言，同一人對同一則只能檢舉一次。
+ * 檢舉留言；留言須屬於該活動且未被隱藏或刪除，不能檢舉自己的留言，同一人對同一則只能檢舉一次。
  * reason 與 note 須先驗證。
  */
 export function createCommentReport(
@@ -34,7 +34,8 @@ export function createCommentReport(
 ): CreateReportResult {
   const comment = db
     .prepare(
-      'SELECT user_id FROM event_comments WHERE id = ? AND event_id = ? AND hidden_at IS NULL',
+      `SELECT user_id FROM event_comments
+      WHERE id = ? AND event_id = ? AND hidden_at IS NULL AND deleted_at IS NULL`,
     )
     .get(input.commentId, input.eventId);
   if (!comment) return { ok: false, error: 'comment_not_found' };
@@ -69,7 +70,7 @@ export interface ReportedComment {
   firstReportedAt: string;
 }
 
-/** 列出有待審檢舉的留言，依最早被檢舉的時間排序。 */
+/** 列出有待審檢舉的留言，依最早被檢舉的時間排序；留言者已自行刪除的留言（#79）不列出。 */
 export function listPendingReports(db: DatabaseSync): ReportedComment[] {
   const rows = db
     .prepare(
@@ -80,7 +81,7 @@ export function listPendingReports(db: DatabaseSync): ReportedComment[] {
       JOIN event_comments c ON c.id = r.comment_id
       JOIN users u ON u.id = c.user_id
       JOIN events e ON e.id = c.event_id
-      WHERE r.status = 'pending'
+      WHERE r.status = 'pending' AND c.deleted_at IS NULL
       ORDER BY r.created_at, r.id`,
     )
     .all();
