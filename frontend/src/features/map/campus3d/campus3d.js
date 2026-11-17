@@ -4544,7 +4544,15 @@ function surfaceY(x, z) {
   return hit ? hit.point.y : 0;
 }
 const EVENT_CATEGORIES = new Set(['lecture', 'workshop', 'exhibition', 'sports', 'welfare']);
-const safeHref = (href) => (typeof href === 'string' && /^\/(?![/\\])/.test(href) ? href : null);
+// 只接受站內路徑：交給瀏覽器解析後比對 origin，tab、反斜線等變形也擋得住
+const safeHref = (href) => {
+  if (typeof href !== 'string' || !href.startsWith('/')) return null;
+  try {
+    return new URL(href, location.origin).origin === location.origin ? href : null;
+  } catch {
+    return null;
+  }
+};
 const eventsCard = document.createElement('div');
 eventsCard.id = 'eventsCard';
 eventsCard.className = 'card';
