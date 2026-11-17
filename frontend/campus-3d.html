@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>海大 3D 校園</title>
+  </head>
+  <body>
+    <div id="stage"></div>
+    <div id="labels"></div>
+    <header>
+      <div class="card" id="panel">
+        <div class="title-row">
+          <h1>海大基隆主校區・3D 校園</h1>
+          <button id="fold" aria-expanded="true">收合</button>
+        </div>
+        <p class="sub">依校園平面圖配置；全校建物白模，橘色為常辦活動的場地</p>
+        <div class="chips" id="chips"></div>
+      </div>
+      <div class="card" style="display: flex; gap: 6px">
+        <button id="reset">回到全景</button>
+        <button id="toggleLabels">顯示全部名稱</button>
+        <button id="editToggle">編輯模式</button>
+      </div>
+    </header>
+    <div id="info" class="card">
+      <span class="badge" id="infoBadge">活動常用場地</span>
+      <h2 id="infoName"></h2>
+      <p class="meta" id="infoMeta"></p>
+      <div class="row">
+        <button class="primary" id="explode">展開樓層</button>
+        <button id="close">關閉</button>
+      </div>
+      <p id="floorNote"></p>
+    </div>
+    <div id="editBar" class="card">
+      <div class="title-row">
+        <strong>編輯模式</strong><span id="editSel">點一棟建物或道路上的橘點</span>
+      </div>
+      <p class="sub">
+        拖曳建物移動・Q／E 或下方按鈕旋轉（按住 Shift 微調）・拖曳橘點改道路，雙擊道路加點、選點按
+        Delete 刪點・Ctrl+Z
+        復原。「＋定位方塊」放一個可拉高、拉寬的方塊，取好名字標出那是什麼；選取後按「刪除」可刪掉建物、方塊或整條路。調整會存在這台瀏覽器，按「匯出」複製座標文字。
+      </p>
+      <div class="row">
+        <button id="rotL">↺ 旋轉</button><button id="rotR">旋轉 ↻</button>
+        <button id="editUndo">復原</button><button id="editResetOne">還原此項</button
+        ><button id="editResetAll">全部還原</button>
+        <button class="primary" id="editExport">匯出</button><button id="editDone">完成</button>
+      </div>
+      <div class="row">
+        <button id="addBox">＋定位方塊</button><button id="addRoad">＋道路</button
+        ><button id="editDelete">刪除</button>
+      </div>
+      <div class="row" id="boxPanel" style="display: none">
+        <label class="boxf"
+          >名稱 <input id="boxName" type="text" placeholder="例如：涼亭、變電箱"
+        /></label>
+        <label class="boxf">寬 <input id="boxW" type="number" min="1" step="1" /></label>
+        <label class="boxf">深 <input id="boxD" type="number" min="1" step="1" /></label>
+        <label class="boxf">高 <input id="boxH" type="number" min="0.5" step="0.5" /></label>
+        <span class="sub">公尺。拖藍點拉高、拖綠點拉寬深</span>
+      </div>
+      <textarea id="editOut" readonly></textarea>
+    </div>
+    <div id="hint" class="card">
+      拖曳旋轉・滾輪往游標處縮放・右鍵、方向鍵或 WASD 移動・點建物看名稱
+    </div>
+    <script type="module" src="/src/features/map/campus3d/campus3d.js"></script>
+  </body>
+</html>
