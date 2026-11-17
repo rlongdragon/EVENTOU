@@ -11,3 +11,9 @@
   min-height: 420px;
   border: 0;
 }
+
+/* 活動頁的地點地圖：高度與平面地圖相近 */
+.campus-3d-view--compact iframe {
+  height: min(60vh, 480px);
+  min-height: 360px;
+}

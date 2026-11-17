@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { formatEventTime } from '../events/eventTime';
-import { CampusMapStage, type MapMode } from './CampusMapStage';
+import { CampusMapStage } from './CampusMapStage';
+import { MapModeToggle, type MapMode } from './MapModeToggle';
 import type { MapMarker } from './MapView';
 import { categoryClassName, categoryGlyph } from '../../shared/eventCategories';
 import { fetchMapEvents, type MapEventResult } from './api';
@@ -14,11 +15,6 @@ import {
   type DateRange,
 } from './dateRange';
 import './campusMapPage.css';
-
-const MAP_MODES: { mode: MapMode; label: string }[] = [
-  { mode: '3d', label: '立體' },
-  { mode: '2d', label: '平面' },
-];
 
 interface LoadedMapEvents {
   key: string;
@@ -88,18 +84,7 @@ export function CampusMapPage() {
   return (
     <section className="campus-map-page">
       <h1>校園活動地圖</h1>
-      <div className="campus-map-modes" role="group" aria-label="地圖檢視">
-        {MAP_MODES.map((option) => (
-          <button
-            key={option.mode}
-            type="button"
-            aria-pressed={mode === option.mode}
-            onClick={() => setMode(option.mode)}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
+      <MapModeToggle mode={mode} onChange={setMode} />
       <div className="campus-map-filters">
         <label>
           開始日期

@@ -5,7 +5,7 @@ import { MapView, type MapMarker } from './MapView';
 import { categoryGlyph } from '../../shared/eventCategories';
 import './campusMapStage.css';
 
-export type MapMode = '3d' | '2d';
+import type { MapMode } from './MapModeToggle';
 
 interface CampusMapStageProps {
   mode: MapMode;
