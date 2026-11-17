@@ -20,6 +20,9 @@ export interface NotificationEvent {
   originalUrl: string;
 }
 
+/** 收到通知的原因：追蹤了活動的類別，或追蹤了活動的來源。 */
+export type NotificationReason = { kind: 'category' } | { kind: 'source'; sourceName: string };
+
 const TIME_ZONE = 'Asia/Taipei';
 const WEEKDAYS = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
 // 只用 Intl 取出台北時間的數字，文字自己組：Intl 直接輸出的字串會隨 Node 內建的 ICU 版本不同
@@ -77,23 +80,26 @@ function escapeHtml(value: string): string {
 
 /**
  * 產生新活動通知信。baseUrl 為網站對外的位址（不含結尾斜線），
- * 用來組出活動頁與管理訂閱（取消訂閱）的連結。
+ * 用來組出活動頁與行事曆頁（取消追蹤、關閉通知）的連結。
  */
 export function buildNewEventEmail(
   recipient: { email: string; displayName: string },
   event: NotificationEvent,
   baseUrl: string,
+  reason: NotificationReason = { kind: 'category' },
 ): EmailMessage {
   const eventUrl = `${baseUrl}/events/${event.id}`;
-  const subscriptionsUrl = `${baseUrl}/subscriptions`;
+  const subscriptionsUrl = `${baseUrl}/calendars`;
   const time = formatEventTime(event);
   const location = event.location ?? '未提供';
-  const unsubscribe = `你會收到這封信，是因為你訂閱了「${event.categoryLabel}」類別。不想再收到通知時，請到訂閱頁取消訂閱`;
+  const followed =
+    reason.kind === 'source' ? `來源「${reason.sourceName}」` : `「${event.categoryLabel}」類別`;
+  const unsubscribe = `你會收到這封信，是因為你追蹤了${followed}。不想再收到通知時，請到行事曆頁取消追蹤或關閉 Email 通知`;
 
   const text = [
     `${recipient.displayName} 你好，`,
     '',
-    `你訂閱的「${event.categoryLabel}」類別有新活動：`,
+    `你追蹤的${followed}有新活動：`,
     '',
     `活動：${event.title}`,
     `時間：${time}`,
@@ -106,7 +112,7 @@ export function buildNewEventEmail(
 
   const html = [
     `<p>${escapeHtml(recipient.displayName)} 你好，</p>`,
-    `<p>你訂閱的「${escapeHtml(event.categoryLabel)}」類別有新活動：</p>`,
+    `<p>你追蹤的${escapeHtml(followed)}有新活動：</p>`,
     `<h2><a href="${escapeHtml(eventUrl)}">${escapeHtml(event.title)}</a></h2>`,
     '<ul>',
     `<li>時間：${escapeHtml(time)}</li>`,

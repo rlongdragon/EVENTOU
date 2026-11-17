@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router';
+import { EventCalendarSection } from '../calendars/EventCalendarSection';
 import type { EventDetail } from './api';
 import { fetchEvent } from './api';
 import { DEFAULT_PHOTOS } from './defaultPhotos';
@@ -88,6 +89,7 @@ export function EventDetailPage() {
         <h2>活動說明</h2>
         <p className="event-description">{event.description || '未提供'}</p>
       </section>
+      <EventCalendarSection event={event} />
       <section>
         <h2>來源</h2>
         {/* US-20：跨來源的重複公告已合併成這一筆時，列出所有來源 */}

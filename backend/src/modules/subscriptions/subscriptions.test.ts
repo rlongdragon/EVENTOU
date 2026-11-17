@@ -5,7 +5,12 @@ import { after, before, describe, test } from 'node:test';
 import { createApp } from '../../app.js';
 import { closeDb, getDb, migrate } from '../../db/index.js';
 import { EVENT_CATEGORIES } from '../events/events.types.js';
-import { listSubscribersByCategory } from './subscriptions.service.js';
+import type { EventCategory } from '../events/events.types.js';
+import { listEventSubscribers } from './subscriptions.service.js';
+
+/** 只因為追蹤類別而成為通知對象的使用者（sourceId 0 不對應任何來源） */
+const listSubscribersByCategory = (category: EventCategory) =>
+  listEventSubscribers({ category, sourceId: 0 });
 
 process.env.DATABASE_PATH = ':memory:';
 
@@ -30,15 +35,35 @@ after(() => {
   closeDb();
 });
 
-async function request(method: string, path: string, options: { cookie?: string } = {}) {
+interface SourceFollow {
+  id: number;
+  name: string;
+  type: string;
+  followed: boolean;
+}
+
+async function request(
+  method: string,
+  path: string,
+  options: { cookie?: string; body?: unknown } = {},
+) {
   const response = await fetch(`${baseUrl}${path}`, {
     method,
-    headers: options.cookie ? { Cookie: options.cookie } : {},
+    headers: {
+      ...(options.cookie ? { Cookie: options.cookie } : {}),
+      ...(options.body === undefined ? {} : { 'Content-Type': 'application/json' }),
+    },
+    body: options.body === undefined ? undefined : JSON.stringify(options.body),
   });
   const text = await response.text();
   return {
     status: response.status,
-    body: (text ? JSON.parse(text) : {}) as { categories?: CategorySubscription[]; error?: string },
+    body: (text ? JSON.parse(text) : {}) as {
+      categories?: CategorySubscription[];
+      sources?: SourceFollow[];
+      emailNotifications?: boolean;
+      error?: string;
+    },
   };
 }
 
@@ -158,5 +183,131 @@ describe('訂閱活動類別（US-07）', () => {
     await request('PUT', '/api/subscriptions/lecture', { cookie });
     getDb().prepare('DELETE FROM users WHERE id = ?').run(id);
     assert.equal(countRows(id), 0);
+  });
+});
+
+describe('追蹤來源與 Email 通知開關（#76）', () => {
+  /** 建立一個已核准、一個待審核的來源，回傳兩者的 id */
+  function seedSourcePair(ownerId: number, label: string): { approved: number; pending: number } {
+    const insert = getDb().prepare(
+      `INSERT INTO sources (name, url, type, review_status, submitted_by)
+      VALUES (?, ?, 'club_site', ?, ?) RETURNING id`,
+    );
+    const approved = insert.get(
+      `${label}社團`,
+      `https://example.com/${label}/a`,
+      'approved',
+      ownerId,
+    );
+    const pending = insert.get(
+      `${label}待審`,
+      `https://example.com/${label}/p`,
+      'pending',
+      ownerId,
+    );
+    return { approved: Number(approved?.id), pending: Number(pending?.id) };
+  }
+
+  function followedSources(sources: SourceFollow[] | undefined): number[] {
+    assert.ok(sources);
+    return sources.filter((source) => source.followed).map((source) => source.id);
+  }
+
+  test('訪客無法追蹤來源或變更通知設定', async () => {
+    assert.equal((await request('PUT', '/api/subscriptions/sources/1')).status, 401);
+    assert.equal((await request('DELETE', '/api/subscriptions/sources/1')).status, 401);
+    assert.equal(
+      (
+        await request('PATCH', '/api/subscriptions/settings', {
+          body: { emailNotifications: false },
+        })
+      ).status,
+      401,
+    );
+  });
+
+  test('只列出已核准的來源，可追蹤與取消追蹤，重複操作結果相同', async () => {
+    const { cookie, id } = await registerUser('follow-source@example.com');
+    const sources = seedSourcePair(id, 'follow');
+
+    const initial = await request('GET', '/api/subscriptions', { cookie });
+    const listed = initial.body.sources?.map((source) => source.id) ?? [];
+    assert.ok(listed.includes(sources.approved));
+    assert.ok(!listed.includes(sources.pending));
+    assert.deepEqual(followedSources(initial.body.sources), []);
+    assert.equal(initial.body.emailNotifications, true);
+
+    const path = `/api/subscriptions/sources/${sources.approved}`;
+    assert.equal((await request('PUT', path, { cookie })).status, 200);
+    const again = await request('PUT', path, { cookie });
+    assert.equal(again.status, 200);
+    assert.deepEqual(followedSources(again.body.sources), [sources.approved]);
+    assert.equal(
+      getDb().prepare('SELECT count(*) AS n FROM source_follows WHERE user_id = ?').get(id)?.n,
+      1,
+    );
+
+    const cancelled = await request('DELETE', path, { cookie });
+    assert.equal(cancelled.status, 200);
+    assert.deepEqual(followedSources(cancelled.body.sources), []);
+    assert.equal((await request('DELETE', path, { cookie })).status, 200);
+  });
+
+  test('未核准、不存在或格式錯誤的來源回傳 404', async () => {
+    const { cookie, id } = await registerUser('follow-invalid@example.com');
+    const sources = seedSourcePair(id, 'invalid');
+    for (const sourceId of [String(sources.pending), '99999', 'abc', '0']) {
+      const response = await request('PUT', `/api/subscriptions/sources/${sourceId}`, { cookie });
+      assert.equal(response.status, 404, sourceId);
+    }
+    assert.equal(
+      getDb().prepare('SELECT count(*) AS n FROM source_follows WHERE user_id = ?').get(id)?.n,
+      0,
+    );
+  });
+
+  test('追蹤來源的使用者是該來源新活動的通知對象；關閉 Email 通知後不是', async () => {
+    const { cookie, id } = await registerUser('follow-notify@example.com');
+    const sources = seedSourcePair(id, 'notify');
+    await request('PUT', `/api/subscriptions/sources/${sources.approved}`, { cookie });
+    const recipients = () =>
+      listEventSubscribers({ category: 'sports', sourceId: sources.approved }).map(
+        (subscriber) => subscriber.userId,
+      );
+    assert.ok(recipients().includes(id));
+
+    const off = await request('PATCH', '/api/subscriptions/settings', {
+      cookie,
+      body: { emailNotifications: false },
+    });
+    assert.equal(off.status, 200);
+    assert.equal(off.body.emailNotifications, false);
+    assert.ok(!recipients().includes(id));
+    // 關閉通知不影響追蹤狀態
+    assert.deepEqual(followedSources(off.body.sources), [sources.approved]);
+
+    const on = await request('PATCH', '/api/subscriptions/settings', {
+      cookie,
+      body: { emailNotifications: true },
+    });
+    assert.equal(on.body.emailNotifications, true);
+    assert.ok(recipients().includes(id));
+  });
+
+  test('同時追蹤類別與來源的使用者只會出現一次', async () => {
+    const { cookie, id } = await registerUser('follow-both@example.com');
+    const sources = seedSourcePair(id, 'both');
+    await request('PUT', `/api/subscriptions/sources/${sources.approved}`, { cookie });
+    await request('PUT', '/api/subscriptions/welfare', { cookie });
+    const recipients = listEventSubscribers({ category: 'welfare', sourceId: sources.approved });
+    assert.equal(recipients.filter((subscriber) => subscriber.userId === id).length, 1);
+  });
+
+  test('通知設定的值不是布林時回傳 400', async () => {
+    const { cookie } = await registerUser('settings-invalid@example.com');
+    for (const body of [{}, { emailNotifications: 'no' }, { emailNotifications: 0 }]) {
+      const response = await request('PATCH', '/api/subscriptions/settings', { cookie, body });
+      assert.equal(response.status, 400);
+    }
   });
 });

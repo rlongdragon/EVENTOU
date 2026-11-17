@@ -59,8 +59,8 @@ frontend/src/
 │   ├── auth/           # US-06
 │   ├── events/         # US-01、US-02、US-03、US-10、US-11、US-12
 │   ├── map/            # US-04
-│   ├── subscriptions/  # US-07、US-08
-│   ├── calendars/      # US-05、US-09
+│   ├── subscriptions/  # 追蹤 API（行事曆頁使用）
+│   ├── calendars/      # 行事曆頁：月曆、追蹤、同步（US-05、US-07、US-09，#76）
 │   └── sources/        # US-13 ~ US-16
 └── shared/         # 跨功能共用元件與 API 呼叫
 
@@ -74,7 +74,7 @@ backend/src/
 │   ├── ingestion/      # 背景排程           US-17、US-18
 │   ├── events/         # /api/events        US-19、US-20、US-01、US-02、US-03、US-10、US-11
 │   ├── subscriptions/  # /api/subscriptions US-07、US-08
-│   ├── calendars/      # /api/calendars     US-05、US-09
+│   ├── calendars/      # /api/calendars     US-05、US-09、#76
 │   └── map/            # /api/map           US-03、US-04
 └── shared/
 ```
@@ -152,45 +152,52 @@ npm run sources:seed-ntou -w backend -- someone@example.com
 - 風險只是提示，**不會**改變審核狀態或啟用狀態，也不影響擷取；最終決定仍由管理員審核。
 - 前端 `/admin/sources`：每個來源顯示風險等級與原因；`/sources/new` 的「我提交的來源」顯示已核准來源的風險等級。
 
-## 類別公開行事曆（US-05）
+## 行事曆與追蹤（US-05、US-07、US-08、US-09，#76 整併）
 
-- 後端 API（皆不需登入）：`GET /api/calendars/categories`（各類別的代碼、顯示名稱與訂閱路徑）、`GET /api/calendars/categories/:category.ics`（該類別的 iCalendar，`Content-Type: text/calendar`）。
-- 每個類別一個固定網址，類別代碼見 `EVENT_CATEGORIES`（`lecture`、`workshop`、`exhibition`、`sports`、`welfare`）；不存在的類別回傳 `404`，沒有活動的類別回傳合法的空行事曆。
-- 只輸出已發布（`published_events`）且來源審核狀態為 `approved` 的活動；活動轉為待審或來源被退回後，下次同步就會從行事曆消失。
-- 每個活動的 UID 為 `event-<活動 id>@eventou`，活動更新時 id 不變，行事曆軟體會視為同一筆並更新內容。
-- 時間以 UTC 輸出（不需 VTIMEZONE）；全天活動以 `VALUE=DATE` 輸出，結束日為排他的隔天。
-- `.ics` 的產生邏輯在 `backend/src/modules/calendars/calendars.ics.ts` 的 `buildCalendar`，US-09 的個人行事曆也沿用。
-- 前端頁面 `/calendars`：列出各類別的訂閱網址，提供「複製網址」與「訂閱行事曆」（`webcal://`）。Google Calendar 等線上服務需要能從外部連到的網址，本機的 `localhost` 網址無法訂閱。
+「行事曆」與「訂閱」整併成一個頁面 `/calendars`：每位使用者有一個「我的行事曆」，內容由追蹤決定，可在站內月曆查看，也能一鍵同步到 Google 日曆、Apple 行事曆、Outlook。
 
-## 個人行事曆（US-09）
+### 前端
 
-- 後端 API（需登入，訪客回傳 `401`）：`GET /api/calendars/personal`（自己的行事曆）、`POST /api/calendars/personal`（建立）、`GET /api/calendars/personal/:calendarId`（行事曆與目前符合條件的活動）、`PUT /api/calendars/personal/:calendarId`（修改）、`DELETE /api/calendars/personal/:calendarId`（刪除）。
-- 建立與修改的 body 為 `{ "name": string, "categories": string[], "tags": string[] }`：名稱最長 50 字，類別為 `EVENT_CATEGORIES` 的代碼，標籤最多 20 個、每個最長 30 字，類別與標籤至少要有一個；不符合時回傳 `400 validation_error`。每位使用者最多 20 個行事曆，超過回傳 `409 limit_reached`。
-- 篩選規則：類別之間、標籤之間是「任一符合」；同時指定類別與標籤時，活動要兩者都符合。標籤以與活動相同的方式正規化（全形轉半形、去除前後空白）後比對。
-- 行事曆只存條件，活動每次都從 `published_events`（且來源已核准）即時查詢，新活動符合條件時會自動出現。
-- 只能查看與管理自己的行事曆；別人的行事曆或不存在的 id 一律回傳 `404`。
-- iCal 訂閱（不需登入）：`GET /api/calendars/personal/:token.ics`。行事曆軟體無法登入，所以用隨機 token 當網址，拿到網址的人都能讀取；修改條件不會改變網址，刪除行事曆後網址失效。產生邏輯沿用 US-05 的 `buildCalendar`。
-- `GET /api/calendars/tags`（不需登入）：已發布活動中出現過的所有標籤，供選擇條件。
-- 資料表（migration 11）：`personal_calendars`、`personal_calendar_categories`、`personal_calendar_tags`；使用者或行事曆刪除時條件一併刪除。
-- 前端：`/calendars` 的「個人行事曆」區塊可建立與列出行事曆（訪客看到登入提示）；`/calendars/personal/:calendarId`（需登入）顯示符合條件的活動與訂閱網址，可編輯條件或刪除。
+- `/calendars`（未登入可用）：月曆可切換月份、回到今天，點日期在旁邊（手機版在下方）列出當日活動；可依類別、來源篩選。訪客瀏覽全部活動；登入後可切換「我的行事曆／全部活動」（`?view=all`），月份記在 `?month=YYYY-MM`。
+- 每筆活動可「加入我的行事曆」（手動加入）、「從行事曆隱藏」（追蹤帶進來但不想看到）、「還原」，也可「加到 Google 日曆」（開啟 Google 的新增活動畫面，不需要網站有公開網址）或下載 `.ics`。活動詳細頁有同樣的「加入行事曆」區塊。
+- 「追蹤」區塊（需登入）：追蹤類別與來源，以及新活動 Email 通知的總開關。
+- 「同步到你的行事曆」區塊：登入後提供個人同步網址的一鍵訂閱（Google 日曆、Outlook.com、`webcal://`）、下載 `.ics`、複製與重設網址；訪客可訂閱各類別的公開行事曆。
+- **網站在本機或區域網路執行時**（`localhost`、`127.0.0.1`、`192.168.x.x` 等，見 `calendarLinks.ts` 的 `isPrivateOrigin`），Google 日曆、Outlook.com 的伺服器連不到同步網址，畫面會說明原因、停用這兩個按鈕，改提供同一台電腦的行事曆軟體訂閱與下載 `.ics`。部署到公開網址後即可一鍵訂閱。
+- 舊網址 `/subscriptions` 導向 `/calendars#follow`，`/calendars/personal/:id` 導向 `/calendars`。
+- 類別色在 `frontend/src/shared/eventCategories.css`，地圖與行事曆共用。
 
-## 訂閱活動類別（US-07）
+### 我的行事曆
 
-- 後端 API（皆需登入，訪客回傳 `401`）：`GET /api/subscriptions`（所有類別與自己的訂閱狀態）、`PUT /api/subscriptions/:category`（訂閱）、`DELETE /api/subscriptions/:category`（取消訂閱）。三者都回傳 `{ "categories": [{ "category", "label", "subscribed" }] }`。
-- `:category` 為類別代碼（`EVENT_CATEGORIES`），不存在的類別回傳 `404`。訂閱與取消都可重複呼叫：重複訂閱不會產生第二筆，取消未訂閱的類別也視為成功。
-- 訂閱關係存在 `category_subscriptions`（migration 7），主鍵為 `(user_id, category)`；使用者刪除時一併刪除。類別值域由程式驗證，不設 CHECK。
-- US-08 的通知對象請用 `listSubscribersByCategory()`（`backend/src/modules/subscriptions/subscriptions.service.ts`）取得，取消訂閱的使用者不會出現。
-- 前端頁面 `/subscriptions`（需登入，訪客會先被導向登入再回來）：「我的訂閱」清單，以及各類別的訂閱狀態與訂閱／取消訂閱按鈕。
+- 活動出現在某人的行事曆 = 手動加入，或追蹤了它的類別或來源且沒有被隱藏。只含已發布（`published_events`）且來源已核准的活動；行事曆不另存活動清單，每次即時查詢，新活動會自動出現。
+- US-20 合併重複活動後，對被合併那筆活動的標記與對其來源的追蹤，會算到保留的那筆活動上。
+- 後端 API：
+  - `GET /api/calendars/events?from=YYYY-MM-DD&to=YYYY-MM-DD`（未登入可用）：月曆的活動，活動期間與範圍有重疊就列出，範圍最多 100 天。選填 `scope=mine`（需登入，只列我的行事曆）、`category`、`sourceId`、`hidden=1`（與 `scope=mine` 一起用，一併列出被隱藏的活動）。登入時每筆附上 `mine`、`mark`（`added`／`hidden`／`null`）與 `via`（`{ category, source }`，是否因追蹤而帶進來）。
+  - `GET|PUT|DELETE /api/calendars/events/:eventId/mark`（需登入）：查詢、設定（body `{ "state": "added" | "hidden" }`）或移除對活動的標記，皆回傳 `{ mine, mark, via }`。活動不存在或來源未核准回 `404`。
+  - `GET /api/calendars/events/:eventId.ics`（未登入可用）：單一活動的 `.ics`（附件下載）。
+  - `GET /api/calendars/sources`（未登入可用）：可篩選與追蹤的來源（已核准）。
+- 同步網址（iCal）：`GET /api/calendars/feed`（需登入）取得自己的網址路徑，`POST /api/calendars/feed/reset`（需登入）換新網址、舊網址立即失效。`GET /api/calendars/feed/:token.ics` 不需登入：行事曆軟體無法登入，以隨機 token 識別，拿到網址的人都能讀取。
 
-## 新活動 Email 通知（US-08）
+### 類別公開行事曆（US-05）
 
-- 沒有 HTTP API，由後端啟動時開始的背景排程處理（`backend/src/modules/subscriptions/subscriptions.scheduler.ts`），預設每 5 分鐘一輪，可用 `NOTIFICATION_INTERVAL_MS`（毫秒，預設 `300000`）調整。
-- 每一輪會從 `published_events` 找出**還沒有派送紀錄**的活動，替當下訂閱該類別的使用者建立寄送紀錄並寄信。是不是「新活動」只看有沒有派送過，不看 upsert 的結果：重跑擷取或活動內容更新不會再寄，`needs_review` 轉為已發布時才第一次通知。
-- 不通知的情況：活動已經結束、來源審核狀態不是 `approved`、使用者在活動派送之後才訂閱、寄出前已取消訂閱。
-- 資料表（migration 8）：`event_notification_dispatches`（每個活動只派送一次）、`event_notifications`（寄送紀錄，`(event_id, user_id)` 唯一，同一活動對同一使用者只寄一次）。
-- 寄送狀態：`pending`（待寄送或待重試）、`sent`、`failed`（試滿 5 次）、`skipped`。失敗原因記在 `last_error`，`pending` 的通知每一輪都會重試；`failed` 的可用 `npm run notifications:retry -w backend` 重新排入。
-- 信件內容包含活動標題、時間、地點、活動頁連結、原始公告連結，以及到訂閱頁取消訂閱的連結；連結的網站位址由 `PUBLIC_BASE_URL` 決定。
-- 寄信使用 SMTP（`nodemailer`），設定見 `backend/.env.example` 的 `SMTP_*` 與 `MAIL_FROM`。**沒有設定 `SMTP_HOST` 時不會真的寄信**，只把信件內容印在後端主控台，方便本機開發。
+- `GET /api/calendars/categories`（各類別的代碼、顯示名稱與訂閱路徑）、`GET /api/calendars/categories/:category.ics`（該類別的 iCalendar），皆不需登入，網址不變。
+- 只輸出已發布且來源已核准的活動；每個活動的 UID 為 `event-<活動 id>@eventou`，活動更新時 id 不變，行事曆軟體會視為同一筆並更新內容。時間以 UTC 輸出，全天活動以 `VALUE=DATE` 輸出，結束日為排他的隔天。
+- `.ics` 的產生邏輯在 `backend/src/modules/calendars/calendars.ics.ts` 的 `buildCalendar`，我的行事曆與單一活動下載也沿用。
+
+### 追蹤與 Email 通知（US-07、US-08）
+
+- 後端 API（皆需登入）：`GET /api/subscriptions`、`PUT|DELETE /api/subscriptions/:category`（追蹤類別）、`PUT|DELETE /api/subscriptions/sources/:sourceId`（追蹤來源，只能追蹤已核准的來源）、`PATCH /api/subscriptions/settings`（body `{ "emailNotifications": boolean }`）。全部回傳 `{ categories: [{ category, label, subscribed }], sources: [{ id, name, type, followed }], emailNotifications }`。重複追蹤或取消都視為成功。
+- 通知對象為追蹤該活動類別或來源、且沒有關閉 Email 通知的使用者（`listEventSubscribers()`，`backend/src/modules/subscriptions/subscriptions.service.ts`），同一人只算一次。
+- 新活動通知由後端背景排程處理（`subscriptions.scheduler.ts`），預設每 5 分鐘一輪，可用 `NOTIFICATION_INTERVAL_MS`（毫秒，預設 `300000`）調整。每一輪從 `published_events` 找出**還沒有派送紀錄**的活動建立寄送紀錄並寄信：重跑擷取或活動內容更新不會再寄，`needs_review` 轉為已發布時才第一次通知。
+- 不通知的情況：活動已經結束、來源審核狀態不是 `approved`、使用者在活動派送之後才追蹤、寄出前已取消追蹤或關閉通知。
+- 寄送狀態：`pending`（待寄送或待重試）、`sent`、`failed`（試滿 5 次）、`skipped`。`failed` 的可用 `npm run notifications:retry -w backend` 重新排入。
+- 信件說明收到通知的原因（追蹤的類別或來源），並附活動頁、原始公告與行事曆頁（取消追蹤、關閉通知）的連結；網站位址由 `PUBLIC_BASE_URL` 決定。
+- 寄信使用 SMTP（`nodemailer`），設定見 `backend/.env.example` 的 `SMTP_*` 與 `MAIL_FROM`。**沒有設定 `SMTP_HOST` 時不會真的寄信**，只把信件內容印在後端主控台。
+
+### 資料表
+
+- `category_subscriptions`（migration 7）：追蹤的類別。
+- `event_notification_dispatches`、`event_notifications`（migration 8）：通知派送與寄送紀錄，同一活動對同一使用者只寄一次。
+- migration 14：`source_follows`（追蹤的來源）、`calendar_event_marks`（對單一活動的 `added`／`hidden` 標記）、`user_calendar_settings`（同步網址 token 與 Email 通知開關，沒有資料列時視為通知開啟）。同時移除 US-09 的多個個人行事曆與標籤條件（`personal_calendars` 等三張表），舊的個人行事曆同步網址隨之失效。
 
 ## 活動留言（US-10）
 

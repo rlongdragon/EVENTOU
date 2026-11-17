@@ -7,7 +7,6 @@ const NAV_ITEMS: { to: string; label: string; role?: Role }[] = [
   { to: '/', label: '活動' },
   { to: '/map', label: '地圖' },
   { to: '/calendars', label: '行事曆' },
-  { to: '/subscriptions', label: '訂閱' },
   { to: '/sources/new', label: '提交來源' },
   { to: '/admin/sources', label: '來源管理', role: 'admin' },
   { to: '/admin/duplicates', label: '重複活動', role: 'admin' },

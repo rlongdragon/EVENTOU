@@ -4,13 +4,13 @@ import { EVENT_CATEGORY_LABELS } from '../events/events.types.js';
 import type { ReviewStatus } from '../sources/sourceTypes.js';
 import { buildNewEventEmail } from './subscriptions.email.js';
 import type { Mailer } from './subscriptions.mailer.js';
-import { isEventCategory, listSubscribersByCategory } from './subscriptions.service.js';
+import { isEventCategory, listEventSubscribers } from './subscriptions.service.js';
 
 // US-08 新活動 Email 通知。
 // 不依賴 Event upsert 的回傳值：以「這個活動有沒有派送紀錄」判斷是不是新活動，
 // 所以重跑擷取、活動內容更新都不會重複通知；needs_review 轉為 published 時才第一次通知。
 
-/** 寄送狀態：pending 等待寄送或重試、sent 已寄出、failed 重試用盡、skipped 寄出前已取消訂閱或活動已下架。 */
+/** 寄送狀態：pending 等待寄送或重試、sent 已寄出、failed 重試用盡、skipped 寄出前已取消追蹤、關閉通知或活動已下架。 */
 export const NOTIFICATION_STATUSES = ['pending', 'sent', 'failed', 'skipped'] as const;
 
 export type NotificationStatus = (typeof NOTIFICATION_STATUSES)[number];
@@ -48,14 +48,14 @@ function hasEnded(
 }
 
 /**
- * 找出還沒派送過的已發布活動，替目前訂閱該類別的使用者建立寄送紀錄。
+ * 找出還沒派送過的已發布活動，替目前追蹤該類別或來源、且開啟 Email 通知的使用者建立寄送紀錄。
  * 每個活動只會派送一次；已經結束的活動只記錄為已派送，不通知。
  */
 export function dispatchNewEvents(now = new Date()): number {
   const db = getDb();
   const events = db
     .prepare(
-      `SELECT e.id, e.category, e.start_time, e.end_time, e.all_day
+      `SELECT e.id, e.category, e.source_id, e.start_time, e.end_time, e.all_day
       FROM published_events e
       JOIN sources s ON s.id = e.source_id
       LEFT JOIN event_notification_dispatches d ON d.event_id = e.id
@@ -83,7 +83,9 @@ export function dispatchNewEvents(now = new Date()): number {
       now,
     );
     const subscribers =
-      !ended && isEventCategory(row.category) ? listSubscribersByCategory(row.category) : [];
+      !ended && isEventCategory(row.category)
+        ? listEventSubscribers({ category: row.category, sourceId: Number(row.source_id) })
+        : [];
     // 寄送紀錄與派送紀錄要一起成立，避免中途失敗後同一活動被派送兩次
     db.exec('BEGIN');
     try {
@@ -101,8 +103,8 @@ export function dispatchNewEvents(now = new Date()): number {
 }
 
 /**
- * 寄出所有 pending 的通知。寄出前會再確認一次：使用者已取消訂閱，
- * 或活動已不是已發布狀態時不寄，標記為 skipped。
+ * 寄出所有 pending 的通知。寄出前會再確認一次：使用者已不再追蹤該類別與來源、
+ * 已關閉 Email 通知，或活動已不是已發布狀態時不寄，標記為 skipped。
  */
 export async function sendPendingNotifications(
   mailer: Mailer,
@@ -114,11 +116,16 @@ export async function sendPendingNotifications(
     .prepare(
       `SELECT n.id, n.attempts, u.email, u.display_name,
         e.id AS event_id, e.title, e.category, e.start_time, e.end_time, e.all_day,
-        e.location, e.original_url, cs.user_id AS subscribed_user_id
+        e.location, e.original_url,
+        EXISTS (SELECT 1 FROM category_subscriptions cs
+          WHERE cs.user_id = n.user_id AND cs.category = e.category) AS follows_category,
+        (SELECT s.name FROM source_follows sf JOIN sources s ON s.id = sf.source_id
+          WHERE sf.user_id = n.user_id AND sf.source_id = e.source_id) AS followed_source_name,
+        COALESCE((SELECT st.email_notifications FROM user_calendar_settings st
+          WHERE st.user_id = n.user_id), 1) AS notifications_enabled
       FROM event_notifications n
       JOIN users u ON u.id = n.user_id
       LEFT JOIN published_events e ON e.id = n.event_id
-      LEFT JOIN category_subscriptions cs ON cs.user_id = n.user_id AND cs.category = e.category
       WHERE n.status = 'pending'
       ORDER BY n.id`,
     )
@@ -133,7 +140,14 @@ export async function sendPendingNotifications(
   for (const row of rows) {
     const id = Number(row.id);
     const attempts = Number(row.attempts);
-    if (row.event_id === null || row.subscribed_user_id === null) {
+    const followsCategory = Number(row.follows_category) === 1;
+    const followedSourceName =
+      row.followed_source_name === null ? null : String(row.followed_source_name);
+    if (
+      row.event_id === null ||
+      Number(row.notifications_enabled) !== 1 ||
+      (!followsCategory && followedSourceName === null)
+    ) {
       update.run('skipped' satisfies NotificationStatus, attempts, null, null, timestamp, id);
       result.skipped += 1;
       continue;
@@ -152,6 +166,10 @@ export async function sendPendingNotifications(
         originalUrl: String(row.original_url),
       },
       baseUrl,
+      // 同時追蹤類別與來源時，以類別說明收到通知的原因
+      followsCategory || followedSourceName === null
+        ? { kind: 'category' }
+        : { kind: 'source', sourceName: followedSourceName },
     );
     try {
       await mailer.send(message);

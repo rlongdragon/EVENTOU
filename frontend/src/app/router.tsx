@@ -1,15 +1,13 @@
-import { createBrowserRouter } from 'react-router';
+import { Navigate, createBrowserRouter } from 'react-router';
 import { LoginPage } from '../features/auth/LoginPage';
 import { RequireAuth } from '../features/auth/RequireAuth';
-import { CalendarsPage } from '../features/calendars/CalendarsPage';
-import { PersonalCalendarPage } from '../features/calendars/PersonalCalendarPage';
+import { CalendarPage } from '../features/calendars/CalendarPage';
 import { AdminDuplicatesPage } from '../features/events/AdminDuplicatesPage';
 import { AdminCommentReportsPage } from '../features/events/AdminCommentReportsPage';
 import { EventDetailPage } from '../features/events/EventDetailPage';
 import { EventSearchPage } from '../features/events/EventSearchPage';
 import { AdminSourcesPage } from '../features/sources/AdminSourcesPage';
 import { SubmitSourcePage } from '../features/sources/SubmitSourcePage';
-import { SubscriptionsPage } from '../features/subscriptions/SubscriptionsPage';
 import { Layout } from './Layout';
 
 export const router = createBrowserRouter([
@@ -26,23 +24,10 @@ export const router = createBrowserRouter([
         }),
       },
       { path: 'login', element: <LoginPage /> },
-      {
-        path: 'subscriptions',
-        element: (
-          <RequireAuth>
-            <SubscriptionsPage />
-          </RequireAuth>
-        ),
-      },
-      { path: 'calendars', element: <CalendarsPage /> },
-      {
-        path: 'calendars/personal/:calendarId',
-        element: (
-          <RequireAuth>
-            <PersonalCalendarPage />
-          </RequireAuth>
-        ),
-      },
+      { path: 'calendars', element: <CalendarPage /> },
+      // #76 訂閱頁與個人行事曆已整併進行事曆頁，舊網址（含通知信中的連結）導向新頁面
+      { path: 'subscriptions', element: <Navigate to="/calendars#follow" replace /> },
+      { path: 'calendars/personal/:calendarId', element: <Navigate to="/calendars" replace /> },
       {
         path: 'sources/new',
         element: (
