@@ -4544,8 +4544,7 @@ function surfaceY(x, z) {
   return hit ? hit.point.y : 0;
 }
 const EVENT_CATEGORIES = new Set(['lecture', 'workshop', 'exhibition', 'sports', 'welfare']);
-const safeHref = (href) =>
-  typeof href === 'string' && href.startsWith('/') && !href.startsWith('//') ? href : null;
+const safeHref = (href) => (typeof href === 'string' && /^\/(?![/\\])/.test(href) ? href : null);
 const eventsCard = document.createElement('div');
 eventsCard.id = 'eventsCard';
 eventsCard.className = 'card';
