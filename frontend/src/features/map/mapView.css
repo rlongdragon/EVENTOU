@@ -1,29 +1,5 @@
 /* 地圖樣式沿用「雜誌」主題的 token（見 src/index.css）：紙色、墨線細框、直角；
-   類別色為低飽和色，避開只作點綴的橘色 */
-
-.map-cat--default {
-  --cat-color: var(--color-olive);
-}
-
-.map-cat--lecture {
-  --cat-color: #2f3d3a;
-}
-
-.map-cat--workshop {
-  --cat-color: #46657f;
-}
-
-.map-cat--exhibition {
-  --cat-color: #775a74;
-}
-
-.map-cat--sports {
-  --cat-color: #5f7234;
-}
-
-.map-cat--welfare {
-  --cat-color: #9a5b52;
-}
+   類別色定義在 shared/eventCategories.css */
 
 .map-view {
   width: 100%;

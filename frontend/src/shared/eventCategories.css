@@ -1,0 +1,26 @@
+/* 活動類別色：地圖與行事曆共用。沿用「雜誌」主題的低飽和色，避開只作點綴的橘色；
+   在元素上加 .cat--<類別> 後，以 var(--cat-color) 取用 */
+
+.cat--default {
+  --cat-color: var(--color-olive);
+}
+
+.cat--lecture {
+  --cat-color: #2f3d3a;
+}
+
+.cat--workshop {
+  --cat-color: #46657f;
+}
+
+.cat--exhibition {
+  --cat-color: #775a74;
+}
+
+.cat--sports {
+  --cat-color: #5f7234;
+}
+
+.cat--welfare {
+  --cat-color: #9a5b52;
+}

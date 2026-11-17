@@ -3,7 +3,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster';
-import { categoryClassName, categoryGlyph } from './mapCategories';
+import { categoryClassName, categoryGlyph } from '../../shared/eventCategories';
 import { addBasemap } from './basemap';
 import './mapView.css';
 

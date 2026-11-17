@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type L from 'leaflet';
 import { Campus3DView } from './Campus3DView';
 import { MapView, type MapMarker } from './MapView';
-import { categoryGlyph } from './mapCategories';
+import { categoryGlyph } from '../../shared/eventCategories';
 import './campusMapStage.css';
 
 export type MapMode = '3d' | '2d';

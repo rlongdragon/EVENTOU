@@ -1,16 +1,34 @@
 import { ApiError } from '../auth/api';
 
-export interface CategorySubscription {
+// 追蹤與通知（需登入）：追蹤的類別與來源決定「我的行事曆」的內容，也決定新活動 Email 通知的對象。
+
+export interface CategoryFollow {
   /** 類別代碼 */
   category: string;
   /** 類別顯示名稱，由後端依 EVENT_CATEGORY_LABELS 提供 */
   label: string;
-  /** 目前登入的使用者是否已訂閱 */
   subscribed: boolean;
 }
 
-async function request(path: string, method = 'GET'): Promise<CategorySubscription[]> {
-  const response = await fetch(path, { method });
+export interface SourceFollow {
+  id: number;
+  name: string;
+  type: string;
+  followed: boolean;
+}
+
+/** 每個異動 API 都回傳完整的追蹤狀態。 */
+export interface FollowState {
+  categories: CategoryFollow[];
+  sources: SourceFollow[];
+  emailNotifications: boolean;
+}
+
+async function request(path: string, init: RequestInit = {}): Promise<FollowState> {
+  const response = await fetch(path, {
+    ...init,
+    headers: init.body ? { 'Content-Type': 'application/json' } : undefined,
+  });
   const text = await response.text();
   const body = text ? JSON.parse(text) : undefined;
   if (!response.ok) {
@@ -20,21 +38,28 @@ async function request(path: string, method = 'GET'): Promise<CategorySubscripti
       body?.message ?? `HTTP ${response.status}`,
     );
   }
-  return (body as { categories: CategorySubscription[] }).categories;
+  return body as FollowState;
 }
 
-/** 取得所有活動類別與自己的訂閱狀態（US-07，需登入）。 */
-export function fetchSubscriptions(): Promise<CategorySubscription[]> {
-  return request('/api/subscriptions');
+export function fetchFollowState(signal?: AbortSignal): Promise<FollowState> {
+  return request('/api/subscriptions', { signal });
 }
 
-/** 訂閱或取消訂閱某個類別，回傳更新後的所有類別訂閱狀態。 */
-export function setSubscribed(
-  category: string,
-  subscribed: boolean,
-): Promise<CategorySubscription[]> {
-  return request(
-    `/api/subscriptions/${encodeURIComponent(category)}`,
-    subscribed ? 'PUT' : 'DELETE',
-  );
+export function setCategoryFollowed(category: string, followed: boolean): Promise<FollowState> {
+  return request(`/api/subscriptions/${encodeURIComponent(category)}`, {
+    method: followed ? 'PUT' : 'DELETE',
+  });
+}
+
+export function setSourceFollowed(sourceId: number, followed: boolean): Promise<FollowState> {
+  return request(`/api/subscriptions/sources/${sourceId}`, {
+    method: followed ? 'PUT' : 'DELETE',
+  });
+}
+
+export function setEmailNotifications(enabled: boolean): Promise<FollowState> {
+  return request('/api/subscriptions/settings', {
+    method: 'PATCH',
+    body: JSON.stringify({ emailNotifications: enabled }),
+  });
 }
