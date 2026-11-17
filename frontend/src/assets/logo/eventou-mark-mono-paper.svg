@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="112" height="112" viewBox="4 4 112 112" role="img" aria-label="EVENTOU">
+  <defs>
+    <mask id="cut" maskUnits="userSpaceOnUse" x="0" y="0" width="120" height="120">
+      <rect width="120" height="120" fill="#fff"/>
+      <path d="M22 28H68a8 8 0 0 0 16 0H98a8 8 0 0 1 8 8V84a8 8 0 0 1-8 8H84a8 8 0 0 0-16 0H22a8 8 0 0 1-8-8V36a8 8 0 0 1 8-8Z" fill="#000" stroke="#000" stroke-width="9" stroke-linejoin="round" transform="translate(3 4)"/>
+    </mask>
+  </defs>
+  <path d="M22 28H68a8 8 0 0 0 16 0H98a8 8 0 0 1 8 8V84a8 8 0 0 1-8 8H84a8 8 0 0 0-16 0H22a8 8 0 0 1-8-8V36a8 8 0 0 1 8-8Z" fill="#f8f6f1" stroke="#f8f6f1" stroke-width="6" stroke-linejoin="round" transform="rotate(-14 60 60)" mask="url(#cut)"/>
+  <g transform="translate(3 4)" fill="#f8f6f1">
+    <path d="M22 28H68a8 8 0 0 0 16 0H98a8 8 0 0 1 8 8V84a8 8 0 0 1-8 8H84a8 8 0 0 0-16 0H22a8 8 0 0 1-8-8V36a8 8 0 0 1 8-8Z" fill="none" stroke="#f8f6f1" stroke-width="6" stroke-linejoin="round"/>
+    <path d="M84 28H98a8 8 0 0 1 8 8V84a8 8 0 0 1-8 8H84a8 8 0 0 0-8-8V36a8 8 0 0 0 8-8Z"/>
+    <path d="M30 42H58V50H39V56H54V64H39V70H58V78H30Z"/>
+  </g>
+</svg>

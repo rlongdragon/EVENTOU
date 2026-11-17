@@ -2,10 +2,128 @@ import './campus3d.css';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 // 平面圖（300dpi 點陣）像素座標 → 公尺（約 0.5 m/px，以操場跑道長度估算）
 const S = 0.5;
-const toWorld = (hx, hy) => [(hx - 1400) * S, (hy - 600) * S];
+const planToMeters = (hx, hy) => [(hx - 1400) * S, (hy - 600) * S];
+// 平面圖是手繪的，各區比例不一（部分區域偏差可達 50 m）。以 OSM 為準算出平滑的位移場（高斯徑向基底）：
+// 控制點是 34 棟與 OSM 同名的建物，加上模型道路對到 OSM 道路中心線的取樣點。
+// 所有座標都經過 toWorld，道路、建物、標籤一起移動、彼此不會錯開。
+// 每列：[中心 x, 中心 z, 權重 x, 權重 z]，單位公尺
+const WARP_SIGMA2 = 3600;
+const WARP = [
+  [116.5, 5.0, 1.1944, -6.8829],
+  [-1.5, -68.5, 1.568, -4.5934],
+  [-221.5, 6.5, -14.8933, -9.2217],
+  [-292.5, -7.5, -4.5373, -1.6523],
+  [237.0, -50.0, -0.2554, 0.1107],
+  [-46.5, -113.5, -3.5256, -0.5169],
+  [181.0, 50.0, 0.4601, 0.544],
+  [-104.0, -69.0, -4.9583, 4.6403],
+  [-194.0, -83.5, 1.8464, 1.437],
+  [-302.5, 66.0, 2.1357, 0.737],
+  [-338.5, 84.5, -13.939, -10.9808],
+  [-302.0, 109.0, -5.9238, -9.4044],
+  [-141.5, -83.5, 3.9998, 3.8279],
+  [-45.0, -42.5, -6.34, -1.1116],
+  [61.0, 11.5, -2.2177, -1.7265],
+  [236.0, 51.0, 4.2995, -2.4662],
+  [-1.5, -13.5, 8.3394, 1.9818],
+  [-600.0, -105.0, -9.2897, 26.7736],
+  [-592.0, -70.0, -4.8339, 30.6988],
+  [-531.0, -44.0, 1.4024, 21.4787],
+  [-389.0, 34.0, -14.9872, -0.4314],
+  [-253.0, 125.0, 14.1429, -12.2431],
+  [-384.5, 143.5, 30.6072, 5.943],
+  [-456.0, 112.5, 15.0689, 7.5227],
+  [223.5, -182.0, -7.8371, 17.9629],
+  [198.5, -99.0, -4.3292, 3.6417],
+  [370.0, -107.5, 6.9165, 2.0094],
+  [447.0, -85.5, -3.4881, 6.6215],
+  [413.5, -34.0, -3.3456, -4.8228],
+  [531.0, -77.5, 10.9532, 2.3943],
+  [494.0, 13.0, 1.9264, 0.5323],
+  [437.0, 75.5, 1.2661, 3.5331],
+  [370.0, 65.5, 0.818, -6.3081],
+  [427.0, 96.5, -1.4708, -3.6328],
+  [-473.1, -39.6, 3.3279, -0.6924],
+  [-442.3, -27.8, 0.5091, -4.5862],
+  [-411.5, -15.9, -4.5116, -2.9412],
+  [-381.5, -3.6, -8.1066, -2.3432],
+  [-351.9, 9.1, -7.122, -2.5774],
+  [-322.3, 21.8, -1.0903, 0.4049],
+  [-292.7, 34.5, 4.3385, 5.1331],
+  [-263.1, 47.2, 3.1768, 5.0276],
+  [-232.9, 60.8, 0.0498, 1.2724],
+  [-202.4, 75.0, -0.0038, -0.9148],
+  [-171.8, 89.1, 1.0528, -2.6311],
+  [-141.3, 103.2, 1.9099, -4.4657],
+  [-109.6, 112.1, 2.2205, -4.4085],
+  [-77.7, 120.2, 2.0494, -3.1024],
+  [-45.8, 128.3, 1.5059, -1.9731],
+  [-13.9, 136.4, 0.5392, -1.4037],
+  [18.4, 142.8, -0.4378, -2.2481],
+  [51.3, 146.1, -0.5436, -4.5976],
+  [404.9, 142.3, -2.2745, -14.8277],
+  [437.5, 139.2, -3.1159, -16.8492],
+  [151.7, 39.8, -1.5072, -2.5889],
+  [166.0, 7.8, -2.555, -4.3525],
+  [185.5, -22.5, -2.9926, -3.0634],
+  [224.0, -21.8, -2.3674, 1.1465],
+  [263.0, -3.0, -4.4757, 7.5379],
+  [386.8, 36.0, 4.2515, -7.2451],
+  [420.8, 44.0, 3.9697, 0.2822],
+  [454.2, 48.9, 2.3783, 7.282],
+  [487.5, 53.3, 0.0982, 6.5636],
+  [509.7, 73.1, -1.7813, 1.7948],
+  [325.9, -39.1, -0.6915, 8.302],
+  [367.5, -18.4, 1.4074, -0.3184],
+  [268.1, -138.6, 1.2254, 2.5061],
+  [306.6, -132.0, 3.4388, -0.7548],
+  [341.6, -112.8, 5.9749, 2.6923],
+  [374.0, -87.2, 4.6788, 1.0519],
+  [413.9, -65.3, -3.6072, -1.8671],
+  [-124.7, -149.0, -1.0859, 5.944],
+  [-93.0, -139.4, -2.6974, 4.2141],
+  [-61.3, -129.8, -2.7484, 0.4403],
+  [-29.6, -120.2, -1.6988, -2.721],
+  [2.1, -110.6, 0.1352, -4.7958],
+  [36.5, -103.9, 0.9008, -3.895],
+  [70.8, -98.7, -0.103, -1.9244],
+  [103.8, -91.6, -1.6055, -1.8974],
+  [137.0, -73.0, -3.474, -3.0174],
+  [222.8, -96.0, -0.8566, 2.0002],
+  [252.5, -128.5, 0.6908, 3.6836],
+  [-222.1, -70.0, -8.2269, -1.4024],
+  [-232.5, -110.0, -2.7513, 1.1011],
+  [-241.6, -145.3, 1.0196, 1.7522],
+  [-244.0, -177.8, 2.3738, 3.7527],
+  [-236.5, -210.0, 3.5202, 5.3179],
+  [-167.5, -61.2, 4.7066, 0.8927],
+  [67.8, 109.6, 1.6867, -3.1418],
+  [90.0, 99.2, 2.3668, -2.928],
+  [146.0, 133.0, 1.1583, -3.1842],
+  [143.8, 98.0, 2.6106, -0.0736],
+];
+function warpAt(x, z) {
+  let dx = 0;
+  let dz = 0;
+  for (const [cx, cz, wx, wz] of WARP) {
+    const k = Math.exp(-((x - cx) ** 2 + (z - cz) ** 2) / WARP_SIGMA2);
+    dx += wx * k;
+    dz += wz * k;
+  }
+  return [dx, dz];
+}
+const toWorld = (hx, hy) => {
+  const [x, z] = planToMeters(hx, hy);
+  const [dx, dz] = warpAt(x, z);
+  return [x + dx, z + dz];
+};
 const FLOOR_H = 3.8;
 const ROT = -0.36; // 校區主要建物軸向
 const ROT_E = -0.62; // 海事大樓一帶軸向
@@ -3267,7 +3385,16 @@ function pick(e) {
 
 // ---------- 編輯模式：直接拖曳建物與道路頂點，調整存在瀏覽器，可匯出座標寫回資料 ----------
 const EDIT_KEY = 'campus3d.edits.v3'; // 寫回模型後換新鍵，舊的調整不再重複套用
-const fromWorld = (x, z) => [Math.round(x / S + 1400), Math.round(z / S + 600)];
+// toWorld 的反函數：位移場平滑且小，固定點迭代幾次就收斂
+const fromWorld = (x, z) => {
+  let [px, pz] = [x, z];
+  for (let i = 0; i < 6; i++) {
+    const [dx, dz] = warpAt(px, pz);
+    px = x - dx;
+    pz = z - dz;
+  }
+  return [Math.round(px / S + 1400), Math.round(pz / S + 600)];
+};
 let editMode = false;
 let editTarget = null; // { kind: 'obj', info } 或 { kind: 'pt', road, i }
 let drag = null;
@@ -4145,20 +4272,499 @@ if (params.get('room')) {
   }
 }
 
+// ---------- 與平面地圖無縫切換 ----------
+// 3D 世界座標 (x, z)（公尺）↔ 經緯度：相似變換（位移場已經修掉各區的局部偏差）。
+// 東 + i·北 = GEO.a·(x − i·z) + GEO.b（以 lat0/lng0 為原點的地面公尺）。
+const GEO = { lat0: 25.14969, lng0: 121.7761, a: [-0.937426, -0.002272], b: [111.414, 52.783] };
+const EARTH_R = 6378137;
+const COS0 = Math.cos((GEO.lat0 * Math.PI) / 180);
+const GEO_SCALE = Math.hypot(GEO.a[0], GEO.a[1]); // 1 世界公尺 = 幾地面公尺
+const cmul = ([a, b], [c, d]) => [a * c - b * d, a * d + b * c];
+const cdiv = ([a, b], [c, d]) => {
+  const n = c * c + d * d;
+  return [(a * c + b * d) / n, (b * c - a * d) / n];
+};
+function worldToLatLng(x, z) {
+  const [e, n] = cmul(GEO.a, [x, -z]);
+  return {
+    lat: GEO.lat0 + ((n + GEO.b[1]) / EARTH_R) * (180 / Math.PI),
+    lng: GEO.lng0 + ((e + GEO.b[0]) / (EARTH_R * COS0)) * (180 / Math.PI),
+  };
+}
+function latLngToWorld(lat, lng) {
+  const e = (((lng - GEO.lng0) * Math.PI) / 180) * EARTH_R * COS0;
+  const n = (((lat - GEO.lat0) * Math.PI) / 180) * EARTH_R;
+  const [x, q] = cdiv([e - GEO.b[0], n - GEO.b[1]], GEO.a);
+  return new THREE.Vector3(x, 0, -q);
+}
+// 平面地圖是北方朝上；俯視時相機稍微偏向南方，畫面上方就是北
+const NORTH = (() => {
+  const [x, q] = cdiv([0, 1], GEO.a);
+  return new THREE.Vector2(x, -q).normalize();
+})();
+const AZ_NORTH_UP = Math.atan2(-NORTH.x, -NORTH.y);
+const TOP_POLAR = 0.0005;
+const FOV_3D = 35;
+const FOV_FLAT = 1; // 視角 1° 幾乎等於平行投影，建物高度不會讓屋頂偏移
+const HOME_SPH = new THREE.Spherical().setFromVector3(HOME.pos.clone().sub(HOME.target));
+const BASE_FOG = [scene.fog.near, scene.fog.far];
+// Leaflet（Web Mercator）在某緯度、某縮放等級下，每個螢幕像素代表的地面公尺
+const metersPerPixel = (lat, zoom) =>
+  (40075016.686 * Math.cos((lat * Math.PI) / 180)) / (256 * 2 ** zoom);
+// 讓畫面高度剛好涵蓋 groundH 世界公尺所需的相機距離
+const distFor = (fov, groundH) => groundH / 2 / Math.tan(THREE.MathUtils.degToRad(fov) / 2);
+
+function applyView(v) {
+  camera.fov = v.fov;
+  camera.near = Math.max(1, v.dist - 2000);
+  camera.far = Math.max(4000, v.dist + 3000);
+  camera.updateProjectionMatrix();
+  controls.target.copy(v.target);
+  camera.position
+    .copy(v.target)
+    .add(new THREE.Vector3().setFromSphericalCoords(v.dist, v.polar, v.azimuth));
+  camera.lookAt(v.target);
+  // 霧的距離跟著相機距離放大，遠距離俯視時才不會整片起霧
+  const k = Math.max(1, v.fogK);
+  scene.fog.near = BASE_FOG[0] * k;
+  scene.fog.far = BASE_FOG[1] * k;
+}
+
+const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+const lerpAngle = (a, b, k) =>
+  a + (((((b - a + Math.PI) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)) - Math.PI) * k;
+
+// morph：{ segs, i, t, view, onDone } 播放中；{ parked: true } 停在平面狀態等外層切回來
+let morph = null;
+const currentView = () => {
+  const sph = new THREE.Spherical().setFromVector3(camera.position.clone().sub(controls.target));
+  return {
+    target: controls.target.clone(),
+    polar: sph.phi,
+    azimuth: sph.theta,
+    dist: sph.radius,
+    fov: camera.fov,
+    fogK: 1,
+  };
+};
+const flatView = (target, groundH, fov) => {
+  const dist = distFor(fov, groundH);
+  return {
+    target,
+    polar: TOP_POLAR,
+    azimuth: AZ_NORTH_UP,
+    dist,
+    fov,
+    fogK: dist / distFor(FOV_3D, groundH),
+  };
+};
+function freeze() {
+  anim = null;
+  held.clear();
+  moveVel.set(0, 0, 0);
+  controls.enabled = false;
+}
+function release() {
+  morph = null;
+  camera.near = 1;
+  camera.far = 4000;
+  camera.updateProjectionMatrix();
+  scene.fog.near = BASE_FOG[0];
+  scene.fog.far = BASE_FOG[1];
+  controls.enabled = true;
+  controls.update();
+}
+function playMorph(segs, onDone) {
+  freeze();
+  morph = { segs, i: 0, t: 0, onDone };
+}
+function stepMorph(dt) {
+  if (!morph || morph.parked) return;
+  const seg = morph.segs[morph.i];
+  morph.t = Math.min(1, morph.t + dt / seg.dur);
+  const k = easeInOut(morph.t);
+  const { from, to } = seg;
+  const v = {
+    target: from.target.clone().lerp(to.target, k),
+    polar: THREE.MathUtils.lerp(from.polar, to.polar, k),
+    azimuth: lerpAngle(from.azimuth, to.azimuth, k),
+    fov: THREE.MathUtils.lerp(from.fov, to.fov, k),
+  };
+  if (seg.dolly) {
+    // 換視角時同步改距離，地面比例維持不變（推拉變焦），只有建物立面慢慢出現
+    v.dist = distFor(v.fov, seg.groundH);
+    v.fogK = v.dist / distFor(FOV_3D, seg.groundH);
+  } else {
+    v.dist = THREE.MathUtils.lerp(from.dist, to.dist, k);
+    v.fogK = THREE.MathUtils.lerp(from.fogK, to.fogK, k);
+  }
+  applyView(v);
+  if (morph.t >= 1) {
+    morph.i += 1;
+    morph.t = 0;
+    if (morph.i >= morph.segs.length) {
+      const done = morph.onDone;
+      morph = null;
+      done?.();
+    }
+  }
+}
+
+const postToParent = (msg) => {
+  if (window.parent !== window) window.parent.postMessage(msg, location.origin);
+};
+let pendingTo3d = null;
+window.addEventListener('message', (e) => {
+  if (e.origin !== location.origin || e.source !== window.parent) return;
+  const m = e.data;
+  if (!m || typeof m.type !== 'string') return;
+
+  if (m.type === 'eventou:to-3d') {
+    // 平面 → 立體 第 1 步：先停在與平面地圖完全重疊的俯視、近平行投影畫面
+    const { lat, lng, zoom } = m;
+    if (![lat, lng, zoom].every(Number.isFinite)) return;
+    const groundH = (window.innerHeight * metersPerPixel(lat, zoom)) / GEO_SCALE;
+    const start = flatView(latLngToWorld(lat, lng), groundH, FOV_FLAT);
+    freeze();
+    morph = { parked: true };
+    applyView(start);
+    pendingTo3d = { start, groundH };
+    renderer.render(scene, camera);
+    labelRenderer.render(scene, camera);
+    requestAnimationFrame(() => postToParent({ type: 'eventou:3d-ready' }));
+  }
+
+  if (m.type === 'eventou:3d-begin' && pendingTo3d) {
+    // 第 2 步：俯視不動、視角慢慢變成透視；第 3 步：才離開俯視，傾斜到立體視角
+    const { start, groundH } = pendingTo3d;
+    pendingTo3d = null;
+    const persp = flatView(start.target, groundH, FOV_3D);
+    const end = {
+      ...persp,
+      polar: HOME_SPH.phi,
+      azimuth: HOME_SPH.theta,
+      dist: THREE.MathUtils.clamp(persp.dist, controls.minDistance, controls.maxDistance),
+      fogK: 1,
+    };
+    playMorph(
+      [
+        { from: start, to: persp, dur: 0.9, dolly: true, groundH },
+        { from: persp, to: end, dur: 1.3 },
+      ],
+      release,
+    );
+  }
+
+  if (m.type === 'eventou:to-2d') {
+    // 立體 → 平面：反過來。先轉回北方朝上的俯視，再把視角收成近平行投影，最後交給平面地圖
+    pendingTo3d = null;
+    const from = currentView();
+    const center = worldToLatLng(from.target.x, from.target.z);
+    const nowGroundH = 2 * from.dist * Math.tan(THREE.MathUtils.degToRad(FOV_3D) / 2);
+    const mpp = (nowGroundH * GEO_SCALE) / window.innerHeight;
+    const zoom = THREE.MathUtils.clamp(
+      Math.round(Math.log2((40075016.686 * Math.cos((center.lat * Math.PI) / 180)) / (256 * mpp))),
+      15,
+      19,
+    );
+    const groundH = (window.innerHeight * metersPerPixel(center.lat, zoom)) / GEO_SCALE;
+    const ground = from.target.clone().setY(0);
+    const top = flatView(ground, groundH, FOV_3D);
+    const flat = flatView(ground, groundH, FOV_FLAT);
+    playMorph(
+      [
+        { from, to: top, dur: 1.2 },
+        { from: top, to: flat, dur: 0.8, dolly: true, groundH },
+      ],
+      () => {
+        morph = { parked: true };
+        postToParent({ type: 'eventou:2d-ready', lat: center.lat, lng: center.lng, zoom });
+      },
+    );
+  }
+});
+
+// ---------- 按需繪製 ----------
+// 場景大多時候是靜止的，每幀都重畫（上千個 draw call 加陰影）會讓整頁一直吃滿 CPU／GPU。
+// 改成只有畫面會變的時候才畫：相機在動、動畫進行中、使用者正在操作。太陽固定，陰影只在建物移動時重算。
+renderer.shadowMap.autoUpdate = false;
+renderer.shadowMap.needsUpdate = true;
+let dirtyFrames = 2; // 接下來還要畫幾幀
+let shadowDirty = false;
+const invalidate = (frames = 2) => {
+  dirtyFrames = Math.max(dirtyFrames, frames);
+};
+// 任何輸入都可能改變畫面（點選高亮、編輯拖曳、面板操作），保守地多畫幾幀
+for (const type of [
+  'pointerdown',
+  'pointermove',
+  'pointerup',
+  'wheel',
+  'keydown',
+  'keyup',
+  'click',
+]) {
+  window.addEventListener(
+    type,
+    () => {
+      invalidate(3);
+      // 編輯模式會直接移動、旋轉建物，陰影要跟著重算
+      if (editMode) shadowDirty = true;
+    },
+    { capture: true, passive: true },
+  );
+}
+window.addEventListener('resize', () => invalidate());
+controls.addEventListener('change', () => invalidate());
+// 外層把立體模型藏起來時（切到平面地圖）整個暫停
+let paused = false;
+window.addEventListener('message', (e) => {
+  if (e.origin !== location.origin || e.source !== window.parent) return;
+  if (e.data?.type === 'eventou:visibility') {
+    paused = !e.data.visible;
+    if (!paused) invalidate();
+  }
+});
+document.addEventListener('visibilitychange', () => invalidate());
+
+// ---------- 活動標記 ----------
+// 外層地圖頁把篩選後的活動（經緯度＋摘要）傳進來；同一個地點的活動合成一個標記，點開看清單。
+// 活動標題、地點都來自擷取的公告，一律用 textContent 放進畫面；連結只接受站內路徑。
+const eventLayer = new THREE.Group();
+scene.add(eventLayer);
+const hitMeshes = [];
+scene.traverse((o) => {
+  if (o.isMesh) hitMeshes.push(o);
+});
+const rayDown = new THREE.Raycaster();
+// 標記放在該點最高的表面上（屋頂或地面）
+function surfaceY(x, z) {
+  rayDown.set(new THREE.Vector3(x, 500, z), new THREE.Vector3(0, -1, 0));
+  const hit = rayDown.intersectObjects(hitMeshes, false).find((h) => h.object.visible);
+  return hit ? hit.point.y : 0;
+}
+const EVENT_CATEGORIES = new Set(['lecture', 'workshop', 'exhibition', 'sports', 'welfare']);
+// 只接受站內路徑：交給瀏覽器解析後比對 origin，tab、反斜線等變形也擋得住
+const safeHref = (href) => {
+  if (typeof href !== 'string' || !href.startsWith('/')) return null;
+  try {
+    return new URL(href, location.origin).origin === location.origin ? href : null;
+  } catch {
+    return null;
+  }
+};
+const eventsCard = document.createElement('div');
+eventsCard.id = 'eventsCard';
+eventsCard.className = 'card';
+eventsCard.hidden = true;
+document.body.append(eventsCard);
+
+function showEventList(list) {
+  const head = document.createElement('div');
+  head.className = 'title-row';
+  const heading = document.createElement('strong');
+  heading.textContent = list.length > 1 ? `這裡有 ${list.length} 個活動` : '活動';
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.textContent = '關閉';
+  close.addEventListener('click', () => {
+    eventsCard.hidden = true;
+  });
+  head.append(heading, close);
+  const ul = document.createElement('ul');
+  for (const ev of list) {
+    const li = document.createElement('li');
+    if (ev.categoryLabel) {
+      const chip = document.createElement('span');
+      chip.className =
+        'ev-cat cat-' + (EVENT_CATEGORIES.has(ev.category) ? ev.category : 'default');
+      chip.textContent = String(ev.categoryLabel);
+      li.append(chip);
+    }
+    const href = safeHref(ev.href);
+    const title = document.createElement(href ? 'a' : 'span');
+    title.className = 'ev-title';
+    title.textContent = String(ev.title ?? '');
+    if (href) {
+      title.href = href;
+      title.target = '_top'; // 在外層頁面開啟活動詳細頁
+    }
+    li.append(title);
+    for (const line of Array.isArray(ev.details) ? ev.details : []) {
+      if (!line) continue;
+      const p = document.createElement('p');
+      p.className = 'ev-detail';
+      p.textContent = String(line);
+      li.append(p);
+    }
+    ul.append(li);
+  }
+  eventsCard.replaceChildren(head, ul);
+  eventsCard.hidden = false;
+  infoEl.style.display = 'none';
+}
+
+function setEvents(events) {
+  eventLayer.clear(); // CSS2DObject 被移除時會一併移除自己的 DOM 元素
+  eventsCard.hidden = true;
+  const groups = new Map();
+  for (const ev of events) {
+    if (!Number.isFinite(ev?.lat) || !Number.isFinite(ev?.lng)) continue;
+    const key = `${ev.lat.toFixed(5)},${ev.lng.toFixed(5)}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(ev);
+  }
+  for (const list of groups.values()) {
+    const p = latLngToWorld(list[0].lat, list[0].lng);
+    const anchor = document.createElement('div');
+    anchor.className = 'ev-anchor';
+    const pin = document.createElement('button');
+    pin.type = 'button';
+    const cat = EVENT_CATEGORIES.has(list[0].category) ? list[0].category : 'default';
+    pin.className = 'ev-pin cat-' + cat;
+    pin.textContent =
+      list.length > 1 ? String(list.length) : String(list[0].glyph ?? '●').slice(0, 2);
+    const titles = list.map((ev) => String(ev.title ?? ''));
+    pin.title = titles.join('\n');
+    pin.setAttribute('aria-label', `${list.length} 個活動：${titles.join('、')}`);
+    pin.addEventListener('click', (e) => {
+      e.stopPropagation();
+      showEventList(list);
+      invalidate();
+    });
+    anchor.append(pin);
+    const obj = new CSS2DObject(anchor);
+    obj.position.set(p.x, surfaceY(p.x, p.z) + 2, p.z);
+    eventLayer.add(obj);
+  }
+  invalidate();
+}
+window.addEventListener('message', (e) => {
+  if (e.origin !== location.origin || e.source !== window.parent) return;
+  if (e.data?.type === 'eventou:events' && Array.isArray(e.data.events))
+    setEvents(e.data.events.slice(0, 500));
+});
+
+// ---------- 移軸鏡頭效果 ----------
+// 拉近時模仿移軸攝影：畫面中間一條清楚的帶狀區域，上下逐漸散焦，模糊處再帶一點色散，讓校園看起來像模型。
+// 遠景或切換動畫時不套用，直接畫，避免多花效能。
+const TILT_NEAR = 150; // 相機距離小於這個值時效果全開
+const TILT_FAR = 280; // 大於這個值時完全關閉（約為看得清整棟行政大樓的距離）
+const TILT_FOCUS = 0.5; // 清楚帶的中心（畫面由下往上 0–1）
+const TILT_BAND = 0.14; // 清楚帶的半寬
+const tiltBlurShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    dir: { value: new THREE.Vector2() },
+    amount: { value: 0 },
+    focus: { value: TILT_FOCUS },
+    band: { value: TILT_BAND },
+  },
+  vertexShader: /* glsl */ `
+    varying vec2 vUv;
+    void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: /* glsl */ `
+    uniform sampler2D tDiffuse;
+    uniform vec2 dir;
+    uniform float amount, focus, band;
+    varying vec2 vUv;
+    void main() {
+      float k = amount * smoothstep(band, band + 0.32, abs(vUv.y - focus));
+      vec4 sum = texture2D(tDiffuse, vUv) * 0.2270270270;
+      vec2 o1 = dir * k * 1.3846153846, o2 = dir * k * 3.2307692308;
+      sum += (texture2D(tDiffuse, vUv + o1) + texture2D(tDiffuse, vUv - o1)) * 0.3162162162;
+      sum += (texture2D(tDiffuse, vUv + o2) + texture2D(tDiffuse, vUv - o2)) * 0.0702702703;
+      gl_FragColor = sum;
+    }`,
+};
+const chromaShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    amount: { value: 0 },
+    focus: { value: TILT_FOCUS },
+    band: { value: TILT_BAND },
+  },
+  vertexShader: tiltBlurShader.vertexShader,
+  fragmentShader: /* glsl */ `
+    uniform sampler2D tDiffuse;
+    uniform float amount, focus, band;
+    varying vec2 vUv;
+    void main() {
+      float k = amount * smoothstep(band, band + 0.4, abs(vUv.y - focus));
+      vec2 off = (vUv - vec2(0.5, focus)) * k * 0.006;
+      vec4 c = texture2D(tDiffuse, vUv);
+      gl_FragColor = vec4(texture2D(tDiffuse, vUv + off).r, c.g, texture2D(tDiffuse, vUv - off).b, c.a);
+    }`,
+};
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+// 可分離模糊（水平、垂直）做三輪，取樣間距小、不會出現重影
+const blurPasses = [];
+for (let i = 0; i < 3; i++) {
+  for (const axis of ['x', 'y']) {
+    const pass = new ShaderPass(tiltBlurShader);
+    pass.axis = axis;
+    blurPasses.push(pass);
+    composer.addPass(pass);
+  }
+}
+const chromaPass = new ShaderPass(chromaShader);
+composer.addPass(chromaPass);
+composer.addPass(new OutputPass());
+function resizeComposer() {
+  composer.setPixelRatio(renderer.getPixelRatio());
+  composer.setSize(window.innerWidth, window.innerHeight);
+  const blurPx = 1.8; // 每輪取樣間距（像素），三輪疊加
+  for (const pass of blurPasses) {
+    pass.uniforms.dir.value.set(
+      pass.axis === 'x' ? blurPx / window.innerWidth : 0,
+      pass.axis === 'y' ? blurPx / window.innerHeight : 0,
+    );
+  }
+}
+resizeComposer();
+window.addEventListener('resize', resizeComposer);
+function renderView() {
+  const dist = camera.position.distanceTo(controls.target);
+  const strength = 1 - THREE.MathUtils.smoothstep(dist, TILT_NEAR, TILT_FAR);
+  if (strength < 0.01) {
+    renderer.render(scene, camera);
+    return;
+  }
+  for (const pass of blurPasses) pass.uniforms.amount.value = strength;
+  chromaPass.uniforms.amount.value = strength;
+  composer.render();
+}
+
 const clock = new THREE.Clock();
 const ease = (t) => 1 - Math.pow(1 - t, 3);
 renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 0.05);
+  if (morph) {
+    if (!morph.parked) stepMorph(dt);
+    else if (dirtyFrames <= 0) return;
+    dirtyFrames = Math.max(0, dirtyFrames - 1);
+    renderer.render(scene, camera);
+    labelRenderer.render(scene, camera);
+    return;
+  }
+  if (paused || document.hidden) return;
+  let moving = false;
   if (anim) {
     anim.t = Math.min(1, anim.t + dt / 0.9);
     const k = ease(anim.t);
     camera.position.lerpVectors(anim.fromPos, anim.toPos, k);
     controls.target.lerpVectors(anim.fromTgt, anim.toTgt, k);
     if (anim.t >= 1) anim = null;
+    moving = true;
   }
   for (const v of venueInfos) {
     const goal = v.exploded ? 1 : 0;
+    if (Math.abs(goal - v.t) < 1e-4) continue;
     v.t += (goal - v.t) * Math.min(1, dt * 6);
+    if (Math.abs(goal - v.t) < 1e-4) v.t = goal;
+    moving = true;
+    shadowDirty = true;
     const lift = (v.basement || 0) * (FLOOR_H + 9);
     v.floorMeshes.forEach((fg, i) => {
       fg.position.y = fg.userData.baseY + v.t * (i * 9 + lift);
@@ -4185,10 +4791,20 @@ renderer.setAnimationLoop(() => {
       const step = moveVel.clone().multiplyScalar(dt);
       camera.position.add(step);
       controls.target.add(step);
+      moving = true;
     }
   }
-  controls.update();
-  renderer.render(scene, camera);
+  // update() 在阻尼減速還沒停下時回傳 true
+  if (controls.update()) moving = true;
+  if (moving) invalidate(1);
+  if (dirtyFrames <= 0) return;
+  dirtyFrames -= 1;
+  if (shadowDirty) {
+    renderer.shadowMap.needsUpdate = true;
+    shadowDirty = false;
+  }
+  renderView();
   labelRenderer.render(scene, camera);
 });
 window.__ready = true;
+postToParent({ type: 'eventou:3d-loaded' });

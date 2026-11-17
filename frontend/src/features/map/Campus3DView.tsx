@@ -1,3 +1,4 @@
+import type { Ref } from 'react';
 import './campus3DView.css';
 
 interface Campus3DViewProps {
@@ -6,6 +7,7 @@ interface Campus3DViewProps {
   src?: string;
   /** 嵌在活動頁等較小的區塊時用較矮的高度 */
   compact?: boolean;
+  iframeRef?: Ref<HTMLIFrameElement>;
 }
 
 /**
@@ -16,10 +18,11 @@ export function Campus3DView({
   title,
   src = '/campus-3d.html',
   compact = false,
+  iframeRef,
 }: Campus3DViewProps) {
   return (
     <div className={compact ? 'campus-3d-view campus-3d-view--compact' : 'campus-3d-view'}>
-      <iframe src={src} title={title} loading="lazy" allow="clipboard-write" />
+      <iframe ref={iframeRef} src={src} title={title} loading="lazy" allow="clipboard-write" />
     </div>
   );
 }

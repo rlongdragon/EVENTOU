@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { formatEventTime } from '../events/eventTime';
-import { Campus3DView } from './Campus3DView';
+import { CampusMapStage } from './CampusMapStage';
 import { MapModeToggle, type MapMode } from './MapModeToggle';
-import { MapView, type MapMarker } from './MapView';
+import type { MapMarker } from './MapView';
 import { categoryClassName, categoryGlyph } from '../../shared/eventCategories';
 import { fetchMapEvents, type MapEventResult } from './api';
 import {
@@ -115,31 +115,31 @@ export function CampusMapPage() {
             ))}
           </select>
         </label>
-      </div>
-      <div className="campus-map-presets" role="group" aria-label="快速選擇日期範圍">
-        {DATE_RANGE_PRESETS.map((preset) => {
-          const presetRange = rangeFromToday(today, preset.days);
-          const active = presetRange.from === from && presetRange.to === to;
-          return (
-            <button
-              key={preset.days}
-              type="button"
-              aria-pressed={active}
-              onClick={() => setRange(presetRange)}
-            >
-              {preset.label}
-            </button>
-          );
-        })}
-        <button
-          type="button"
-          onClick={() => {
-            setRange({ from: '', to: '' });
-            setCategory('');
-          }}
-        >
-          清除篩選
-        </button>
+        <div className="campus-map-presets" role="group" aria-label="快速選擇日期範圍">
+          {DATE_RANGE_PRESETS.map((preset) => {
+            const presetRange = rangeFromToday(today, preset.days);
+            const active = presetRange.from === from && presetRange.to === to;
+            return (
+              <button
+                key={preset.days}
+                type="button"
+                aria-pressed={active}
+                onClick={() => setRange(presetRange)}
+              >
+                {preset.label}
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => {
+              setRange({ from: '', to: '' });
+              setCategory('');
+            }}
+          >
+            清除篩選
+          </button>
+        </div>
       </div>
       {matchingError && <p role="alert">{matchingError}</p>}
       {!matchingError && isLoading && <p role="status">正在載入活動地圖…</p>}
@@ -151,31 +151,29 @@ export function CampusMapPage() {
         </p>
       )}
       {mode === '3d' && (
-        <>
-          <p className="campus-map-note">
-            立體模型目前顯示建物、樓層與常辦活動的場地；活動標記請切換到平面地圖查看。
-          </p>
-          <Campus3DView title="3D 校園模型" />
-        </>
+        <p className="campus-map-note">
+          立體模型標出有活動的地點，點標記可看活動清單；常辦活動的場地可展開樓層。
+        </p>
       )}
       {mode === '2d' && result && (
-        <>
-          <ul className="map-legend" aria-label="圖例">
-            {result.categories.map((option) => (
-              <li key={option.code}>
-                <span
-                  className={`map-legend-swatch ${categoryClassName(option.code)}`}
-                  aria-hidden="true"
-                >
-                  {categoryGlyph(option.code)}
-                </span>
-                {option.label}
-              </li>
-            ))}
-          </ul>
-          <MapView markers={markers} ariaLabel="校園活動地圖" emptyCenter={result.campus} />
-        </>
+        <ul className="map-legend" aria-label="圖例">
+          {result.categories.map((option) => (
+            <li key={option.code}>
+              <span
+                className={`map-legend-swatch ${categoryClassName(option.code)}`}
+                aria-hidden="true"
+              >
+                {categoryGlyph(option.code)}
+              </span>
+              {option.label}
+            </li>
+          ))}
+        </ul>
       )}
+      <CampusMapStage
+        mode={mode}
+        map2d={result ? { markers, ariaLabel: '校園活動地圖', emptyCenter: result.campus } : null}
+      />
       {unlocatedEvents.length > 0 && (
         <section className="campus-map-unlocated" aria-labelledby="campus-map-unlocated-heading">
           <h2 id="campus-map-unlocated-heading">無法定位的活動（{unlocatedEvents.length}）</h2>
