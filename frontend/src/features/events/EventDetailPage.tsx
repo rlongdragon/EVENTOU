@@ -9,6 +9,7 @@ import { EventLocationMap } from './EventLocationMap';
 import { EventComments } from './EventComments';
 import { EventRating } from './EventRating';
 import { formatEventTime } from './eventTime';
+import { splitLinks } from './linkify';
 import { ShareEventButton } from './ShareEventButton';
 
 type LoadState =
@@ -87,7 +88,19 @@ export function EventDetailPage() {
       </figure>
       <section>
         <h2>活動說明</h2>
-        <p className="event-description">{event.description || '未提供'}</p>
+        <p className="event-description">
+          {event.description
+            ? splitLinks(event.description).map((segment, index) =>
+                segment.type === 'link' ? (
+                  <a key={index} href={segment.href} target="_blank" rel="noopener noreferrer">
+                    {segment.text}
+                  </a>
+                ) : (
+                  segment.text
+                ),
+              )
+            : '未提供'}
+        </p>
       </section>
       <EventCalendarSection event={event} />
       <section>
