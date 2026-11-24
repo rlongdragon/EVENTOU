@@ -140,7 +140,7 @@ describe('CAS 登入', () => {
     assert.ok(result.cookies.get('eventou_cas_state'));
   });
 
-  test('第一次登入自動建立會員：學號前 5 碼當顯示名稱、學校信箱當通知信箱，並回到原頁面', async () => {
+  test('第一次登入自動建立會員：學號前 5 碼加短代碼當顯示名稱、學校信箱當通知信箱，並回到原頁面', async () => {
     const result = await casLogin('01357107', '/events/3?tab=info');
     assert.equal(result.status, 302);
     assert.equal(result.location, '/events/3?tab=info');
@@ -148,7 +148,7 @@ describe('CAS 登入', () => {
     const me = await request('GET', '/api/auth/me', { cookie: sessionCookie(result) });
     assert.equal(me.status, 200);
     assert.equal(me.body.user.studentId, '01357107');
-    assert.equal(me.body.user.displayName, '01357*');
+    assert.match(me.body.user.displayName, /^01357\*-[0-9A-F]{5}$/);
     assert.equal(me.body.user.email, '01357107@mail.ntou.edu.tw');
     assert.equal(me.body.user.role, 'user');
     assert.equal(me.body.user.passwordHash, undefined);

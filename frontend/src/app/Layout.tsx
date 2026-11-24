@@ -1,5 +1,6 @@
 import { NavLink, Outlet, useLocation } from 'react-router';
 import { casLoginUrl, type Role } from '../features/auth/api';
+import { AdminBadge } from '../features/auth/AdminBadge';
 import { useAuth } from '../features/auth/AuthContext';
 import { useTaipeiToday } from '../shared/taipeiToday';
 import logoMark from '../assets/logo/eventou-mark.svg';
@@ -54,7 +55,8 @@ export function Layout() {
             {!loading && user && (
               <>
                 <NavLink to="/account">
-                  {user.displayName}（{ROLE_LABELS[user.role]}）
+                  {user.displayName}
+                  {user.role === 'admin' ? <AdminBadge compact /> : `（${ROLE_LABELS[user.role]}）`}
                 </NavLink>
                 <button type="button" onClick={() => void logout()}>
                   登出

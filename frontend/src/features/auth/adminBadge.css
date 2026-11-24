@@ -1,0 +1,66 @@
+/* #100 管理員徽章：深海藍底、金色描邊的盾牌標籤 */
+.admin-badge {
+  --admin-badge-navy: #0b3d6b;
+  --admin-badge-navy-light: #1a5a94;
+  --admin-badge-gold: #d4a84b;
+
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  gap: 0.25rem;
+  align-items: center;
+  overflow: hidden;
+  padding: 0.1rem 0.5rem 0.1rem 0.3rem;
+  border: 1px solid var(--admin-badge-gold);
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--admin-badge-navy), var(--admin-badge-navy-light));
+  box-shadow: 0 1px 2px rgba(11, 61, 107, 0.25);
+  color: #fff;
+  font-family: var(--font-label);
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.admin-badge svg {
+  flex: none;
+  filter: drop-shadow(0 0 1px rgba(212, 168, 75, 0.6));
+}
+
+/* 只有盾牌、沒有文字（導覽列等空間小的地方）；仍有 aria-label */
+.admin-badge--compact {
+  margin-left: 0.3rem;
+  padding: 0.15rem;
+}
+
+/* 出現時光澤掃過一次 */
+.admin-badge::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    110deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.55) 50%,
+    transparent 70%
+  );
+  content: '';
+  pointer-events: none;
+  transform: translateX(-130%);
+  animation: admin-badge-shine 1.2s var(--ease-out) 0.25s 1 both;
+}
+
+@keyframes admin-badge-shine {
+  to {
+    transform: translateX(130%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-badge::after {
+    display: none;
+    animation: none;
+  }
+}

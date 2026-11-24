@@ -10,6 +10,7 @@ import {
   type User,
 } from './auth.service.js';
 import { isRole } from './roles.js';
+import { findReservedWord } from './auth.displayName.js';
 import {
   casLoginUrl,
   casLogoutUrl,
@@ -172,7 +173,12 @@ authRouter.patch('/me', requireAuth, async (req, res) => {
     if (!displayName) fields.displayName = '請輸入顯示名稱';
     else if (displayName.length > DISPLAY_NAME_MAX_LENGTH) {
       fields.displayName = `顯示名稱不可超過 ${DISPLAY_NAME_MAX_LENGTH} 個字元`;
-    } else input.displayName = displayName;
+    } else {
+      // #100 管理員身分以徽章表示，一般使用者不能用保留字冒充
+      const reserved = req.user.role === 'admin' ? undefined : findReservedWord(displayName);
+      if (reserved) fields.displayName = `顯示名稱不可包含「${reserved}」等保留字`;
+      else input.displayName = displayName;
+    }
   }
   if (raw.email !== undefined) {
     const email = typeof raw.email === 'string' ? raw.email.trim().toLowerCase() : null;

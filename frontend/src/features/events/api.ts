@@ -1,4 +1,4 @@
-import { ApiError } from '../auth/api';
+import { ApiError, type Role } from '../auth/api';
 
 // 對應 backend/src/modules/events/events.types.ts 的 PublishedEvent（只列活動頁用到的欄位）
 export interface EventDetail {
@@ -88,7 +88,8 @@ export interface EventComment {
   createdAt: string;
   editedAt: string | null;
   /** 已刪除或隱藏的佔位為 null */
-  author: { id: number; displayName: string } | null;
+  /** role 決定是否顯示管理員徽章（#100），與顯示名稱無關 */
+  author: { id: number; displayName: string; role: Role } | null;
   /** 留言者目前對這個活動的評分（1–5），未評分為 null */
   rating: number | null;
   likeCount: number;

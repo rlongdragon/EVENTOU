@@ -498,4 +498,19 @@ export const migrations: Migration[] = [
       CREATE INDEX email_verifications_user ON email_verifications (user_id, created_at);
     `,
   },
+  {
+    id: 19,
+    name: 'unique_default_display_names',
+    // #100 預設顯示名稱加上由 id 產生的短代碼（01357* → 01357*-3F2A1），同系同屆的人不再同名。
+    // 算式與 auth.displayName.ts 的 displayNameCode 相同；只更新仍在用預設名稱的帳號。
+    up: `
+      UPDATE users
+      SET display_name = display_name || '-' || printf('%05X', (id * 40503) % 1048576)
+      WHERE student_id IS NOT NULL
+        AND display_name = CASE
+          WHEN length(student_id) > 5 THEN substr(student_id, 1, 5) || '*'
+          ELSE substr(student_id, 1, max(0, length(student_id) - 2)) || '*'
+        END;
+    `,
+  },
 ];

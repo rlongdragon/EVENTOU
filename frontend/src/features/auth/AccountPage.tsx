@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { ApiError } from './api';
+import { AdminBadge } from './AdminBadge';
 import { useAuth } from './AuthContext';
 
 const fieldStyle = { display: 'flex', flexDirection: 'column', gap: '0.25rem' } as const;
@@ -82,6 +83,7 @@ export function AccountPage() {
     <section style={{ maxWidth: 420 }}>
       <h1>帳號</h1>
       {user.studentId && <p>學號 {user.studentId}</p>}
+      <p>身分 {user.role === 'admin' ? <AdminBadge /> : '一般使用者'}</p>
       <form
         // 儲存後依最新的會員資料重設表單，信箱欄位顯示目前已驗證的信箱
         key={`${user.email ?? ''}|${pendingEmail ?? ''}`}
@@ -99,6 +101,9 @@ export function AccountPage() {
             required
           />
           {fieldErrors.displayName && <p style={errorStyle}>{fieldErrors.displayName}</p>}
+          {user.role !== 'admin' && (
+            <small>顯示在留言等公開位置；不可包含「管理員」「官方」「admin」等保留字。</small>
+          )}
         </label>
         <label style={fieldStyle}>
           通知信箱
