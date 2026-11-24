@@ -109,9 +109,10 @@ export function EventSearchPage() {
           <p className="cover-lead fade-in">
             為你彙整海大的活動；學校首頁與各處室的公告自動整理成同一份清單。可以搜尋、加進行事曆，有新活動就通知你。
           </p>
-          {/* key 讓網址條件改變（例如按上一頁）時表單跟著重設 */}
+          {/* key 讓網址條件改變（例如按上一頁）時表單跟著重設；選項載入後也重設，
+              否則直接開帶條件的網址時，defaultValue 套用時選項還不存在，選單會停在「全部」 */}
           <form
-            key={`${q}\n${category}\n${topic}`}
+            key={`${q}\n${category}\n${topic}\n${categories.length}\n${topics.length}`}
             role="search"
             onSubmit={handleSubmit}
             className="search-bar fade-in"
