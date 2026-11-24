@@ -291,6 +291,17 @@ describe('追蹤來源與 Email 通知開關（#76）', () => {
     assert.equal(recipients.filter((subscriber) => subscriber.userId === id).length, 1);
   });
 
+  test('追蹤內容領域的使用者是該領域新活動的通知對象', async () => {
+    const { cookie, id } = createTestUser();
+    await request('PUT', '/api/subscriptions/topics/security', { cookie });
+    const recipients = (topics: string[]) =>
+      listEventSubscribers({ category: 'other', sourceId: 0, topics }).map(
+        (subscriber) => subscriber.userId,
+      );
+    assert.ok(recipients(['ai', 'security']).includes(id));
+    assert.ok(!recipients(['ai']).includes(id));
+  });
+
   test('通知設定的值不是布林時回傳 400', async () => {
     const { cookie } = createTestUser();
     for (const body of [{}, { emailNotifications: 'no' }, { emailNotifications: 0 }]) {

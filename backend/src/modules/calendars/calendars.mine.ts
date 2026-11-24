@@ -26,7 +26,7 @@ export interface EventCalendarState {
   mine: boolean;
   mark: EventMarkState | null;
   /** 是否因為追蹤類別／來源而帶進來（與 mark 無關） */
-  via: { category: boolean; source: boolean };
+  via: { category: boolean; source: boolean; topic: boolean };
 }
 
 /** 月曆上的一筆活動。 */
@@ -81,19 +81,25 @@ const USER_EVENTS_SQL = `
     EXISTS (SELECT 1 FROM source_follows sf
       WHERE sf.user_id = :userId
         AND (sf.source_id = e.source_id OR sf.source_id IN (${MERGED_SOURCE_IDS_SQL}))) AS via_source,
+    EXISTS (SELECT 1 FROM users u, json_each(u.interest_topics) ut, json_each(e.topics) et
+      WHERE u.id = :userId AND ut.value = et.value) AS via_topic,
     (e.source_id = :sourceId OR :sourceId IN (${MERGED_SOURCE_IDS_SQL})) AS from_source
   FROM published_events e
   JOIN sources s ON s.id = e.source_id
   WHERE s.review_status = '${APPROVED}'`;
 
-const IS_MINE_SQL = `(mark = 'added' OR ((via_category OR via_source) AND mark IS NOT 'hidden'))`;
-const IS_FOLLOWED_SQL = `(mark = 'added' OR via_category OR via_source)`;
+const IS_MINE_SQL = `(mark = 'added' OR ((via_category OR via_source OR via_topic) AND mark IS NOT 'hidden'))`;
+const IS_FOLLOWED_SQL = `(mark = 'added' OR via_category OR via_source OR via_topic)`;
 
 function toState(row: Record<string, SQLOutputValue>): EventCalendarState {
   const mark = isEventMarkState(row.mark) ? row.mark : null;
-  const via = { category: Number(row.via_category) === 1, source: Number(row.via_source) === 1 };
+  const via = {
+    category: Number(row.via_category) === 1,
+    source: Number(row.via_source) === 1,
+    topic: Number(row.via_topic) === 1,
+  };
   return {
-    mine: mark === 'added' || ((via.category || via.source) && mark !== 'hidden'),
+    mine: mark === 'added' || ((via.category || via.source || via.topic) && mark !== 'hidden'),
     mark,
     via,
   };

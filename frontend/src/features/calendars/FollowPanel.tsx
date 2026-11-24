@@ -5,6 +5,7 @@ import {
   setCategoryFollowed,
   setEmailNotifications,
   setSourceFollowed,
+  setTopicFollowed,
   type FollowState,
 } from '../subscriptions/api';
 
@@ -21,7 +22,7 @@ interface FollowPanelProps {
   onChange: () => void;
 }
 
-/** 追蹤類別與來源：追蹤的活動會出現在我的行事曆，有新活動時寄 Email（可關閉）。 */
+/** 追蹤類別、領域與來源：追蹤的活動會出現在我的行事曆，有新活動時寄 Email（可關閉）。 */
 export function FollowPanel({ onChange }: FollowPanelProps) {
   const [state, setState] = useState<FollowState | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -52,6 +53,7 @@ export function FollowPanel({ onChange }: FollowPanelProps) {
 
   const followedCount =
     (state?.categories.filter((item) => item.subscribed).length ?? 0) +
+    (state?.topics.filter((item) => item.subscribed).length ?? 0) +
     (state?.sources.filter((item) => item.followed).length ?? 0);
 
   return (
@@ -59,8 +61,8 @@ export function FollowPanel({ onChange }: FollowPanelProps) {
       <div className="cal-panel-head">
         <h2 id="follow-heading">追蹤</h2>
         <p className="cal-muted">
-          追蹤的類別與來源有新活動時，會自動出現在你的行事曆
-          {state && followedCount === 0 && '。目前還沒有追蹤任何類別或來源'}。
+          追蹤的類別、領域與來源有新活動時，會自動出現在你的行事曆
+          {state && followedCount === 0 && '。目前還沒有追蹤任何項目'}。
         </p>
       </div>
       {error && <p role="alert">無法更新追蹤：{error}</p>}
@@ -83,6 +85,22 @@ export function FollowPanel({ onChange }: FollowPanelProps) {
                 <span className="cal-toggle-glyph" aria-hidden="true">
                   {categoryGlyph(item.category)}
                 </span>
+                {item.label}
+              </button>
+            ))}
+          </div>
+
+          <h3 className="cal-subhead">領域</h3>
+          <div className="interest-chips" role="group" aria-label="追蹤的領域">
+            {state.topics.map((item) => (
+              <button
+                key={item.topic}
+                type="button"
+                className="topic-toggle"
+                aria-pressed={item.subscribed}
+                disabled={busy}
+                onClick={() => void update(() => setTopicFollowed(item.topic, !item.subscribed))}
+              >
                 {item.label}
               </button>
             ))}
@@ -129,7 +147,7 @@ export function FollowPanel({ onChange }: FollowPanelProps) {
               }
             />
             <span>
-              追蹤的類別或來源有新活動時寄 Email 給我
+              追蹤的類別、領域或來源有新活動時寄 Email 給我
               <span className="cal-muted cal-switch-note">
                 每個活動只會通知一次；關閉後仍會出現在行事曆
               </span>

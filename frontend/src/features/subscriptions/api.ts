@@ -1,6 +1,6 @@
 import { ApiError } from '../auth/api';
 
-// 追蹤與通知（需登入）：追蹤的類別與來源決定「我的行事曆」的內容，也決定新活動 Email 通知的對象。
+// 追蹤與通知（需登入）：追蹤的類別、領域與來源決定「我的行事曆」的內容，也決定新活動 Email 通知的對象。
 
 export interface CategoryFollow {
   /** 類別代碼 */
@@ -18,8 +18,16 @@ export interface SourceFollow {
 }
 
 /** 每個異動 API 都回傳完整的追蹤狀態。 */
+/** 內容領域的追蹤狀態；和帳號頁的偏好領域是同一份設定 */
+export interface TopicFollow {
+  topic: string;
+  label: string;
+  subscribed: boolean;
+}
+
 export interface FollowState {
   categories: CategoryFollow[];
+  topics: TopicFollow[];
   sources: SourceFollow[];
   emailNotifications: boolean;
 }
@@ -47,6 +55,12 @@ export function fetchFollowState(signal?: AbortSignal): Promise<FollowState> {
 
 export function setCategoryFollowed(category: string, followed: boolean): Promise<FollowState> {
   return request(`/api/subscriptions/${encodeURIComponent(category)}`, {
+    method: followed ? 'PUT' : 'DELETE',
+  });
+}
+
+export function setTopicFollowed(topic: string, followed: boolean): Promise<FollowState> {
+  return request(`/api/subscriptions/topics/${encodeURIComponent(topic)}`, {
     method: followed ? 'PUT' : 'DELETE',
   });
 }

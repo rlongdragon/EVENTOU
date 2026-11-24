@@ -2,9 +2,13 @@
 export const CATEGORY_GLYPHS: Record<string, string> = {
   lecture: '講',
   workshop: '工',
+  info_session: '說',
+  competition: '賽',
   exhibition: '展',
+  camp: '營',
   sports: '運',
-  welfare: '餐',
+  welfare: '福',
+  other: '其',
 };
 
 /** 類別對應的 CSS class（設定 --cat-color）；未知或未提供類別時用主題輔色。 */

@@ -1,6 +1,6 @@
 import { getDb } from '../../db/index.js';
 import type { EventCategory } from '../events/events.types.js';
-import { EVENT_CATEGORY_LABELS } from '../events/events.types.js';
+import { EVENT_CATEGORY_LABELS, EVENT_TOPIC_LABELS, isEventTopic } from '../events/events.types.js';
 import type { ReviewStatus } from '../sources/sourceTypes.js';
 import { buildNewEventEmail } from './subscriptions.email.js';
 import type { Mailer } from './subscriptions.mailer.js';
@@ -55,7 +55,7 @@ export function dispatchNewEvents(now = new Date()): number {
   const db = getDb();
   const events = db
     .prepare(
-      `SELECT e.id, e.category, e.source_id, e.start_time, e.end_time, e.all_day
+      `SELECT e.id, e.category, e.topics, e.source_id, e.start_time, e.end_time, e.all_day
       FROM published_events e
       JOIN sources s ON s.id = e.source_id
       LEFT JOIN event_notification_dispatches d ON d.event_id = e.id
@@ -84,7 +84,11 @@ export function dispatchNewEvents(now = new Date()): number {
     );
     const subscribers =
       !ended && isEventCategory(row.category)
-        ? listEventSubscribers({ category: row.category, sourceId: Number(row.source_id) })
+        ? listEventSubscribers({
+            category: row.category,
+            sourceId: Number(row.source_id),
+            topics: JSON.parse(String(row.topics ?? '[]')) as string[],
+          })
         : [];
     // 寄送紀錄與派送紀錄要一起成立，避免中途失敗後同一活動被派送兩次
     db.exec('BEGIN');
@@ -103,7 +107,7 @@ export function dispatchNewEvents(now = new Date()): number {
 }
 
 /**
- * 寄出所有 pending 的通知。寄出前會再確認一次：使用者已不再追蹤該類別與來源、
+ * 寄出所有 pending 的通知。寄出前會再確認一次：使用者已不再追蹤該類別、領域與來源、
  * 已關閉 Email 通知、沒有通知信箱，或活動已不是已發布狀態時不寄，標記為 skipped。
  */
 export async function sendPendingNotifications(
@@ -121,6 +125,8 @@ export async function sendPendingNotifications(
           WHERE cs.user_id = n.user_id AND cs.category = e.category) AS follows_category,
         (SELECT s.name FROM source_follows sf JOIN sources s ON s.id = sf.source_id
           WHERE sf.user_id = n.user_id AND sf.source_id = e.source_id) AS followed_source_name,
+        (SELECT et.value FROM json_each(e.topics) et, json_each(u.interest_topics) ut
+          WHERE et.value = ut.value LIMIT 1) AS followed_topic,
         COALESCE((SELECT st.email_notifications FROM user_calendar_settings st
           WHERE st.user_id = n.user_id), 1) AS notifications_enabled
       FROM event_notifications n
@@ -143,11 +149,12 @@ export async function sendPendingNotifications(
     const followsCategory = Number(row.follows_category) === 1;
     const followedSourceName =
       row.followed_source_name === null ? null : String(row.followed_source_name);
+    const followedTopic = isEventTopic(row.followed_topic) ? row.followed_topic : null;
     if (
       row.event_id === null ||
       row.email === null ||
       Number(row.notifications_enabled) !== 1 ||
-      (!followsCategory && followedSourceName === null)
+      (!followsCategory && followedSourceName === null && !followedTopic)
     ) {
       update.run('skipped' satisfies NotificationStatus, attempts, null, null, timestamp, id);
       result.skipped += 1;
@@ -167,10 +174,12 @@ export async function sendPendingNotifications(
         originalUrl: String(row.original_url),
       },
       baseUrl,
-      // 同時追蹤類別與來源時，以類別說明收到通知的原因
-      followsCategory || followedSourceName === null
+      // 同時符合多項時，依類別、領域、來源的順序說明收到通知的原因
+      followsCategory
         ? { kind: 'category' }
-        : { kind: 'source', sourceName: followedSourceName },
+        : followedTopic
+          ? { kind: 'topic', topicLabel: EVENT_TOPIC_LABELS[followedTopic] }
+          : { kind: 'source', sourceName: followedSourceName ?? '' },
     );
     try {
       await mailer.send(message);

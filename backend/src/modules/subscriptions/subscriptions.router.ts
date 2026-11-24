@@ -4,18 +4,26 @@ import { getDb } from '../../db/index.js';
 import { requireAuth } from '../auth/auth.middleware.js';
 import { getCalendarSettings, setEmailNotifications } from '../calendars/calendars.mine.js';
 import type { EventCategory } from '../events/events.types.js';
-import { EVENT_CATEGORIES, EVENT_CATEGORY_LABELS } from '../events/events.types.js';
+import {
+  EVENT_CATEGORIES,
+  EVENT_CATEGORY_LABELS,
+  EVENT_TOPIC_LABELS,
+  EVENT_TOPICS,
+  isEventTopic,
+} from '../events/events.types.js';
 import {
   followSource,
   isEventCategory,
+  listFollowedTopics,
   listSourceFollows,
   listSubscribedCategories,
+  setTopicFollowed,
   subscribeCategory,
   unfollowSource,
   unsubscribeCategory,
 } from './subscriptions.service.js';
 
-// 追蹤與通知：追蹤的類別與來源決定「我的行事曆」的內容，也決定新活動 Email 通知的對象
+// 追蹤與通知：追蹤的類別、領域與來源決定「我的行事曆」的內容，也決定新活動 Email 通知的對象
 export const subscriptionsRouter = Router();
 
 subscriptionsRouter.use(requireAuth);
@@ -23,11 +31,17 @@ subscriptionsRouter.use(requireAuth);
 /** 所有類別、可追蹤的來源與目前使用者的追蹤狀態；每個異動 API 都回傳同一份，前端不必再查一次。 */
 function sendSubscriptions(res: Response, userId: number): void {
   const subscribed = new Set(listSubscribedCategories(userId));
+  const followedTopics = new Set(listFollowedTopics(userId));
   res.json({
     categories: EVENT_CATEGORIES.map((category) => ({
       category,
       label: EVENT_CATEGORY_LABELS[category],
       subscribed: subscribed.has(category),
+    })),
+    topics: EVENT_TOPICS.map((topic) => ({
+      topic,
+      label: EVENT_TOPIC_LABELS[topic],
+      subscribed: followedTopics.has(topic),
     })),
     sources: listSourceFollows(userId),
     emailNotifications: getCalendarSettings(getDb(), userId).emailNotifications,
@@ -108,6 +122,22 @@ subscriptionsRouter.delete('/sources/:sourceId', (req, res) => {
   unfollowSource(userId, sourceId);
   sendSubscriptions(res, userId);
 });
+
+// 追蹤內容領域（需登入）；和帳號頁的偏好領域（#98）是同一份設定
+subscriptionsRouter.put('/topics/:topic', (req, res) => setTopic(req, res, true));
+subscriptionsRouter.delete('/topics/:topic', (req, res) => setTopic(req, res, false));
+
+function setTopic(req: Request, res: Response, followed: boolean): void {
+  const userId = currentUserId(req, res);
+  if (userId === undefined) return;
+  const { topic } = req.params;
+  if (!isEventTopic(topic)) {
+    res.status(404).json({ error: 'not_found', message: '找不到這個領域' });
+    return;
+  }
+  setTopicFollowed(userId, topic, followed);
+  sendSubscriptions(res, userId);
+}
 
 // US-07 追蹤類別（需登入）；重複追蹤不會產生第二筆
 subscriptionsRouter.put('/:category', (req, res) => {

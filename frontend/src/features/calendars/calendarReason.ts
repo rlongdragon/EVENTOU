@@ -4,8 +4,11 @@ import type { EventCalendarState } from './api';
 export function calendarReason(state: EventCalendarState): string | null {
   if (state.mark === 'added') return '已手動加入';
   if (state.mark === 'hidden') return '已從行事曆隱藏';
-  if (state.via.category && state.via.source) return '來自追蹤的類別與來源';
-  if (state.via.category) return '來自追蹤的類別';
-  if (state.via.source) return '來自追蹤的來源';
+  const followed = [
+    state.via.category && '類別',
+    state.via.topic && '領域',
+    state.via.source && '來源',
+  ].filter(Boolean);
+  if (followed.length) return `來自追蹤的${followed.join('與')}`;
   return null;
 }

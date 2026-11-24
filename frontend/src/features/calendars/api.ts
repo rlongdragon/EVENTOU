@@ -55,7 +55,7 @@ export interface EventCalendarState {
   mine: boolean;
   mark: EventMark | null;
   /** 是否因為追蹤類別／來源而帶進來 */
-  via: { category: boolean; source: boolean };
+  via: { category: boolean; source: boolean; topic: boolean };
 }
 
 /** 月曆上的一筆活動。 */

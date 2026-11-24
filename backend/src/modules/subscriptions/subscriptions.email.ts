@@ -20,8 +20,11 @@ export interface NotificationEvent {
   originalUrl: string;
 }
 
-/** 收到通知的原因：追蹤了活動的類別，或追蹤了活動的來源。 */
-export type NotificationReason = { kind: 'category' } | { kind: 'source'; sourceName: string };
+/** 收到通知的原因：追蹤了活動的類別、內容領域，或活動的來源。 */
+export type NotificationReason =
+  | { kind: 'category' }
+  | { kind: 'topic'; topicLabel: string }
+  | { kind: 'source'; sourceName: string };
 
 const TIME_ZONE = 'Asia/Taipei';
 const WEEKDAYS = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
@@ -93,7 +96,11 @@ export function buildNewEventEmail(
   const time = formatEventTime(event);
   const location = event.location ?? '未提供';
   const followed =
-    reason.kind === 'source' ? `來源「${reason.sourceName}」` : `「${event.categoryLabel}」類別`;
+    reason.kind === 'source'
+      ? `來源「${reason.sourceName}」`
+      : reason.kind === 'topic'
+        ? `「${reason.topicLabel}」領域`
+        : `「${event.categoryLabel}」類別`;
   const unsubscribe = `你會收到這封信，是因為你追蹤了${followed}。不想再收到通知時，請到行事曆頁取消追蹤或關閉 Email 通知`;
 
   const text = [

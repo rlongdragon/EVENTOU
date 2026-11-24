@@ -24,7 +24,7 @@ export function DayAgenda({ day, items, loading, scope, signedIn, onStateChange 
       {items.length === 0 && !loading && (
         <p className="cal-muted">
           {scope === 'mine'
-            ? '這天你的行事曆沒有活動。到「全部活動」看看，或在下方追蹤感興趣的類別與來源。'
+            ? '這天你的行事曆沒有活動。到「全部活動」看看，或在下方追蹤感興趣的類別、領域與來源。'
             : '這天沒有活動。'}
         </p>
       )}

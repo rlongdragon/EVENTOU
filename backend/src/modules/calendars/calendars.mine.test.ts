@@ -130,7 +130,7 @@ interface Item {
   categoryLabel: string;
   mine: boolean;
   mark: string | null;
-  via: { category: boolean; source: boolean };
+  via: { category: boolean; source: boolean; topic: boolean };
 }
 
 const MAY = 'from=2099-05-01&to=2099-05-31';
@@ -187,6 +187,25 @@ describe('我的行事曆：追蹤、加入與隱藏', () => {
     assert.deepEqual(await titles(`${MAY}&scope=mine`, cookie), []);
   });
 
+  test('追蹤內容領域的活動會出現在我的行事曆，和帳號頁的偏好領域是同一份設定', async () => {
+    const cookie = createTestUser().cookie;
+    const followed = await request('PUT', '/api/subscriptions/topics/arts', { cookie });
+    const topics = followed.body.topics as { topic: string; subscribed: boolean }[];
+    assert.equal(topics.find((topic) => topic.topic === 'arts')?.subscribed, true);
+    const me = await request('GET', '/api/auth/me', { cookie });
+    assert.deepEqual((me.body.user as { interestTopics: string[] }).interestTopics, ['arts']);
+    const { body } = await request('GET', `/api/calendars/events?${MAY}&scope=mine`, { cookie });
+    const items = body.items as Item[];
+    assert.deepEqual(
+      items.map((item) => item.title),
+      ['攝影展'],
+    );
+    assert.deepEqual(items[0].via, { category: false, source: false, topic: true });
+    await request('DELETE', '/api/subscriptions/topics/arts', { cookie });
+    assert.deepEqual(await titles(`${MAY}&scope=mine`, cookie), []);
+    assert.equal((await request('PUT', '/api/subscriptions/topics/nope', { cookie })).status, 404);
+  });
+
   test('追蹤類別或來源的活動會出現在我的行事曆，並標示原因', async () => {
     const cookie = createTestUser().cookie;
     await request('PUT', '/api/subscriptions/exhibition', { cookie });
@@ -197,8 +216,8 @@ describe('我的行事曆：追蹤、加入與隱藏', () => {
       items.map((item) => item.title),
       ['系上講座', '攝影展', '系際盃'],
     );
-    assert.deepEqual(items[1].via, { category: true, source: false });
-    assert.deepEqual(items[0].via, { category: false, source: true });
+    assert.deepEqual(items[1].via, { category: true, source: false, topic: false });
+    assert.deepEqual(items[0].via, { category: false, source: true, topic: false });
     assert.ok(items.every((item) => item.mine));
   });
 
@@ -210,7 +229,7 @@ describe('我的行事曆：追蹤、加入與隱藏', () => {
     assert.deepEqual(added.body, {
       mine: true,
       mark: 'added',
-      via: { category: false, source: false },
+      via: { category: false, source: false, topic: false },
     });
     await request('PUT', path, { cookie, body: { state: 'added' } });
     assert.deepEqual(await titles(`${MAY}&scope=mine`, cookie), ['系際盃']);
@@ -235,7 +254,7 @@ describe('我的行事曆：追蹤、加入與隱藏', () => {
     assert.deepEqual(hidden.body, {
       mine: false,
       mark: 'hidden',
-      via: { category: true, source: false },
+      via: { category: true, source: false, topic: false },
     });
     assert.deepEqual(await titles(`${MAY}&scope=mine`, cookie), []);
     assert.deepEqual(await titles(`${MAY}&scope=mine&hidden=1`, cookie), ['系上講座']);
@@ -281,7 +300,11 @@ describe('我的行事曆：追蹤、加入與隱藏', () => {
       cookie,
     });
     assert.equal(status, 200);
-    assert.deepEqual(body, { mine: true, mark: null, via: { category: true, source: false } });
+    assert.deepEqual(body, {
+      mine: true,
+      mark: null,
+      via: { category: true, source: false, topic: false },
+    });
   });
 });
 

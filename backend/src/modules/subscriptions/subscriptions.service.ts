@@ -1,6 +1,6 @@
 import { getDb } from '../../db/index.js';
-import type { EventCategory } from '../events/events.types.js';
-import { EVENT_CATEGORIES } from '../events/events.types.js';
+import type { EventCategory, EventTopic } from '../events/events.types.js';
+import { EVENT_CATEGORIES, EVENT_TOPICS, isEventTopic } from '../events/events.types.js';
 import type { ReviewStatus } from '../sources/sourceTypes.js';
 
 /** 新活動通知的收件人，供 US-08 寄送通知使用。 */
@@ -38,6 +38,27 @@ export function unsubscribeCategory(userId: number, category: EventCategory): vo
   getDb()
     .prepare('DELETE FROM category_subscriptions WHERE user_id = ? AND category = ?')
     .run(userId, category);
+}
+
+/**
+ * 追蹤的內容領域：和帳號頁的偏好領域（#98）是同一份資料（users.interest_topics），
+ * 在行事曆頁追蹤、在帳號頁勾選，兩邊看到的一樣。
+ */
+export function listFollowedTopics(userId: number): EventTopic[] {
+  const row = getDb().prepare('SELECT interest_topics FROM users WHERE id = ?').get(userId);
+  const parsed: unknown = JSON.parse(String(row?.interest_topics ?? '[]'));
+  const followed = new Set(Array.isArray(parsed) ? parsed.filter(isEventTopic) : []);
+  return EVENT_TOPICS.filter((topic) => followed.has(topic));
+}
+
+export function setTopicFollowed(userId: number, topic: EventTopic, followed: boolean): void {
+  const current = listFollowedTopics(userId);
+  const next = followed
+    ? [...new Set([...current, topic])]
+    : current.filter((item) => item !== topic);
+  getDb()
+    .prepare('UPDATE users SET interest_topics = ? WHERE id = ?')
+    .run(JSON.stringify(next), userId);
 }
 
 const APPROVED: ReviewStatus = 'approved';
@@ -88,12 +109,13 @@ export function unfollowSource(userId: number, sourceId: number): void {
 }
 
 /**
- * US-08 的通知對象：追蹤該活動的類別或來源、有通知信箱且沒有關閉 Email 通知的使用者。
+ * US-08 的通知對象：追蹤該活動的類別、內容領域或來源、有通知信箱且沒有關閉 Email 通知的使用者。
  * 沒有行事曆設定資料列的使用者視為通知開啟；同一位使用者只會出現一次。
  */
 export function listEventSubscribers(event: {
   category: EventCategory;
   sourceId: number;
+  topics?: string[];
 }): Subscriber[] {
   const rows = getDb()
     .prepare(
@@ -107,10 +129,12 @@ export function listEventSubscribers(event: {
             WHERE cs.user_id = users.id AND cs.category = ?)
           OR EXISTS (SELECT 1 FROM source_follows sf
             WHERE sf.user_id = users.id AND sf.source_id = ?)
+          OR EXISTS (SELECT 1 FROM json_each(users.interest_topics) ut
+            WHERE ut.value IN (SELECT value FROM json_each(?)))
         )
       ORDER BY users.id`,
     )
-    .all(event.category, event.sourceId);
+    .all(event.category, event.sourceId, JSON.stringify(event.topics ?? []));
   return rows.map((row) => ({
     userId: Number(row.id),
     email: String(row.email),

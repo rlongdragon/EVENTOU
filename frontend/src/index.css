@@ -850,6 +850,16 @@ legend {
   cursor: pointer;
 }
 
+.interest-chips .topic-toggle {
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--color-line);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text);
+  font-size: 0.88rem;
+}
+
+.interest-chips .topic-toggle[aria-pressed='true'],
 .interest-chips label[data-checked='true'] {
   border-color: var(--color-text);
   background: var(--color-text);
