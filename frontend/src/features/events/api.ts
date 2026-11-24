@@ -9,6 +9,12 @@ export interface EventDetail {
   category: string;
   /** 類別顯示名稱，由後端依 EVENT_CATEGORY_LABELS 提供 */
   categoryLabel: string;
+  /** 主題（#69），代碼與顯示名稱由後端依 EVENT_TOPIC_LABELS 提供 */
+  topics: CodeLabel[];
+  /** 資訊受眾（全校學生、研究生、教職員等） */
+  audiences: CodeLabel[];
+  /** LLM 寫的摘要；沒有時為 null */
+  summary: string | null;
   /** Asia/Taipei ISO 8601；全天活動的 endTime 為結束日隔天 00:00 */
   startTime: string;
   endTime: string | null;
@@ -18,6 +24,11 @@ export interface EventDetail {
   originalUrl: string;
   /** 活動的所有來源（US-20）：自己的來源在前，再列出合併進來的重複活動的來源 */
   sources: EventSourceLink[];
+}
+
+export interface CodeLabel {
+  code: string;
+  label: string;
 }
 
 export interface EventSourceLink {
@@ -43,12 +54,28 @@ export async function fetchEvent(
 /** 搜尋結果列表的單筆活動（US-01） */
 export type EventSummary = Pick<
   EventDetail,
-  'id' | 'title' | 'category' | 'categoryLabel' | 'startTime' | 'endTime' | 'allDay' | 'location'
+  | 'id'
+  | 'title'
+  | 'category'
+  | 'categoryLabel'
+  | 'topics'
+  | 'audiences'
+  | 'summary'
+  | 'startTime'
+  | 'endTime'
+  | 'allDay'
+  | 'location'
 >;
+
+/** 活動列表範圍（#88）：mine 是跟我相關，all 是全部 */
+export type EventScope = 'mine' | 'all';
 
 export interface EventSearchParams {
   q: string;
   category: string;
+  topic: string;
+  audience: string;
+  scope: EventScope;
   page: number;
 }
 
@@ -58,17 +85,26 @@ export interface EventSearchResult {
   pageSize: number;
   total: number;
   /** 類別篩選選項，由後端依 EVENT_CATEGORY_LABELS 提供 */
-  categories: { code: string; label: string }[];
+  categories: CodeLabel[];
+  /** 內容領域篩選選項 */
+  topics: CodeLabel[];
+  /** 資訊受眾篩選選項 */
+  audiences: CodeLabel[];
+  /** available：這位使用者能不能看「跟我相關」；active：這次結果是不是只列相關的 */
+  personal: { available: boolean; active: boolean };
 }
 
 /** 搜尋活動（US-01），空字串的條件不送出。 */
 export async function searchEvents(
-  { q, category, page }: EventSearchParams,
+  { q, category, topic, audience, scope, page }: EventSearchParams,
   signal?: AbortSignal,
 ): Promise<EventSearchResult> {
   const query = new URLSearchParams();
   if (q) query.set('q', q);
   if (category) query.set('category', category);
+  if (topic) query.set('topic', topic);
+  if (audience) query.set('audience', audience);
+  if (scope === 'all') query.set('scope', 'all');
   if (page > 1) query.set('page', String(page));
   const response = await fetch(`/api/events?${query}`, { signal });
   if (!response.ok) {
@@ -308,4 +344,17 @@ export function mergeDuplicate(eventId: number): Promise<DuplicatePair[]> {
 /** 拆開配對或還原誤合併，回傳更新後的配對清單。 */
 export function splitDuplicate(eventId: number): Promise<DuplicatePair[]> {
   return duplicatesRequest(`/api/events/duplicates/${eventId}/split`, 'POST');
+}
+
+/** 分類選項：資訊類別、內容領域、資訊受眾 */
+export interface Taxonomy {
+  categories: CodeLabel[];
+  topics: CodeLabel[];
+  audiences: CodeLabel[];
+}
+
+export async function fetchTaxonomy(signal?: AbortSignal): Promise<Taxonomy> {
+  const response = await fetch('/api/events/taxonomy', { signal });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return (await response.json()) as Taxonomy;
 }

@@ -13,7 +13,8 @@
     "test": "node --import tsx --test \"src/**/*.test.ts\"",
     "user:set-role": "tsx --env-file-if-exists=.env src/modules/auth/setRole.cli.ts",
     "sources:seed-ntou": "tsx --env-file-if-exists=.env src/modules/sources/seedNtou.cli.ts",
-    "notifications:retry": "tsx --env-file-if-exists=.env src/modules/subscriptions/retryNotifications.cli.ts"
+    "notifications:retry": "tsx --env-file-if-exists=.env src/modules/subscriptions/retryNotifications.cli.ts",
+    "events:reprocess": "tsx --env-file-if-exists=.env src/modules/events/reprocess.cli.ts"
   },
   "dependencies": {
     "cheerio": "^1.2.0",

@@ -221,7 +221,7 @@ export function CalendarPage() {
         {!authLoading && !user && (
           <p className="cal-note">
             正在瀏覽全部活動。<Link to="/login?redirect=%2Fcalendars">登入</Link>
-            後可以追蹤類別與來源、把活動加入自己的行事曆，並同步到 Google 日曆等軟體。
+            後可以追蹤類別、領域與來源、把活動加入自己的行事曆，並同步到 Google 日曆等軟體。
           </p>
         )}
 

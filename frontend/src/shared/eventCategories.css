@@ -24,3 +24,19 @@
 .cat--welfare {
   --cat-color: #9a5b52;
 }
+
+.cat--info_session {
+  --cat-color: #6b6a3f;
+}
+
+.cat--competition {
+  --cat-color: #8a6a2f;
+}
+
+.cat--camp {
+  --cat-color: #3f6f68;
+}
+
+.cat--other {
+  --cat-color: #6f6a62;
+}

@@ -2,7 +2,7 @@ import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import concretePhoto from '../../assets/photos/concrete.jpg';
 import wavesPhoto from '../../assets/photos/waves.jpg';
-import type { EventSearchResult } from './api';
+import type { EventScope, EventSearchResult } from './api';
 import { searchEvents } from './api';
 import { DEFAULT_PHOTOS, PHOTO_CREDITS } from './defaultPhotos';
 import { pickEventImages } from './eventImage';
@@ -25,21 +25,34 @@ export function EventSearchPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const q = searchParams.get('q') ?? '';
   const category = searchParams.get('category') ?? '';
+  const topic = searchParams.get('topic') ?? '';
+  const audience = searchParams.get('audience') ?? '';
+  // #88 預設是「跟我相關」（後端判斷這位使用者能不能個人化），scope=all 切回全部
+  const scope: EventScope = searchParams.get('scope') === 'all' ? 'all' : 'mine';
   const page = parsePage(searchParams.get('page'));
-  const queryKey = `${q}\n${category}\n${page}`;
-  const filtered = Boolean(q || category);
+  const queryKey = `${q}\n${category}\n${topic}\n${audience}\n${scope}\n${page}`;
+  const filtered = Boolean(q || category || topic || audience);
 
   // 記錄是哪組條件的結果，條件改變時直接視為載入中
   const [result, setResult] = useState<{ queryKey: string; state: LoadState } | null>(null);
-  // 類別選項來自後端，換頁或重新搜尋時沿用上一次的清單，避免下拉選單閃爍
+  // 篩選選項與個人化狀態來自後端，換頁或重新搜尋時沿用上一次的值，避免選單與切換鈕閃爍
   const [categories, setCategories] = useState<EventSearchResult['categories']>([]);
+  const [topics, setTopics] = useState<EventSearchResult['topics']>([]);
+  const [audiences, setAudiences] = useState<EventSearchResult['audiences']>([]);
+  const [personal, setPersonal] = useState<EventSearchResult['personal']>({
+    available: false,
+    active: false,
+  });
   const [introPhase, setIntroPhase] = useState<IntroPhase>('done');
 
   useEffect(() => {
     const controller = new AbortController();
-    searchEvents({ q, category, page }, controller.signal)
+    searchEvents({ q, category, topic, audience, scope, page }, controller.signal)
       .then((data) => {
         setCategories(data.categories);
+        setTopics(data.topics);
+        setAudiences(data.audiences);
+        setPersonal(data.personal);
         setResult({ queryKey, state: { status: 'ok', result: data } });
       })
       .catch((error: unknown) => {
@@ -47,7 +60,7 @@ export function EventSearchPage() {
         setResult({ queryKey, state: { status: 'error', message: String(error) } });
       });
     return () => controller.abort();
-  }, [q, category, page, queryKey]);
+  }, [q, category, topic, audience, scope, page, queryKey]);
 
   const state: LoadState = result?.queryKey === queryKey ? result.state : { status: 'loading' };
 
@@ -57,8 +70,21 @@ export function EventSearchPage() {
     const next = new URLSearchParams();
     const nextQ = String(form.get('q') ?? '').trim();
     const nextCategory = String(form.get('category') ?? '');
+    const nextTopic = String(form.get('topic') ?? '');
+    const nextAudience = String(form.get('audience') ?? '');
     if (nextQ) next.set('q', nextQ);
     if (nextCategory) next.set('category', nextCategory);
+    if (nextTopic) next.set('topic', nextTopic);
+    if (nextAudience) next.set('audience', nextAudience);
+    if (scope === 'all') next.set('scope', 'all');
+    setSearchParams(next);
+  }
+
+  function changeScope(nextScope: EventScope) {
+    const next = new URLSearchParams(searchParams);
+    next.delete('page');
+    if (nextScope === 'all') next.set('scope', 'all');
+    else next.delete('scope');
     setSearchParams(next);
   }
 
@@ -88,9 +114,18 @@ export function EventSearchPage() {
           <p className="cover-lead fade-in">
             為你彙整海大的活動；學校首頁與各處室的公告自動整理成同一份清單。可以搜尋、加進行事曆，有新活動就通知你。
           </p>
-          {/* key 讓網址條件改變（例如按上一頁）時表單跟著重設 */}
+          {/* key 讓網址條件改變（例如按上一頁）時表單跟著重設；選項載入後也重設，
+              否則直接開帶條件的網址時，defaultValue 套用時選項還不存在，選單會停在「全部」 */}
           <form
-            key={`${q}\n${category}`}
+            key={[
+              q,
+              category,
+              topic,
+              audience,
+              categories.length,
+              topics.length,
+              audiences.length,
+            ].join('|')}
             role="search"
             onSubmit={handleSubmit}
             className="search-bar fade-in"
@@ -99,12 +134,28 @@ export function EventSearchPage() {
               type="search"
               name="q"
               defaultValue={q}
-              placeholder="搜尋標題、說明、地點、主辦單位"
+              placeholder="搜尋標題、摘要、地點、主辦單位"
               aria-label="關鍵字"
             />
-            <select name="category" defaultValue={category} aria-label="類別">
+            <select name="category" defaultValue={category} aria-label="資訊類別">
               <option value="">全部類別</option>
               {categories.map((option) => (
+                <option key={option.code} value={option.code}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <select name="topic" defaultValue={topic} aria-label="內容領域">
+              <option value="">全部領域</option>
+              {topics.map((option) => (
+                <option key={option.code} value={option.code}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <select name="audience" defaultValue={audience} aria-label="資訊受眾">
+              <option value="">全部對象</option>
+              {audiences.map((option) => (
                 <option key={option.code} value={option.code}>
                   {option.label}
                 </option>
@@ -124,8 +175,29 @@ export function EventSearchPage() {
 
       <section className="issue" aria-labelledby="issue-heading">
         <div className="issue-head">
-          <h2 id="issue-heading">{filtered ? '搜尋結果' : '本期活動'}</h2>
-          <span className="label">{filtered ? 'Search Results' : 'This Issue on Campus'}</span>
+          <h2 id="issue-heading">
+            {filtered ? '搜尋結果' : personal.active ? '跟我相關' : '本期活動'}
+          </h2>
+          {personal.available ? (
+            <div className="scope-toggle" role="group" aria-label="活動範圍">
+              <button
+                type="button"
+                aria-pressed={scope === 'mine'}
+                onClick={() => changeScope('mine')}
+              >
+                跟我相關
+              </button>
+              <button
+                type="button"
+                aria-pressed={scope === 'all'}
+                onClick={() => changeScope('all')}
+              >
+                全部
+              </button>
+            </div>
+          ) : (
+            <span className="label">{filtered ? 'Search Results' : 'This Issue on Campus'}</span>
+          )}
         </div>
         {state.status === 'loading' && <p>載入中…</p>}
         {state.status === 'error' && <p role="alert">無法載入活動：{state.message}</p>}
@@ -177,8 +249,11 @@ function SearchResults({
               <Link to={`/events/${item.id}`}>
                 <span className="issue-no">{String(number).padStart(2, '0')}</span>
                 <span className="issue-text">
-                  <span className="issue-category">{item.categoryLabel}</span>
+                  <span className="issue-category">
+                    {[item.categoryLabel, ...item.topics.map((topic) => topic.label)].join(' · ')}
+                  </span>
                   <strong className="issue-title">{item.title}</strong>
+                  {item.summary && <span className="issue-summary">{item.summary}</span>}
                   <span className="issue-bar" aria-hidden="true" />
                   <span className="issue-meta">
                     {formatEventTime(item)}

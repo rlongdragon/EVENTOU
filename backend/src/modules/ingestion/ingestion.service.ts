@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { getDb } from '../../db/index.js';
-import { processAnnouncement } from '../events/events.service.js';
+import { processAnnouncementWithLlm } from '../events/events.service.js';
 import type { RawAnnouncement } from '../events/events.types.js';
 import { listIngestableSources } from '../sources/sources.service.js';
 import { positiveInteger, scraperConfigs } from './ingestion.config.js';
@@ -23,7 +23,11 @@ export class IngestionService {
     private configs: ExtractionConfig[] = scraperConfigs,
     private client = new ScraperClient(),
     private scrape = extractAnnouncements,
-    private process = processAnnouncement,
+    // #69 預設先經 LLM 整理；測試可換成同步的 processAnnouncement
+    private process: (
+      db: DatabaseSync,
+      raw: RawAnnouncement,
+    ) => unknown = processAnnouncementWithLlm,
   ) {}
   async runAll(): Promise<void> {
     this.client.clearRobots();
@@ -53,9 +57,9 @@ export class IngestionService {
     let updatedCount = 0;
     let errorMessage: string | null = null;
     const processingErrors: string[] = [];
-    const processRaw = (raw: RawAnnouncement) => {
+    const processRaw = async (raw: RawAnnouncement) => {
       try {
-        this.processRaw(raw);
+        await this.processRaw(raw);
       } catch (error) {
         processingErrors.push(
           `${raw.url}：${error instanceof Error ? error.message : '未知整理錯誤'}`,
@@ -70,7 +74,7 @@ export class IngestionService {
           'SELECT source_id AS sourceId, url, title, raw_content AS rawContent, published_at AS publishedAt, fetched_at AS fetchedAt FROM raw_announcements WHERE source_id=? AND processed_at IS NULL',
         )
         .all(sourceId) as unknown as RawAnnouncement[];
-      for (const raw of pending) processRaw(raw);
+      for (const raw of pending) await processRaw(raw);
       for await (const raw of this.scrape(sourceId, config, this.client)) {
         if (
           !this.db
@@ -83,6 +87,10 @@ export class IngestionService {
             'SELECT title, raw_content, published_at FROM raw_announcements WHERE source_id=? AND url=?',
           )
           .get(sourceId, raw.url!);
+        // 列表頁沒有日期時，沿用先前由 LLM 從內文補上的發布日期（#69），不要覆寫回空值，
+        // 否則每輪擷取都會判定內容有變而重新整理。
+        if (raw.publishedAt === null && typeof existing?.published_at === 'string')
+          raw.publishedAt = existing.published_at;
         const changed =
           !existing ||
           existing.title !== raw.title ||
@@ -105,7 +113,7 @@ export class IngestionService {
           );
         if (!existing) insertedCount += 1;
         else if (changed) updatedCount += 1;
-        if (changed) processRaw(raw);
+        if (changed) await processRaw(raw);
       }
     } catch (error) {
       errorMessage = error instanceof Error ? error.message : '未知擷取錯誤';
@@ -134,8 +142,8 @@ export class IngestionService {
       errorMessage,
     };
   }
-  private processRaw(raw: RawAnnouncement): void {
-    this.process(this.db, raw);
+  private async processRaw(raw: RawAnnouncement): Promise<void> {
+    await this.process(this.db, raw);
     this.db
       .prepare('UPDATE raw_announcements SET processed_at=? WHERE source_id=? AND url=?')
       .run(new Date().toISOString(), raw.sourceId!, raw.url!);

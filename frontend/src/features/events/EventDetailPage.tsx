@@ -75,7 +75,15 @@ export function EventDetailPage() {
         </div>
         <div>
           <dt>類別</dt>
-          <dd>{event.categoryLabel}</dd>
+          <dd>{[event.categoryLabel, ...event.topics.map((topic) => topic.label)].join(' · ')}</dd>
+        </div>
+        <div>
+          <dt>對象</dt>
+          <dd>
+            {event.audiences.length
+              ? event.audiences.map((audience) => audience.label).join('、')
+              : '未註明'}
+          </dd>
         </div>
         <div>
           <dt>主辦單位</dt>
@@ -86,6 +94,7 @@ export function EventDetailPage() {
         <img src={photo.src} alt="" />
         {photo.place && <figcaption className="label">{photo.place}</figcaption>}
       </figure>
+      {event.summary && <p className="event-summary">{event.summary}</p>}
       <section>
         <h2>活動說明</h2>
         <p className="event-description">

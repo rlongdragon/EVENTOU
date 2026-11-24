@@ -9,6 +9,9 @@ import {
   updateUserProfile,
   type User,
 } from './auth.service.js';
+import { currentAcademicYear, gradeFromAdmissionYear } from '../events/events.relevance.js';
+import { INTEREST_DESCRIPTION_MAX_LENGTH, suggestInterestTopics } from '../events/events.llm.js';
+import { isDepartment, isEventTopic } from '../events/events.types.js';
 import { isRole } from './roles.js';
 import { findReservedWord } from './auth.displayName.js';
 import {
@@ -54,8 +57,13 @@ function verificationDeps(): EmailVerificationDeps {
 }
 
 /** 回傳給本人的會員資料：另附等待驗證的新信箱 */
-function accountView(user: User): User & { pendingEmail: string | null } {
-  return { ...user, pendingEmail: getPendingEmail(user.id) };
+/** 本人看到的會員資料：附上等待驗證的信箱（#99）與由入學學年推算的年級（#88） */
+function accountView(user: User): User & { pendingEmail: string | null; grade: number | null } {
+  return {
+    ...user,
+    pendingEmail: getPendingEmail(user.id),
+    grade: gradeFromAdmissionYear(user.admissionYear),
+  };
 }
 
 /** 驗證信沒有寄出時回傳錯誤；寄出或直接更新時回傳 false */
@@ -146,7 +154,7 @@ authRouter.post('/dev-login', (req, res) => {
     user = { ...user, role };
   }
   startSession(res, user);
-  res.json({ user });
+  res.json({ user: accountView(user) });
 });
 
 authRouter.post('/logout', (req, res) => {
@@ -164,7 +172,7 @@ authRouter.get('/me', requireAuth, (req, res) => {
 authRouter.patch('/me', requireAuth, async (req, res) => {
   if (!req.user) return;
   const body: unknown = req.body;
-  const input: { displayName?: string; email?: string | null } = {};
+  const input: Parameters<typeof updateUserProfile>[1] & { email?: string | null } = {};
   const fields: Record<string, string> = {};
   const raw = typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : {};
 
@@ -188,17 +196,50 @@ authRouter.patch('/me', requireAuth, async (req, res) => {
       fields.email = 'Email 格式不正確';
     } else input.email = email;
   }
+  // #88 系所、入學學年（民國）、個人化開關；null 代表清除
+  if (raw.department !== undefined) {
+    if (raw.department === null || isDepartment(raw.department)) input.department = raw.department;
+    else fields.department = '不支援的系所';
+  }
+  if (raw.admissionYear !== undefined) {
+    const year = raw.admissionYear;
+    const latest = currentAcademicYear();
+    if (year === null) input.admissionYear = null;
+    else if (typeof year === 'number' && Number.isInteger(year) && year >= 90 && year <= latest)
+      input.admissionYear = year;
+    else fields.admissionYear = `入學學年需介於 90 到 ${latest}`;
+  }
+  if (raw.personalize !== undefined) {
+    if (typeof raw.personalize === 'boolean') input.personalize = raw.personalize;
+    else fields.personalize = '格式不正確';
+  }
+  // #98 自我描述與偏好領域；空字串、空陣列代表清空
+  if (raw.interestDescription !== undefined) {
+    const description =
+      typeof raw.interestDescription === 'string' ? raw.interestDescription.trim() : null;
+    if (description === null && raw.interestDescription !== null)
+      fields.interestDescription = '格式不正確';
+    else if (description && description.length > INTEREST_DESCRIPTION_MAX_LENGTH)
+      fields.interestDescription = `描述不可超過 ${INTEREST_DESCRIPTION_MAX_LENGTH} 字`;
+    else input.interestDescription = description || null;
+  }
+  if (raw.interestTopics !== undefined) {
+    if (Array.isArray(raw.interestTopics) && raw.interestTopics.every(isEventTopic))
+      input.interestTopics = raw.interestTopics;
+    else fields.interestTopics = '有不存在的領域';
+  }
 
   if (Object.keys(fields).length > 0) {
     res.status(400).json({ error: 'validation_error', message: '會員資料有誤', fields });
     return;
   }
-  // #99 信箱先處理：驗證信沒寄出時整個請求失敗，不會只改了一半
-  if (input.email !== undefined) {
-    const result = await requestEmailChange(req.user, input.email, verificationDeps());
+  // #99 信箱先處理：驗證信沒寄出時整個請求失敗，不會只改了一半；信箱不經 updateUserProfile 修改
+  const { email, ...profile } = input;
+  if (email !== undefined) {
+    const result = await requestEmailChange(req.user, email, verificationDeps());
     if (sendEmailChangeError(res, result)) return;
   }
-  const user = updateUserProfile(req.user.id, { displayName: input.displayName });
+  const user = updateUserProfile(req.user.id, profile);
   res.json({ user: accountView(user) });
 });
 
@@ -232,4 +273,50 @@ authRouter.post('/verify-email', (req, res) => {
     return;
   }
   res.json({ verified: true });
+});
+
+/** #98 每人每 10 分鐘最多請 AI 建議 5 次。 */
+const SUGGEST_WINDOW_MS = 10 * 60 * 1000;
+const SUGGEST_LIMIT = 5;
+const suggestCalls = new Map<number, number[]>();
+
+function allowSuggest(userId: number, now = Date.now()): boolean {
+  const recent = (suggestCalls.get(userId) ?? []).filter((time) => now - time < SUGGEST_WINDOW_MS);
+  if (recent.length >= SUGGEST_LIMIT) {
+    suggestCalls.set(userId, recent);
+    return false;
+  }
+  suggestCalls.set(userId, [...recent, now]);
+  return true;
+}
+
+// #98 依自我描述建議偏好領域。只回傳建議，不改使用者設定；使用者確認後再用 PATCH /me 儲存。
+// 沒有設定 LLM 或呼叫失敗時回 503，前端改成讓使用者手動勾選。描述不寫進紀錄檔。
+authRouter.post('/me/interests/suggest', requireAuth, async (req, res) => {
+  if (!req.user) return;
+  const raw: unknown = (req.body as { description?: unknown } | undefined)?.description;
+  const description = typeof raw === 'string' ? raw.trim() : '';
+  if (!description || description.length > INTEREST_DESCRIPTION_MAX_LENGTH) {
+    res.status(400).json({
+      error: 'validation_error',
+      message: '描述有誤',
+      fields: { description: `請輸入 1–${INTEREST_DESCRIPTION_MAX_LENGTH} 字的描述` },
+    });
+    return;
+  }
+  if (!allowSuggest(req.user.id)) {
+    res.status(429).json({ error: 'rate_limited', message: '建議次數太多，請稍後再試' });
+    return;
+  }
+  try {
+    const topics = await suggestInterestTopics(description);
+    if (topics === null) {
+      res.status(503).json({ error: 'llm_unavailable', message: '目前無法使用 AI 建議' });
+      return;
+    }
+    res.json({ topics });
+  } catch {
+    console.error('[llm] 偏好建議失敗');
+    res.status(503).json({ error: 'llm_unavailable', message: '目前無法使用 AI 建議' });
+  }
 });

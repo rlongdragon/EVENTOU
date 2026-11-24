@@ -1,5 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { getDb } from '../../db/index.js';
+import { profileFromStudentId } from '../events/events.relevance.js';
+import { isEventTopic, type Department, type EventTopic } from '../events/events.types.js';
 import { defaultDisplayName } from './auth.displayName.js';
 import type { Role } from './roles.js';
 
@@ -12,6 +14,13 @@ export interface User {
   displayName: string;
   role: Role;
   createdAt: string;
+  /** #88 個人化推薦：系所、入學學年（民國）、是否開啟；第一次登入時由學號推得，本人可修正 */
+  department: Department | null;
+  admissionYear: number | null;
+  personalize: boolean;
+  /** #98 使用者的自我描述（個人資料，只給本人看）與確認過的偏好領域 */
+  interestDescription: string | null;
+  interestTopics: EventTopic[];
 }
 
 interface UserRow {
@@ -21,6 +30,11 @@ interface UserRow {
   display_name: string;
   role: Role;
   created_at: string;
+  department: Department | null;
+  admission_year: number | null;
+  personalize: number;
+  interest_description: string | null;
+  interest_topics: string;
 }
 
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -34,7 +48,21 @@ function toUser(row: UserRow): User {
     displayName: row.display_name,
     role: row.role,
     createdAt: row.created_at,
+    department: row.department,
+    admissionYear: row.admission_year,
+    personalize: row.personalize === 1,
+    interestDescription: row.interest_description,
+    interestTopics: parseTopics(row.interest_topics),
   };
+}
+
+function parseTopics(value: string): EventTopic[] {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.filter(isEventTopic) : [];
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -59,13 +87,22 @@ export function defaultSchoolEmail(studentId: string): string | null {
 export function findOrCreateUserByStudentId(studentId: string): User {
   const db = getDb();
   const masked = maskStudentId(studentId);
+  // #88 第一次登入時由學號推系所與入學學年
+  const profile = profileFromStudentId(studentId);
   const inserted = db
     .prepare(
-      `INSERT INTO users (student_id, email, display_name) VALUES (?, ?, ?)
+      `INSERT INTO users (student_id, email, display_name, department, admission_year)
+      VALUES (?, ?, ?, ?, ?)
       ON CONFLICT (student_id) DO NOTHING
       RETURNING id`,
     )
-    .get(studentId, defaultSchoolEmail(studentId), masked);
+    .get(
+      studentId,
+      defaultSchoolEmail(studentId),
+      masked,
+      profile?.department ?? null,
+      profile?.admissionYear ?? null,
+    );
   if (inserted) {
     const id = Number(inserted.id);
     db.prepare('UPDATE users SET display_name = ? WHERE id = ?').run(
@@ -79,11 +116,40 @@ export function findOrCreateUserByStudentId(studentId: string): User {
 }
 
 /**
- * 更新本人的顯示名稱（須先驗證），undefined 表示不變；回傳最新的會員資料。
+ * 更新本人的顯示名稱與個人化設定（須先驗證），undefined 表示不變；回傳最新的會員資料。
  * 通知信箱須經驗證才能變更，見 auth.emailVerification.ts（#99）。
  */
-export function updateUserProfile(userId: number, input: { displayName?: string }): User {
+export function updateUserProfile(
+  userId: number,
+  input: {
+    displayName?: string;
+    department?: Department | null;
+    admissionYear?: number | null;
+    personalize?: boolean;
+    interestDescription?: string | null;
+    interestTopics?: EventTopic[];
+  },
+): User {
   const db = getDb();
+  if (input.department !== undefined)
+    db.prepare('UPDATE users SET department = ? WHERE id = ?').run(input.department, userId);
+  if (input.admissionYear !== undefined)
+    db.prepare('UPDATE users SET admission_year = ? WHERE id = ?').run(input.admissionYear, userId);
+  if (input.interestDescription !== undefined)
+    db.prepare('UPDATE users SET interest_description = ? WHERE id = ?').run(
+      input.interestDescription,
+      userId,
+    );
+  if (input.interestTopics !== undefined)
+    db.prepare('UPDATE users SET interest_topics = ? WHERE id = ?').run(
+      JSON.stringify([...new Set(input.interestTopics)]),
+      userId,
+    );
+  if (input.personalize !== undefined)
+    db.prepare('UPDATE users SET personalize = ? WHERE id = ?').run(
+      Number(input.personalize),
+      userId,
+    );
   if (input.displayName !== undefined) {
     db.prepare('UPDATE users SET display_name = ? WHERE id = ?').run(input.displayName, userId);
   }

@@ -12,11 +12,24 @@ export interface User {
   displayName: string;
   role: Role;
   createdAt: string;
+  /** #88 個人化推薦：系所代碼（目前只有 csie）、入學學年（民國）、由後端推算的年級 */
+  department: string | null;
+  admissionYear: number | null;
+  grade: number | null;
+  personalize: boolean;
+  /** #98 自我描述與確認過的偏好領域代碼 */
+  interestDescription: string | null;
+  interestTopics: string[];
 }
 
 export interface ProfileInput {
   displayName?: string;
   email?: string;
+  department?: string | null;
+  admissionYear?: number | null;
+  personalize?: boolean;
+  interestDescription?: string;
+  interestTopics?: string[];
 }
 
 /** 後端回傳的錯誤，fields 為各欄位的錯誤訊息。 */
@@ -82,6 +95,20 @@ export async function updateProfile(input: ProfileInput): Promise<User> {
     body: JSON.stringify(input),
   });
   return user;
+}
+
+/** #98 依自我描述請 AI 建議偏好領域；AI 無法使用時回傳 null，改由使用者手動勾選 */
+export async function suggestInterests(description: string): Promise<string[] | null> {
+  try {
+    const { topics } = await request<{ topics: string[] }>('/api/auth/me/interests/suggest', {
+      method: 'POST',
+      body: JSON.stringify({ description }),
+    });
+    return topics;
+  } catch (error) {
+    if (error instanceof ApiError && (error.status === 503 || error.status === 429)) return null;
+    throw error;
+  }
 }
 
 /** #99 重寄驗證信 */

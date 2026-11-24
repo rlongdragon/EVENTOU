@@ -38,6 +38,12 @@ published_at 與 fetched_at 須為帶時區的 ISO 8601（如 `2026-10-01T09:00:
 | description      | description     | TEXT／string                | 否       | 純文字內文，預設空字串        |
 | category         | category        | TEXT／EventCategory 或 null | 是       | 下表類別代碼                  |
 | tags             | tags            | JSON TEXT／string[]         | 否       | 預設 []                       |
+| topics           | topics          | JSON TEXT／EventTopic[]     | 否       | 內容領域代碼，預設 []      |
+| audiences        | audiences       | JSON TEXT／EventAudience[]  | 否       | 資訊受眾代碼，預設 []         |
+| summary          | summary         | TEXT／string 或 null        | 否       | LLM 摘要，沒有 LLM 時為 null  |
+| is_event         | isEvent         | INTEGER 0／1 → boolean      | 否       | 0 為行政公告，維持待審但不算待審核活動 |
+| audience_departments | audienceDepartments | JSON TEXT／Department[] | 否 | 適用系所（#88），預設 []   |
+| audience_grades  | audienceGrades  | JSON TEXT／number[]         | 否       | 適用年級 1–4，預設 []         |
 | start_time       | startTime       | TEXT／string 或 null        | 是       | Asia/Taipei ISO 8601          |
 | end_time         | endTime         | TEXT／string 或 null        | 否       | 未提供則 null                 |
 | all_day          | allDay          | INTEGER 0／1 → boolean      | 是       | 只有日期沒有時間時為 true     |
@@ -55,17 +61,39 @@ published_at 與 fetched_at 須為帶時區的 ISO 8601（如 `2026-10-01T09:00:
 
 `source_id` 與 `original_url` 是儲存時必填的追溯鍵。缺少這兩個欄位的原始公告須由後續流程保留供人工檢查；不能用假來源或假網址建立 Event。
 
-### 類別
+### 分類：資訊類別、內容領域、資訊受眾
 
-| 代碼       | 顯示名稱     |
-| ---------- | ------------ |
-| lecture    | 講座         |
-| workshop   | 工作坊／研習 |
-| exhibition | 展覽         |
-| sports     | 運動         |
-| welfare    | 餐飲／福利   |
+分類分三個維度：`category` 是資訊類別（活動形式，單選）；`topics` 是內容領域（可多選，最多 3 個）；`audiences` 是資訊受眾（可多選）。可組合篩選，例如「講座」＋「資安」＋「大學部」。
 
-代碼定義在 `EVENT_CATEGORIES`，顯示名稱以 `EVENT_CATEGORY_LABELS` 為準（皆在 `events.types.ts`），各功能共用、不要各自寫死。一個活動只有一個類別，細分用 tags。資料庫不對 category 設 CHECK，值域由程式驗證；增減類別只需修改這兩個常數（要自動分類時再到 `events.categories.ts` 加關鍵字），不必新增 migration。分類先以標題關鍵字，再以內文關鍵字覆寫來源預設類別；內文比對時略過地點、主辦等欄位行，避免「地點：體育館」被分成運動。皆未命中且未提供來源預設類別時標記待審。
+| 類別代碼     | 顯示名稱       |
+| ------------ | -------------- |
+| lecture      | 講座           |
+| workshop     | 工作坊／研習   |
+| info_session | 說明會         |
+| competition  | 競賽           |
+| exhibition   | 展覽／表演     |
+| camp         | 營隊／社團活動 |
+| sports       | 運動           |
+| welfare      | 福利／獎助     |
+| other        | 其他           |
+
+內容領域（`EVENT_TOPICS`／`EVENT_TOPIC_LABELS`）：資訊 it、資安 security、AI／資料科學 ai、電機電子 electrical、機械工程 mechanical、造船航運 maritime、海洋科學 ocean_science、水產養殖 aquaculture、食品 food、生命醫藥 life_medical、環境永續 sustainability、商管金融 business、法律 law、語言 language、國際交流 international、人文歷史 humanities、藝術設計 arts、音樂表演 performing、心理健康 mental_health、醫療保健 healthcare、球類運動 ball_sports、水上活動 water_activities、戶外活動 outdoor、職涯實習 career、升學 graduate、創業 startup、志工服務 volunteer。使用者的偏好領域（#98）也從這份清單挑。
+
+資訊受眾（`EVENT_AUDIENCES`／`EVENT_AUDIENCE_LABELS`）：全校學生 all_students、大學部 undergraduate、研究生 graduate、特定系所 department、教職員 staff、校外人士 public。
+
+三份清單都在 `events.types.ts`；搜尋 API 以 `category=`、`topic=`、`audience=` 篩選，`GET /api/events/taxonomy` 回傳全部選項。
+
+### LLM 整理（#69）
+
+擷取排程呼叫 `processAnnouncementWithLlm`（`events.service.ts`）：先用 `events.llm.ts` 請 LLM 回傳 JSON（是否為活動、時間、地點、主辦、形式、主題、摘要、適用對象、信心），再交給 `processAnnouncement`，LLM 有給的欄位覆寫規則結果，最後一樣經過 `validateEvent`。
+
+- 設定 `LLM_BASE_URL`、`LLM_MODEL`（OpenAI 相容 chat completions）才啟用；沒設定、逾時或回傳格式不對時退回規則擷取。
+- 結果以公告內容的 SHA-256 加模型名稱快取在 `llm_extractions`，內容沒變就不再呼叫。
+- `isEvent` 為 false 的公告標成 `is_event = 0`、待審原因「非活動公告」；信心低於 0.6 時維持待審。
+- 列表頁沒有發布日期時，用 LLM 從內文讀到的日期補上 `raw_announcements.published_at`。
+- 回填已擷取的公告：`npm run events:reprocess -w backend`，結束時印出整理前後的統計。
+
+代碼定義在 `EVENT_CATEGORIES`，顯示名稱以 `EVENT_CATEGORY_LABELS` 為準（皆在 `events.types.ts`），各功能共用、不要各自寫死。一個活動只有一個形式，領域用 topics 表示。資料庫不對 category 設 CHECK，值域由程式驗證；增減類別只需修改這兩個常數（要自動分類時再到 `events.categories.ts` 加關鍵字），不必新增 migration。分類先以標題關鍵字，再以內文關鍵字覆寫來源預設類別；內文比對時略過地點、主辦等欄位行，避免「地點：體育館」被分成運動。皆未命中且未提供來源預設類別時標記待審。
 
 ## Migration 與資料庫約束
 

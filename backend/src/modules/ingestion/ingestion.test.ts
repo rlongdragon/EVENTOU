@@ -195,6 +195,43 @@ test('整理失敗保留原始公告，下次重試成功且不新增第二筆',
   }
 });
 
+test('列表頁沒有日期時保留先前補上的發布日期，不重新整理（#69）', async () => {
+  const db = setup();
+  try {
+    db.exec("UPDATE sources SET review_status='approved'");
+    let processed = 0;
+    const service = new IngestionService(
+      db,
+      [config],
+      new ScraperClient(),
+      async function* (id) {
+        yield {
+          sourceId: id,
+          url: 'https://example.com/detail',
+          title: 'AI 講座',
+          rawContent: '活動日期：2026年10月15日',
+          publishedAt: null,
+          fetchedAt: new Date().toISOString(),
+        };
+      },
+      (database, raw) => {
+        processed += 1;
+        return processAnnouncement(database, raw);
+      },
+    );
+    await service.runSource(1);
+    db.exec("UPDATE raw_announcements SET published_at='2026-10-01T00:00:00+08:00'");
+    await service.runSource(1);
+    assert.equal(processed, 1);
+    assert.equal(
+      db.prepare('SELECT published_at FROM raw_announcements').get()!.published_at,
+      '2026-10-01T00:00:00+08:00',
+    );
+  } finally {
+    db.close();
+  }
+});
+
 test('手動入口與紀錄只允許管理員，並驗證來源識別碼', async () => {
   const db = getDb();
   migrate(db);
@@ -212,6 +249,11 @@ test('手動入口與紀錄只允許管理員，並驗證來源識別碼', async
         displayName: '測試',
         createdAt: '2026-10-13T00:00:00Z',
         role: req.headers['x-test-role'] === 'admin' ? 'admin' : 'user',
+        department: null,
+        admissionYear: null,
+        personalize: true,
+        interestDescription: null,
+        interestTopics: [],
       };
     next();
   });

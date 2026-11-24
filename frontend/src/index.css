@@ -439,6 +439,15 @@ legend {
   object-fit: cover;
 }
 
+.event-summary {
+  max-width: 68ch;
+  margin: 0;
+  padding-left: 1rem;
+  border-left: 3px solid var(--color-accent);
+  font-size: 1.125rem;
+  line-height: 1.8;
+}
+
 .event-description {
   max-width: 68ch;
   font-size: 1.0625rem;
@@ -811,6 +820,88 @@ legend {
   font-size: 1.25rem;
   font-weight: 900;
   line-height: 1.35;
+}
+
+.issue-summary {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--color-muted);
+  font-size: 0.9rem;
+  line-height: 1.6;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+/* 帳號頁偏好領域（#98）：勾選框做成標籤 */
+.interest-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.interest-chips label {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--color-line);
+  border-radius: 4px;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.interest-chips .topic-toggle {
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--color-line);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text);
+  font-size: 0.88rem;
+}
+
+.interest-chips .topic-toggle[aria-pressed='true'],
+.interest-chips label[data-checked='true'] {
+  border-color: var(--color-text);
+  background: var(--color-text);
+  color: var(--color-surface);
+}
+
+.interest-chips label:focus-within {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.interest-chips input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* 跟我相關／全部（#88） */
+.scope-toggle {
+  display: inline-flex;
+  border: 1px solid var(--color-text);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.scope-toggle button {
+  padding: 0.35rem 0.9rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-text);
+  font-size: 0.88rem;
+  white-space: nowrap;
+}
+
+.scope-toggle button + button {
+  border-left: 1px solid var(--color-text);
+}
+
+.scope-toggle button[aria-pressed='true'] {
+  background: var(--color-text);
+  color: var(--color-surface);
 }
 
 .issue-bar {

@@ -513,4 +513,118 @@ export const migrations: Migration[] = [
         END;
     `,
   },
+  {
+    id: 20,
+    name: 'add_llm_extraction_topics_and_personalization',
+    // #69 LLM 整理公告與細分類：
+    // - events.topics：主題（可多選，值域見 EVENT_TOPICS），和 category（形式）組合篩選。
+    // - events.summary：LLM 摘要；is_event：0 代表行政公告，維持 needs_review 但不算待審核活動。
+    // - events.audience_departments／audience_grades：適用系所與年級（#88 推薦用）。
+    // - llm_extractions：以公告內容雜湊快取 LLM 結果，內容沒變就不再呼叫。
+    // #88 個人化推薦：users 新增入學學年（民國）、系所與是否開啟個人化。
+    // published_events 的欄位清單與 migration 12 相同，只多加上新欄位。
+    up: `
+      DROP VIEW published_events;
+
+      ALTER TABLE events ADD COLUMN topics TEXT NOT NULL DEFAULT '[]'
+        CHECK (json_valid(topics) AND json_type(topics) = 'array');
+      ALTER TABLE events ADD COLUMN summary TEXT;
+      ALTER TABLE events ADD COLUMN is_event INTEGER NOT NULL DEFAULT 1 CHECK (is_event IN (0, 1));
+      ALTER TABLE events ADD COLUMN audience_departments TEXT NOT NULL DEFAULT '[]'
+        CHECK (json_valid(audience_departments) AND json_type(audience_departments) = 'array');
+      ALTER TABLE events ADD COLUMN audience_grades TEXT NOT NULL DEFAULT '[]'
+        CHECK (json_valid(audience_grades) AND json_type(audience_grades) = 'array');
+
+      CREATE TABLE llm_extractions (
+        content_hash TEXT NOT NULL,
+        model TEXT NOT NULL,
+        result TEXT NOT NULL CHECK (json_valid(result)),
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY (content_hash, model)
+      );
+
+      ALTER TABLE users ADD COLUMN admission_year INTEGER;
+      ALTER TABLE users ADD COLUMN department TEXT;
+      ALTER TABLE users ADD COLUMN personalize INTEGER NOT NULL DEFAULT 1
+        CHECK (personalize IN (0, 1));
+
+      -- 已登入過的資工系學士班帳號補上系所與入學學年（規則同 profileFromStudentId）
+      UPDATE users
+      SET department = 'csie', admission_year = 100 + CAST(substr(student_id, 2, 2) AS INTEGER)
+      WHERE student_id GLOB '0[0-9][0-9]57[0-9][0-9][0-9]';
+
+      CREATE VIEW published_events AS
+      SELECT
+        e.id, e.title, e.description, e.category, e.tags, e.start_time, e.end_time, e.all_day,
+        COALESCE(e.location, (
+          SELECT d.location FROM events d
+          WHERE d.duplicate_of = e.id AND d.dedup_status = 'merged' AND d.location IS NOT NULL
+          ORDER BY d.id LIMIT 1
+        )) AS location,
+        COALESCE(e.organizer, (
+          SELECT d.organizer FROM events d
+          WHERE d.duplicate_of = e.id AND d.dedup_status = 'merged' AND d.organizer IS NOT NULL
+          ORDER BY d.id LIMIT 1
+        )) AS organizer,
+        COALESCE(e.registration_url, (
+          SELECT d.registration_url FROM events d
+          WHERE d.duplicate_of = e.id AND d.dedup_status = 'merged' AND d.registration_url IS NOT NULL
+          ORDER BY d.id LIMIT 1
+        )) AS registration_url,
+        e.source_id, e.original_url, e.status, e.review_reasons, e.created_at, e.updated_at,
+        e.duplicate_of, e.dedup_status, e.dedup_score,
+        e.topics, e.summary, e.is_event, e.audience_departments, e.audience_grades
+      FROM events e
+      WHERE e.status = 'published'
+        AND NOT (
+          e.dedup_status = 'merged'
+          AND EXISTS (SELECT 1 FROM events k WHERE k.id = e.duplicate_of AND k.status = 'published')
+        );
+    `,
+  },
+  {
+    id: 21,
+    name: 'add_event_audiences_and_user_interests',
+    // 分類改成三個維度：資訊類別（category）、內容領域（topics）、資訊受眾（audiences，值域見 EVENT_AUDIENCES）。
+    // #98 使用者用一段話描述自己，AI 建議偏好領域，使用者確認後存在 interest_topics；描述只存在後端。
+    // published_events 的欄位清單與 migration 20 相同，只多加上 audiences。
+    up: `
+      DROP VIEW published_events;
+
+      ALTER TABLE events ADD COLUMN audiences TEXT NOT NULL DEFAULT '[]'
+        CHECK (json_valid(audiences) AND json_type(audiences) = 'array');
+
+      ALTER TABLE users ADD COLUMN interest_description TEXT;
+      ALTER TABLE users ADD COLUMN interest_topics TEXT NOT NULL DEFAULT '[]'
+        CHECK (json_valid(interest_topics) AND json_type(interest_topics) = 'array');
+
+      CREATE VIEW published_events AS
+      SELECT
+        e.id, e.title, e.description, e.category, e.tags, e.start_time, e.end_time, e.all_day,
+        COALESCE(e.location, (
+          SELECT d.location FROM events d
+          WHERE d.duplicate_of = e.id AND d.dedup_status = 'merged' AND d.location IS NOT NULL
+          ORDER BY d.id LIMIT 1
+        )) AS location,
+        COALESCE(e.organizer, (
+          SELECT d.organizer FROM events d
+          WHERE d.duplicate_of = e.id AND d.dedup_status = 'merged' AND d.organizer IS NOT NULL
+          ORDER BY d.id LIMIT 1
+        )) AS organizer,
+        COALESCE(e.registration_url, (
+          SELECT d.registration_url FROM events d
+          WHERE d.duplicate_of = e.id AND d.dedup_status = 'merged' AND d.registration_url IS NOT NULL
+          ORDER BY d.id LIMIT 1
+        )) AS registration_url,
+        e.source_id, e.original_url, e.status, e.review_reasons, e.created_at, e.updated_at,
+        e.duplicate_of, e.dedup_status, e.dedup_score,
+        e.topics, e.summary, e.is_event, e.audience_departments, e.audience_grades, e.audiences
+      FROM events e
+      WHERE e.status = 'published'
+        AND NOT (
+          e.dedup_status = 'merged'
+          AND EXISTS (SELECT 1 FROM events k WHERE k.id = e.duplicate_of AND k.status = 'published')
+        );
+    `,
+  },
 ];
