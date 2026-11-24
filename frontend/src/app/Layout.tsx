@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from 'react-router';
 import type { Role } from '../features/auth/api';
 import { useAuth } from '../features/auth/AuthContext';
+import { useTaipeiToday } from '../shared/taipeiToday';
 
 // role：只顯示給該角色；需登入但不限角色的頁面照常顯示，點進去會導向登入
 const NAV_ITEMS: { to: string; label: string; role?: Role }[] = [
@@ -19,9 +20,8 @@ export function Layout() {
   const { user, loading, logout } = useAuth();
   const navItems = NAV_ITEMS.filter((item) => !item.role || item.role === user?.role);
 
-  // 刊頭期數：以當月作為「本期」
-  const today = new Date();
-  const issueMonth = String(today.getMonth() + 1).padStart(2, '0');
+  // 刊頭日期：台北時間的今天，過午夜自動換日
+  const today = useTaipeiToday();
 
   return (
     <>
@@ -32,9 +32,9 @@ export function Layout() {
             <span>Campus Events Issue</span>
           </div>
           <div className="masthead-issue">
-            <b>{issueMonth}</b>
+            <b>{String(today.day).padStart(2, '0')}</b>
             <small>
-              {today.getFullYear()} 年 {today.getMonth() + 1} 月號
+              {today.year} 年 {today.month} 月 · 星期{today.weekday}
             </small>
           </div>
         </div>
