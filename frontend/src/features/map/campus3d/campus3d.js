@@ -5498,6 +5498,12 @@ const editBar = document.getElementById('editBar');
 const editSel = document.getElementById('editSel');
 const editOut = document.getElementById('editOut');
 const editToggle = document.getElementById('editToggle');
+// 正式環境只給人瀏覽：編輯模式、動態、省效能的開關只在開發模式（npm run dev）顯示
+if (!import.meta.env.DEV) {
+  for (const id of ['editToggle', 'dynToggle', 'liteToggle']) {
+    document.getElementById(id).style.display = 'none';
+  }
+}
 const hintEl = document.getElementById('hint');
 
 // 可編輯物件：每個有 group 的 info 一筆，依名稱給固定 id

@@ -25,6 +25,8 @@ export function CampusMapPage() {
   const [today] = useState(() => getTaipeiToday());
   const [range, setRange] = useState<DateRange>(() => rangeFromToday(today, DEFAULT_RANGE_DAYS));
   const [category, setCategory] = useState('');
+  // 手機版篩選條件預設收在「…」裡
+  const [filtersOpen, setFiltersOpen] = useState(false);
   // 預設立體（組內 11/16 決議），可切換回平面地圖
   const [mode, setMode] = useState<MapMode>('3d');
   const [loaded, setLoaded] = useState<LoadedMapEvents | null>(null);
@@ -84,61 +86,77 @@ export function CampusMapPage() {
   return (
     <section className="campus-map-page">
       <h1>校園活動地圖</h1>
-      <MapModeToggle mode={mode} onChange={setMode} />
-      <div className="campus-map-filters">
-        <label>
-          開始日期
-          <input
-            type="date"
-            value={from}
-            max={to || undefined}
-            onChange={(event) => setRange({ from: event.target.value, to })}
-          />
-        </label>
-        <label>
-          結束日期
-          <input
-            type="date"
-            value={to}
-            min={from || undefined}
-            onChange={(event) => setRange({ from, to: event.target.value })}
-          />
-        </label>
-        <label>
-          類別
-          <select value={category} onChange={(event) => setCategory(event.target.value)}>
-            <option value="">全部類別</option>
-            {result?.categories.map((option) => (
-              <option key={option.code} value={option.code}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className="campus-map-presets" role="group" aria-label="快速選擇日期範圍">
-          {DATE_RANGE_PRESETS.map((preset) => {
-            const presetRange = rangeFromToday(today, preset.days);
-            const active = presetRange.from === from && presetRange.to === to;
-            return (
-              <button
-                key={preset.days}
-                type="button"
-                aria-pressed={active}
-                onClick={() => setRange(presetRange)}
-              >
-                {preset.label}
-              </button>
-            );
-          })}
-          <button
-            type="button"
-            onClick={() => {
-              setRange({ from: '', to: '' });
-              setCategory('');
-            }}
-          >
-            清除篩選
-          </button>
+      <div className="campus-map-toolbar">
+        <MapModeToggle mode={mode} onChange={setMode} />
+        <button
+          type="button"
+          className="campus-map-more"
+          aria-label="篩選條件"
+          aria-expanded={filtersOpen}
+          aria-controls="campus-map-filters"
+          onClick={() => setFiltersOpen((open) => !open)}
+        >
+          …
+        </button>
+        <div
+          id="campus-map-filters"
+          className="campus-map-filters"
+          data-open={filtersOpen || undefined}
+        >
+          <label>
+            開始日期
+            <input
+              type="date"
+              value={from}
+              max={to || undefined}
+              onChange={(event) => setRange({ from: event.target.value, to })}
+            />
+          </label>
+          <label>
+            結束日期
+            <input
+              type="date"
+              value={to}
+              min={from || undefined}
+              onChange={(event) => setRange({ from, to: event.target.value })}
+            />
+          </label>
+          <label>
+            類別
+            <select value={category} onChange={(event) => setCategory(event.target.value)}>
+              <option value="">全部類別</option>
+              {result?.categories.map((option) => (
+                <option key={option.code} value={option.code}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="campus-map-presets" role="group" aria-label="快速選擇日期範圍">
+            {DATE_RANGE_PRESETS.map((preset) => {
+              const presetRange = rangeFromToday(today, preset.days);
+              const active = presetRange.from === from && presetRange.to === to;
+              return (
+                <button
+                  key={preset.days}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => setRange(presetRange)}
+                >
+                  {preset.label}
+                </button>
+              );
+            })}
+            <button
+              type="button"
+              onClick={() => {
+                setRange({ from: '', to: '' });
+                setCategory('');
+              }}
+            >
+              清除篩選
+            </button>
+          </div>
         </div>
       </div>
       {matchingError && <p role="alert">{matchingError}</p>}
