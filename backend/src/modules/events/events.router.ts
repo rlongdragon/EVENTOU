@@ -3,7 +3,12 @@ import { getDb } from '../../db/index.js';
 import { requireAuth, requireRole } from '../auth/auth.middleware.js';
 import {
   createEventComment,
+  deleteEventComment,
+  isCommentSort,
   listEventComments,
+  resolveReplyParent,
+  setCommentLike,
+  updateEventComment,
   validateCommentContent,
 } from './events.comments.js';
 import {
@@ -145,19 +150,16 @@ eventsRouter.get('/:eventId', (req, res) => {
   res.json({ event: { ...event, categoryLabel, sources: listEventSources(getDb(), event.id) } });
 });
 
-// US-10 活動留言：未登入可看，留言需登入；依留言時間由舊到新排序
-eventsRouter.get('/:eventId/comments', (req, res) => {
-  const event = findPublishedEventOr404(req.params.eventId, res);
-  if (!event) return;
-  res.json({ comments: listEventComments(getDb(), event.id) });
-});
+/** 讀取 JSON body 的欄位；body 不是物件時回傳 undefined。 */
+function bodyField(body: unknown, name: string): unknown {
+  return typeof body === 'object' && body !== null && name in body
+    ? (body as Record<string, unknown>)[name]
+    : undefined;
+}
 
-eventsRouter.post('/:eventId/comments', requireAuth, (req, res) => {
-  const event = findPublishedEventOr404(req.params.eventId, res);
-  if (!event || !req.user) return;
-  const body: unknown = req.body;
-  const raw =
-    typeof body === 'object' && body !== null && 'content' in body ? body.content : undefined;
+/** 驗證留言內容（去除前後空白）；不合法時回 400 並回傳 undefined。 */
+function readCommentContent(body: unknown, res: Response): string | undefined {
+  const raw = bodyField(body, 'content');
   const content = typeof raw === 'string' ? raw.trim() : '';
   const contentError = validateCommentContent(content);
   if (contentError) {
@@ -166,15 +168,102 @@ eventsRouter.post('/:eventId/comments', requireAuth, (req, res) => {
       message: '留言內容有誤',
       fields: { content: contentError },
     });
-    return;
+    return undefined;
+  }
+  return content;
+}
+
+function sendCommentNotFound(res: Response) {
+  res.status(404).json({ error: 'not_found', message: '找不到這則留言' });
+}
+
+// US-10 活動留言：未登入可看，留言需登入。
+// #79 sort=oldest（預設）|newest|top 排序頂層留言，回覆附在各留言的 replies，由舊到新
+eventsRouter.get('/:eventId/comments', (req, res) => {
+  const event = findPublishedEventOr404(req.params.eventId, res);
+  if (!event) return;
+  const sort = isCommentSort(req.query.sort) ? req.query.sort : 'oldest';
+  res.json(listEventComments(getDb(), event.id, { viewerId: req.user?.id ?? null, sort }));
+});
+
+// 發表留言；帶 parentId 時為回覆（回覆「回覆」會掛到同一則頂層留言）
+eventsRouter.post('/:eventId/comments', requireAuth, (req, res) => {
+  const event = findPublishedEventOr404(req.params.eventId, res);
+  if (!event || !req.user) return;
+  const content = readCommentContent(req.body, res);
+  if (content === undefined) return;
+  const rawParent = bodyField(req.body, 'parentId');
+  let parentId: number | null = null;
+  if (rawParent !== undefined && rawParent !== null) {
+    const resolved =
+      typeof rawParent === 'number' && Number.isSafeInteger(rawParent) && rawParent > 0
+        ? resolveReplyParent(getDb(), event.id, rawParent)
+        : undefined;
+    if (resolved === undefined) {
+      res.status(404).json({ error: 'not_found', message: '要回覆的留言不存在或已被刪除' });
+      return;
+    }
+    parentId = resolved;
   }
   const comment = createEventComment(getDb(), {
     eventId: event.id,
     userId: req.user.id,
     content,
+    parentId,
   });
   res.status(201).json({ comment });
 });
+
+// #79 留言者編輯自己的留言
+eventsRouter.patch('/:eventId/comments/:commentId', requireAuth, (req, res) => {
+  const event = findPublishedEventOr404(req.params.eventId, res);
+  if (!event || !req.user) return;
+  const commentId = parseEventId(req.params.commentId);
+  if (commentId === undefined) return sendCommentNotFound(res);
+  const content = readCommentContent(req.body, res);
+  if (content === undefined) return;
+  const result = updateEventComment(getDb(), {
+    eventId: event.id,
+    commentId,
+    userId: req.user.id,
+    content,
+  });
+  if (result.ok) res.json({ comment: result.comment });
+  else if (result.error === 'forbidden') {
+    res.status(403).json({ error: 'forbidden', message: '只能編輯自己的留言' });
+  } else sendCommentNotFound(res);
+});
+
+// #79 刪除留言：留言者可刪除自己的留言，管理員可刪除任何留言（等同隱藏）
+eventsRouter.delete('/:eventId/comments/:commentId', requireAuth, (req, res) => {
+  const event = findPublishedEventOr404(req.params.eventId, res);
+  if (!event || !req.user) return;
+  const commentId = parseEventId(req.params.commentId);
+  if (commentId === undefined) return sendCommentNotFound(res);
+  const result = deleteEventComment(getDb(), { eventId: event.id, commentId, user: req.user });
+  if (result.ok) res.status(204).end();
+  else if (result.error === 'forbidden') {
+    res.status(403).json({ error: 'forbidden', message: '只能刪除自己的留言' });
+  } else sendCommentNotFound(res);
+});
+
+// #79 按讚（PUT）與取消讚（DELETE），可重複呼叫
+for (const [method, liked] of [
+  ['put', true],
+  ['delete', false],
+] as const) {
+  eventsRouter[method]('/:eventId/comments/:commentId/like', requireAuth, (req, res) => {
+    const event = findPublishedEventOr404(req.params.eventId, res);
+    if (!event || !req.user) return;
+    const commentId = parseEventId(req.params.commentId);
+    const result =
+      commentId === undefined
+        ? undefined
+        : setCommentLike(getDb(), { eventId: event.id, commentId, userId: req.user.id, liked });
+    if (result) res.json(result);
+    else sendCommentNotFound(res);
+  });
+}
 
 // #65 檢舉留言：需登入，不能檢舉自己的留言，同一人對同一則只能檢舉一次
 eventsRouter.post('/:eventId/comments/:commentId/reports', requireAuth, (req, res) => {

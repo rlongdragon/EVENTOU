@@ -55,6 +55,9 @@ after(() => {
 interface CommentsBody {
   comments?: EventComment[];
   comment?: EventComment;
+  total?: number;
+  likeCount?: number;
+  likedByMe?: boolean;
   error?: string;
   fields?: Record<string, string>;
 }
@@ -141,7 +144,7 @@ describe('活動留言（US-10）', () => {
         ['第二則', '2026-10-02T10:00:00+08:00'],
       ],
     );
-    assert.ok(body.comments?.every((comment) => comment.author.displayName === 'Bob'));
+    assert.ok(body.comments?.every((comment) => comment.author?.displayName === 'Bob'));
   });
 
   test('空白、非字串或過長的留言被擋下', async () => {
@@ -178,7 +181,7 @@ describe('活動留言（US-10）', () => {
     });
     const ratingOf = async (name: string) => {
       const { body } = await request('GET', `/api/events/${otherEventId}/comments`);
-      return body.comments?.find((comment) => comment.author.displayName === name)?.rating;
+      return body.comments?.find((comment) => comment.author?.displayName === name)?.rating;
     };
     assert.equal(await ratingOf('Erin'), 4);
     assert.equal(await ratingOf('Frank'), null);
@@ -196,5 +199,223 @@ describe('活動留言（US-10）', () => {
       });
       assert.equal(posted.status, 404, id);
     }
+  });
+});
+
+describe('留言編輯、刪除、按讚、回覆與排序（#79）', () => {
+  let threadEventId: number;
+
+  before(() => {
+    threadEventId = processAnnouncement(
+      getDb(),
+      { ...raw, url: 'https://www.ntou.edu.tw/event/comments-thread' },
+      { defaultCategory: 'lecture' },
+    ).id;
+  });
+
+  const path = (suffix = '') => `/api/events/${threadEventId}/comments${suffix}`;
+  const list = async (cookie?: string) => (await request('GET', path(), { cookie })).body;
+
+  async function makeAdmin(email: string, displayName: string) {
+    const admin = await registerUser(email, displayName);
+    getDb().prepare("UPDATE users SET role = 'admin' WHERE id = ?").run(admin.id);
+    return admin;
+  }
+
+  test('留言者可編輯自己的留言，記錄編輯時間；別人不能編輯', async () => {
+    const owner = await registerUser('edit-owner@example.com', 'EditOwner');
+    const other = await registerUser('edit-other@example.com', 'EditOther');
+    const posted = await postComment(threadEventId, '原本的內容', owner.cookie);
+    const id = posted.body.comment?.id;
+    assert.equal(posted.body.comment?.editedAt, null);
+
+    const edit = (content: unknown, cookie?: string, commentId: unknown = id) =>
+      request('PATCH', path(`/${commentId}`), { cookie, body: { content } });
+    const edited = await edit('  改過的內容  ', owner.cookie);
+    assert.equal(edited.status, 200);
+    assert.equal(edited.body.comment?.content, '改過的內容');
+    assert.match(edited.body.comment?.editedAt ?? '', /\+08:00$/);
+
+    assert.equal((await edit('偷改', other.cookie)).status, 403);
+    assert.equal((await edit('  ', owner.cookie)).status, 400);
+    assert.equal((await edit('x')).status, 401);
+    assert.equal((await edit('x', owner.cookie, 999999)).status, 404);
+  });
+
+  test('回覆掛在頂層留言下，回覆「回覆」也掛在同一則頂層留言', async () => {
+    const alice = await registerUser('thread-alice@example.com', 'ThreadAlice');
+    const bob = await registerUser('thread-bob@example.com', 'ThreadBob');
+    const reply = (parentId: unknown, content: string, cookie: string) =>
+      request('POST', path(), { cookie, body: { content, parentId } });
+    const top = (await postComment(threadEventId, '有人要一起去嗎？', alice.cookie)).body.comment;
+    assert.ok(top);
+    const first = await reply(top.id, '我要！', bob.cookie);
+    assert.equal(first.status, 201);
+    assert.equal(first.body.comment?.parentId, top.id);
+    const nested = await reply(first.body.comment?.id, '好，門口見', alice.cookie);
+    assert.equal(nested.body.comment?.parentId, top.id);
+
+    const body = await list();
+    const thread = body.comments?.find((comment) => comment.id === top.id);
+    assert.deepEqual(
+      thread?.replies.map((comment) => comment.content),
+      ['我要！', '好，門口見'],
+    );
+    // 回覆不會出現在頂層
+    assert.ok(!body.comments?.some((comment) => comment.parentId !== null));
+
+    for (const parentId of [999999, 'abc', 0, 1.5]) {
+      assert.equal((await reply(parentId, '回覆', bob.cookie)).status, 404, String(parentId));
+    }
+    // 其他活動的留言不能當作上層留言
+    const elsewhere = (await postComment(otherEventId, '別的活動', alice.cookie)).body.comment;
+    assert.equal((await reply(elsewhere?.id, '回覆', bob.cookie)).status, 404);
+  });
+
+  test('按讚與取消讚可重複呼叫，訪客看得到讚數但不能按', async () => {
+    const author = await registerUser('like-author@example.com', 'LikeAuthor');
+    const fan = await registerUser('like-fan@example.com', 'LikeFan');
+    const id = (await postComment(threadEventId, '值得按讚', author.cookie)).body.comment?.id;
+
+    for (let i = 0; i < 2; i += 1) {
+      const liked = await request('PUT', path(`/${id}/like`), { cookie: fan.cookie });
+      assert.equal(liked.status, 200);
+      assert.equal(liked.body.likeCount, 1);
+      assert.equal(liked.body.likedByMe, true);
+    }
+    const mine = (await list(fan.cookie)).comments?.find((comment) => comment.id === id);
+    assert.equal(mine?.likeCount, 1);
+    assert.equal(mine?.likedByMe, true);
+    const guest = (await list()).comments?.find((comment) => comment.id === id);
+    assert.equal(guest?.likeCount, 1);
+    assert.equal(guest?.likedByMe, false);
+
+    assert.equal((await request('PUT', path(`/${id}/like`))).status, 401);
+    const unliked = await request('DELETE', path(`/${id}/like`), { cookie: fan.cookie });
+    assert.equal(unliked.body.likeCount, 0);
+    assert.equal(unliked.body.likedByMe, false);
+    const missing = await request('PUT', path('/999999/like'), { cookie: fan.cookie });
+    assert.equal(missing.status, 404);
+  });
+
+  test('排序：最舊（預設）、最新、最多讚', async () => {
+    const db = getDb();
+    const { id: userId } = await registerUser('sort@example.com', 'Sorter');
+    const sortEventId = processAnnouncement(
+      db,
+      { ...raw, url: 'https://www.ntou.edu.tw/event/comments-sort' },
+      { defaultCategory: 'lecture' },
+    ).id;
+    const make = (content: string, at: string) =>
+      createEventComment(db, { eventId: sortEventId, userId, content }, new Date(at)).id;
+    make('早', '2026-10-02T01:00:00Z');
+    const middle = make('中', '2026-10-02T02:00:00Z');
+    make('晚', '2026-10-02T03:00:00Z');
+    const fan = await registerUser('sort-fan@example.com', 'SortFan');
+    await request('PUT', `/api/events/${sortEventId}/comments/${middle}/like`, {
+      cookie: fan.cookie,
+    });
+    const order = async (query = '') =>
+      (await request('GET', `/api/events/${sortEventId}/comments${query}`)).body.comments?.map(
+        (comment) => comment.content,
+      );
+    assert.deepEqual(await order(), ['早', '中', '晚']);
+    assert.deepEqual(await order('?sort=oldest'), ['早', '中', '晚']);
+    assert.deepEqual(await order('?sort=newest'), ['晚', '中', '早']);
+    // 讚數相同時較新的在前
+    assert.deepEqual(await order('?sort=top'), ['中', '晚', '早']);
+    assert.deepEqual(await order('?sort=bogus'), ['早', '中', '晚']);
+  });
+
+  test('刪除：沒有回覆的留言消失；有回覆的保留佔位，回覆照常顯示', async () => {
+    const owner = await registerUser('delete-owner@example.com', 'DeleteOwner');
+    const replier = await registerUser('delete-replier@example.com', 'DeleteReplier');
+    const lone = (await postComment(threadEventId, '沒人回', owner.cookie)).body.comment?.id;
+    const parent = (await postComment(threadEventId, '有人回', owner.cookie)).body.comment?.id;
+    await request('POST', path(), {
+      cookie: replier.cookie,
+      body: { content: '回覆內容', parentId: parent },
+    });
+    const totalBefore = (await list()).total ?? 0;
+    const remove = (commentId: unknown, cookie: string) =>
+      request('DELETE', path(`/${commentId}`), { cookie });
+
+    assert.equal((await remove(lone, replier.cookie)).status, 403);
+    assert.equal((await remove(lone, owner.cookie)).status, 204);
+    assert.equal((await remove(parent, owner.cookie)).status, 204);
+    // 已刪除的留言不能再刪、編輯、按讚或回覆
+    assert.equal((await remove(lone, owner.cookie)).status, 404);
+    const edit = await request('PATCH', path(`/${parent}`), {
+      cookie: owner.cookie,
+      body: { content: '復活' },
+    });
+    assert.equal(edit.status, 404);
+    const like = await request('PUT', path(`/${parent}/like`), { cookie: replier.cookie });
+    assert.equal(like.status, 404);
+    const replyToDeleted = await request('POST', path(), {
+      cookie: replier.cookie,
+      body: { content: '還能回嗎', parentId: parent },
+    });
+    assert.equal(replyToDeleted.status, 404);
+
+    const body = await list();
+    assert.equal(body.total, totalBefore - 2);
+    assert.ok(!body.comments?.some((comment) => comment.id === lone));
+    const placeholder = body.comments?.find((comment) => comment.id === parent);
+    assert.equal(placeholder?.removed, true);
+    assert.equal(placeholder?.content, null);
+    assert.equal(placeholder?.author, null);
+    assert.deepEqual(
+      placeholder?.replies.map((comment) => comment.content),
+      ['回覆內容'],
+    );
+  });
+
+  test('管理員可刪除別人的留言（記為隱藏），待審檢舉一併結案', async () => {
+    const author = await registerUser('admin-target@example.com', 'AdminTarget');
+    const reporter = await registerUser('admin-reporter@example.com', 'AdminReporter');
+    const admin = await makeAdmin('comment-admin@example.com', 'CommentAdmin');
+    const id = (await postComment(threadEventId, '違規留言', author.cookie)).body.comment?.id;
+    const reported = await request('POST', path(`/${id}/reports`), {
+      cookie: reporter.cookie,
+      body: { reason: 'spam' },
+    });
+    assert.equal(reported.status, 201);
+
+    assert.equal((await request('DELETE', path(`/${id}`), { cookie: admin.cookie })).status, 204);
+    assert.ok(!(await list()).comments?.some((comment) => comment.id === id));
+    const row = getDb()
+      .prepare('SELECT hidden_by, deleted_at FROM event_comments WHERE id = ?')
+      .get(Number(id));
+    assert.equal(Number(row?.hidden_by), admin.id);
+    assert.equal(row?.deleted_at, null);
+    const pending = getDb()
+      .prepare(
+        "SELECT count(*) AS n FROM comment_reports WHERE comment_id = ? AND status = 'pending'",
+      )
+      .get(Number(id));
+    assert.equal(Number(pending?.n), 0);
+  });
+
+  test('留言者自行刪除後，不再出現在檢舉審核清單，也不能再被檢舉', async () => {
+    const author = await registerUser('self-delete@example.com', 'SelfDelete');
+    const reporter = await registerUser('self-delete-reporter@example.com', 'SelfReporter');
+    const admin = await makeAdmin('self-delete-admin@example.com', 'SelfAdmin');
+    const id = (await postComment(threadEventId, '會被刪', author.cookie)).body.comment?.id;
+    await request('POST', path(`/${id}/reports`), {
+      cookie: reporter.cookie,
+      body: { reason: 'spam' },
+    });
+    await request('DELETE', path(`/${id}`), { cookie: author.cookie });
+    const response = await fetch(`${baseUrl}/api/events/comment-reports`, {
+      headers: { Cookie: admin.cookie },
+    });
+    const { reports } = (await response.json()) as { reports: { comment: { id: number } }[] };
+    assert.ok(!reports.some((report) => report.comment.id === id));
+    const again = await request('POST', path(`/${id}/reports`), {
+      cookie: admin.cookie,
+      body: { reason: 'spam' },
+    });
+    assert.equal(again.status, 404);
   });
 });

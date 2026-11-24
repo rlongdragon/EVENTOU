@@ -406,4 +406,30 @@ export const migrations: Migration[] = [
       DROP TABLE personal_calendars;
     `,
   },
+  {
+    id: 15,
+    name: 'add_comment_replies_likes_edits',
+    // #79 留言功能完善：
+    // - parent_id：回覆的上層留言；只有一層回覆，parent_id 一律指向沒有 parent_id 的留言。
+    // - edited_at：留言者最後一次編輯的時間；deleted_at：留言者自行刪除的時間（保留資料列，
+    //   仍有回覆時顯示「此留言已刪除」）。管理員刪除沿用 hidden_at／hidden_by（migration 13）。
+    // - comment_likes：每人對每則留言最多一個讚。
+    up: `
+      ALTER TABLE event_comments ADD COLUMN parent_id INTEGER
+        REFERENCES event_comments (id) ON DELETE CASCADE;
+      ALTER TABLE event_comments ADD COLUMN edited_at TEXT;
+      ALTER TABLE event_comments ADD COLUMN deleted_at TEXT;
+
+      CREATE INDEX event_comments_parent ON event_comments (parent_id);
+
+      CREATE TABLE comment_likes (
+        comment_id INTEGER NOT NULL REFERENCES event_comments (id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (comment_id, user_id)
+      );
+
+      CREATE INDEX comment_likes_user ON comment_likes (user_id);
+    `,
+  },
 ];

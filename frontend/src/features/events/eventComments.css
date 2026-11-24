@@ -1,20 +1,88 @@
-/* US-10 留言列表：名字、評分、時間在同一列，檢舉按鈕靠右 */
+/* US-10／#79 留言：沿用「雜誌」主題的墨線與直角；名字、評分、時間在同一列，「⋯」選單靠右 */
+
+.comment-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.comment-sort {
+  display: inline-flex;
+  gap: 0.5rem;
+  align-items: center;
+  color: var(--color-muted);
+  font-size: 0.9rem;
+}
+
+.comment-composer {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0.5rem 0 1rem;
+}
+
+.comment-composer textarea {
+  width: 100%;
+  resize: vertical;
+}
+
+.comment-composer-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.comment-counter {
+  margin-right: auto;
+  color: var(--color-muted);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.comment-error {
+  margin: 0;
+  color: var(--color-warning);
+}
+
+.comment-login,
+.comment-empty {
+  color: var(--color-muted);
+}
+
 .comment-list {
   margin: 0 0 1rem;
   padding: 0;
+  border-top: 1px solid var(--color-line);
   list-style: none;
 }
 
 .comment-item {
-  padding: 0.75rem 0;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  padding: 0.9rem 0;
+  border-bottom: 1px solid var(--color-line);
+}
+
+.comment-body {
+  min-width: 0;
 }
 
 .comment-head {
   display: flex;
   flex-wrap: wrap;
   gap: 0.25rem 0.6rem;
-  align-items: baseline;
+  align-items: center;
+}
+
+.comment-author {
+  font-weight: 700;
+}
+
+.comment-badge {
+  padding: 0 0.35rem;
+  border: 1px solid var(--color-line);
+  color: var(--color-muted);
+  font-size: 0.72rem;
 }
 
 .comment-rating {
@@ -23,20 +91,129 @@
 }
 
 .comment-time {
-  color: #59636e;
-  font-size: 0.9rem;
-}
-
-.comment-report-button {
-  min-height: auto;
-  margin-left: auto;
-  padding: 0.1rem 0.6rem;
-  font-size: 0.8rem;
+  color: var(--color-muted);
+  font-size: 0.85rem;
 }
 
 .comment-content {
   margin: 0.35rem 0 0;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.comment-removed {
+  margin: 0;
+  color: var(--color-muted);
+  font-style: italic;
+}
+
+/* 讚、回覆：無框的小按鈕，滑過才出現底色 */
+.comment-actions {
+  display: flex;
+  gap: 0.25rem;
+  margin-top: 0.35rem;
+  margin-left: -0.5rem;
+}
+
+.comment-action,
+.comment-icon-button,
+.comment-toggle {
+  display: inline-flex;
+  gap: 0.3rem;
+  align-items: center;
+  min-height: 2rem;
+  padding: 0 0.5rem;
+  border: 0;
+  background: transparent;
+  color: var(--color-muted);
+  font-size: 0.85rem;
+  letter-spacing: normal;
+  text-decoration: none;
+}
+
+.comment-action:hover,
+.comment-action:hover:not(:disabled),
+.comment-icon-button:hover:not(:disabled),
+.comment-toggle:hover:not(:disabled) {
+  background: var(--color-bg-deep);
+  color: var(--color-text);
+}
+
+.comment-action[aria-pressed='true'] {
+  color: var(--color-accent);
+}
+
+.comment-icon-button {
+  min-width: 2rem;
+  justify-content: center;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.comment-menu {
+  position: relative;
+  margin-left: auto;
+}
+
+.comment-menu-list {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 10;
+  display: grid;
+  min-width: 7rem;
+  border: 1px solid var(--color-text);
+  background: var(--color-surface);
+  box-shadow: 0 4px 12px rgba(28, 33, 31, 0.12);
+}
+
+.comment-menu-list button {
+  justify-content: flex-start;
+  border: 0;
+  text-align: left;
+}
+
+.comment-menu-list button + button {
+  border-top: 1px solid var(--color-line);
+}
+
+.comment-menu-list .comment-menu-danger {
+  color: var(--color-warning);
+}
+
+/* 回覆：縮排並以細線標示屬於哪一則留言 */
+.comment-replies {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0.5rem 0 0 0.75rem;
+  padding-left: 1rem;
+  border-left: 2px solid var(--color-line);
+}
+
+.comment-reply-list {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0.25rem 0;
+  list-style: none;
+}
+
+.comment-toggle {
+  justify-self: start;
+  margin-left: -0.5rem;
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+.comment-replies .comment-composer {
+  margin: 0.25rem 0 0.5rem;
+}
+
+@media (max-width: 640px) {
+  .comment-replies {
+    margin-left: 0.25rem;
+    padding-left: 0.75rem;
+  }
 }
 
 .comment-report-dialog {

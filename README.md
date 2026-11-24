@@ -199,26 +199,29 @@ npm run sources:seed-ntou -w backend -- someone@example.com
 - `event_notification_dispatches`、`event_notifications`（migration 8）：通知派送與寄送紀錄，同一活動對同一使用者只寄一次。
 - migration 14：`source_follows`（追蹤的來源）、`calendar_event_marks`（對單一活動的 `added`／`hidden` 標記）、`user_calendar_settings`（同步網址 token 與 Email 通知開關，沒有資料列時視為通知開啟）。同時移除 US-09 的多個個人行事曆與標籤條件（`personal_calendars` 等三張表），舊的個人行事曆同步網址隨之失效。
 
-## 活動留言（US-10）
+## 活動留言（US-10、#79）
 
-- 後端 API：`GET /api/events/:eventId/comments`（未登入可看）、`POST /api/events/:eventId/comments`（需登入，body 為 `{ "content": string }`）。
-- 只有已發布的活動能看與留言；活動不存在、待審（`needs_review`）或 id 無效時回傳 `404`。
+- 後端 API（`:eventId` 須為已發布的活動；活動不存在、待審（`needs_review`）或 id 無效時回傳 `404`）：
+  - `GET /api/events/:eventId/comments?sort=oldest|newest|top`（未登入可看）：回傳 `{ comments, total }`。頂層留言依 `sort` 排序（預設 `oldest`；`top` 依讚數，同讚數較新的在前），每則的 `replies` 為它的回覆（由舊到新）；`total` 為對外顯示的留言數（含回覆）。
+  - `POST /api/events/:eventId/comments`（需登入）：body 為 `{ "content": string, "parentId"?: number }`，帶 `parentId` 時為回覆。只有一層回覆：回覆「回覆」會掛到同一則頂層留言；要回覆的留言不存在、屬於其他活動或已刪除時回 `404`。
+  - `PATCH /api/events/:eventId/comments/:commentId`（需登入）：留言者編輯自己的留言，body 為 `{ "content": string }`；別人的留言回 `403`。
+  - `DELETE /api/events/:eventId/comments/:commentId`（需登入）：留言者刪除自己的留言，或管理員刪除任何留言，成功回 `204`；一般使用者刪除別人的留言回 `403`。
+  - `PUT`／`DELETE /api/events/:eventId/comments/:commentId/like`（需登入）：按讚／取消讚，可重複呼叫，回傳 `{ likeCount, likedByMe }`。
 - 留言內容會去除前後空白，空白留言回傳 `400 validation_error`（`fields.content`），上限 1000 字元。
-- 留言依時間由舊到新排序；每則留言回傳 `id`、`content`、`createdAt`（`+08:00` 的 ISO 字串）與留言者 `author`（`id`、`displayName`，不含 email），以及留言者目前對該活動的評分 `rating`（1–5，未評分為 `null`，來自 US-11 的 `event_ratings`）。
-- 資料表（migration 9）：`event_comments`，活動或使用者刪除時留言一併刪除。
-- 前端在活動頁（`/events/:eventId`）下方顯示留言列表，每則留言旁顯示留言者的星等；訪客看到登入提示，登入後才出現留言輸入框。
-- 登入後可在別人的留言旁按「檢舉」，由管理員審核（見下方「留言檢舉」）。
-- 被管理員隱藏的留言（`hidden_at` 有值）不會出現在留言列表。
+- 每則留言回傳 `id`、`parentId`、`content`、`createdAt`、`editedAt`（未編輯為 `null`，時間皆為 `+08:00` 的 ISO 字串）、留言者 `author`（`id`、`displayName`，不含 email）、留言者目前對該活動的評分 `rating`（1–5，未評分為 `null`，來自 US-11 的 `event_ratings`）、`likeCount`、`likedByMe`（訪客一律 `false`）、`removed` 與 `replies`。
+- 刪除與隱藏：留言者刪除記為 `deleted_at`；管理員刪除別人的留言記為隱藏（`hidden_at`、`hidden_by`），該留言的待審檢舉一併以「已隱藏」結案。已刪除或隱藏的留言不能再編輯、按讚、回覆或檢舉；頂層留言若仍有回覆，以 `removed: true` 的佔位保留位置（`content`、`author` 為 `null`），回覆照常顯示，沒有回覆的則不列出。
+- 資料表：`event_comments`（migration 9；活動或使用者刪除時留言一併刪除），migration 15 新增 `parent_id`、`edited_at`、`deleted_at` 與 `comment_likes`（每人對每則留言最多一個讚）。
+- 前端在活動頁（`/events/:eventId`）下方顯示留言：輸入框在最上方（Ctrl／⌘ + Enter 送出），可切換排序；每則留言顯示星等、讚與「回覆」，「⋯」選單依身分列出「編輯」「刪除」（自己的留言，管理員可刪除任何留言）與「檢舉」（別人的留言）。回覆超過兩則時預設收合。訪客看得到讚數，按讚與留言會導向登入。
 
 ## 留言檢舉（#65）
 
 - `POST /api/events/:eventId/comments/:commentId/reports`（需登入），body 為 `{ "reason": "spam" | "abusive" | "off_topic" | "other", "note"?: string }`，成功回 `201`。補充說明會去除前後空白，上限 500 字元。
-  - 原因不合法或補充說明過長回 `400 validation_error`（`fields.reason`／`fields.note`）；檢舉自己的留言回 `400 own_comment`；同一人重複檢舉同一則回 `409 already_reported`；活動或留言不存在、留言不屬於該活動或已被隱藏回 `404`。
+  - 原因不合法或補充說明過長回 `400 validation_error`（`fields.reason`／`fields.note`）；檢舉自己的留言回 `400 own_comment`；同一人重複檢舉同一則回 `409 already_reported`；活動或留言不存在、留言不屬於該活動或已被隱藏或刪除回 `404`。
 - 管理員 API（`requireRole('admin')`）：
-  - `GET /api/events/comment-reports`：列出有待審檢舉的留言，每筆含留言內容與留言者、所屬活動、檢舉次數、各原因次數與補充說明（不含檢舉者身分）。
+  - `GET /api/events/comment-reports`：列出有待審檢舉的留言（留言者已自行刪除的不列出），每筆含留言內容與留言者、所屬活動、檢舉次數、各原因次數與補充說明（不含檢舉者身分）。
   - `POST /api/events/comment-reports/:commentId/hide`：隱藏留言；`POST /api/events/comment-reports/:commentId/dismiss`：駁回檢舉。同一則留言的待審檢舉一併結案，回傳更新後的清單；沒有待審檢舉時回 `404`。
 - 資料表（migration 13）：`comment_reports`（`(comment_id, reporter_id)` 唯一，狀態 `pending`／`hidden`／`dismissed`，記錄審核者與時間），`event_comments` 新增 `hidden_at`、`hidden_by`。
-- 前端：活動頁留言旁的「檢舉」開啟視窗選擇原因與補充說明；管理員在導覽列「留言檢舉」（`/admin/comment-reports`）審核。
+- 前端：活動頁別人留言的「⋯」選單中的「檢舉」開啟視窗選擇原因與補充說明；管理員在導覽列「留言檢舉」（`/admin/comment-reports`）審核。
 
 ## 活動評價（US-11）
 
