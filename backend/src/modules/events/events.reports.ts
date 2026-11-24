@@ -19,6 +19,8 @@ export type CreateReportResult =
 
 /**
  * 檢舉留言；留言須屬於該活動且未被隱藏或刪除，不能檢舉自己的留言，同一人對同一則只能檢舉一次。
+ * #87 例外：檢舉已結案（駁回）且留言在結案後又被編輯過時，同一人可以重新檢舉，
+ * 原本那筆檢舉改回待審並換成新的原因與說明，避免被檢舉者在駁回後把內容改回去。
  * reason 與 note 須先驗證。
  */
 export function createCommentReport(
@@ -34,7 +36,7 @@ export function createCommentReport(
 ): CreateReportResult {
   const comment = db
     .prepare(
-      `SELECT user_id FROM event_comments
+      `SELECT user_id, edited_at FROM event_comments
       WHERE id = ? AND event_id = ? AND hidden_at IS NULL AND deleted_at IS NULL`,
     )
     .get(input.commentId, input.eventId);
@@ -48,7 +50,18 @@ export function createCommentReport(
       RETURNING id`,
     )
     .get(input.commentId, input.reporterId, input.reason, input.note, taipeiNow(now));
-  return inserted ? { ok: true } : { ok: false, error: 'already_reported' };
+  if (inserted) return { ok: true };
+  const editedAt = comment.edited_at === null ? null : String(comment.edited_at);
+  if (editedAt === null) return { ok: false, error: 'already_reported' };
+  // 時間皆為 +08:00 的 ISO 字串，可直接比較
+  const reopened = db
+    .prepare(
+      `UPDATE comment_reports
+      SET reason = ?, note = ?, status = 'pending', created_at = ?, reviewed_by = NULL, reviewed_at = NULL
+      WHERE comment_id = ? AND reporter_id = ? AND status != 'pending' AND reviewed_at < ?`,
+    )
+    .run(input.reason, input.note, taipeiNow(now), input.commentId, input.reporterId, editedAt);
+  return Number(reopened.changes) > 0 ? { ok: true } : { ok: false, error: 'already_reported' };
 }
 
 /** 管理員審核頁的一筆：一則被檢舉的留言與它所有待審的檢舉 */

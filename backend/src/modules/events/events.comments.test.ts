@@ -5,7 +5,13 @@ import { after, before, describe, test } from 'node:test';
 import { createApp } from '../../app.js';
 import { closeDb, getDb, migrate } from '../../db/index.js';
 import { seedSources } from '../sources/sources.testHelpers.js';
-import { COMMENT_MAX_LENGTH, createEventComment, type EventComment } from './events.comments.js';
+import {
+  COMMENT_MAX_LENGTH,
+  createEventComment,
+  updateEventComment,
+  type EventComment,
+} from './events.comments.js';
+import { createCommentReport, reviewCommentReports } from './events.reports.js';
 import { processAnnouncement } from './events.service.js';
 import type { RawAnnouncement } from './events.types.js';
 
@@ -417,5 +423,128 @@ describe('留言編輯、刪除、按讚、回覆與排序（#79）', () => {
       body: { reason: 'spam' },
     });
     assert.equal(again.status, 404);
+  });
+});
+
+describe('被檢舉的留言不能靠編輯躲過審核（#87）', () => {
+  let reportEventId: number;
+
+  before(() => {
+    reportEventId = processAnnouncement(
+      getDb(),
+      { ...raw, url: 'https://www.ntou.edu.tw/event/comments-report-edit' },
+      { defaultCategory: 'lecture' },
+    ).id;
+  });
+
+  test('有待審檢舉時編輯回 409，內容不變；檢舉結案後可以編輯', async () => {
+    const author = await registerUser('review-author@example.com', 'ReviewAuthor');
+    const reporter = await registerUser('review-reporter@example.com', 'ReviewReporter');
+    const admin = await registerUser('review-admin@example.com', 'ReviewAdmin');
+    getDb().prepare("UPDATE users SET role = 'admin' WHERE id = ?").run(admin.id);
+    const id = (await postComment(reportEventId, '不當內容', author.cookie)).body.comment?.id;
+    const reported = await request('POST', `/api/events/${reportEventId}/comments/${id}/reports`, {
+      cookie: reporter.cookie,
+      body: { reason: 'abusive' },
+    });
+    assert.equal(reported.status, 201);
+
+    const edit = () =>
+      request('PATCH', `/api/events/${reportEventId}/comments/${id}`, {
+        cookie: author.cookie,
+        body: { content: '無害內容' },
+      });
+    const blocked = await edit();
+    assert.equal(blocked.status, 409);
+    assert.equal(blocked.body.error, 'under_review');
+    const { body } = await request('GET', `/api/events/${reportEventId}/comments`);
+    assert.equal(body.comments?.find((comment) => comment.id === id)?.content, '不當內容');
+
+    const dismissed = await fetch(`${baseUrl}/api/events/comment-reports/${id}/dismiss`, {
+      method: 'POST',
+      headers: { Cookie: admin.cookie },
+    });
+    assert.equal(dismissed.status, 200);
+    assert.equal((await edit()).status, 200);
+  });
+
+  test('檢舉被駁回後留言又被編輯，原檢舉人可以重新檢舉；沒編輯就不行', async () => {
+    const db = getDb();
+    const author = await registerUser('reopen-author@example.com', 'ReopenAuthor');
+    const reporter = await registerUser('reopen-reporter@example.com', 'ReopenReporter');
+    const admin = await registerUser('reopen-admin@example.com', 'ReopenAdmin');
+    const at = (time: string) => new Date(`2026-11-20T${time}+08:00`);
+    const commentId = createEventComment(
+      db,
+      { eventId: reportEventId, userId: author.id, content: '不當內容' },
+      at('10:00:00'),
+    ).id;
+    const report = (time: string) =>
+      createCommentReport(
+        db,
+        { eventId: reportEventId, commentId, reporterId: reporter.id, reason: 'spam', note: null },
+        at(time),
+      );
+    assert.deepEqual(report('10:01:00'), { ok: true });
+    reviewCommentReports(
+      db,
+      { commentId, action: 'dismiss', reviewerId: admin.id },
+      at('10:02:00'),
+    );
+    // 結案後沒有編輯：不能重複檢舉
+    assert.deepEqual(report('10:03:00'), { ok: false, error: 'already_reported' });
+
+    const edited = updateEventComment(
+      db,
+      { eventId: reportEventId, commentId, userId: author.id, content: '又改回不當內容' },
+      at('10:04:00'),
+    );
+    assert.equal(edited.ok, true);
+    assert.deepEqual(report('10:05:00'), { ok: true });
+    const row = db
+      .prepare('SELECT status, reviewed_by, reviewed_at FROM comment_reports WHERE comment_id = ?')
+      .get(commentId);
+    assert.equal(row?.status, 'pending');
+    assert.equal(row?.reviewed_by, null);
+    assert.equal(row?.reviewed_at, null);
+    // 重新變成待審後又不能編輯，也不能再重複檢舉
+    const again = updateEventComment(
+      db,
+      { eventId: reportEventId, commentId, userId: author.id, content: '再改' },
+      at('10:06:00'),
+    );
+    assert.deepEqual(again, { ok: false, error: 'under_review' });
+    assert.deepEqual(report('10:07:00'), { ok: false, error: 'already_reported' });
+  });
+
+  test('結案前就編輯過（例如被檢舉前）的留言，駁回後不能重新檢舉', async () => {
+    const db = getDb();
+    const author = await registerUser('early-edit-author@example.com', 'EarlyAuthor');
+    const reporter = await registerUser('early-edit-reporter@example.com', 'EarlyReporter');
+    const admin = await registerUser('early-edit-admin@example.com', 'EarlyAdmin');
+    const at = (time: string) => new Date(`2026-11-21T${time}+08:00`);
+    const commentId = createEventComment(
+      db,
+      { eventId: reportEventId, userId: author.id, content: '原文' },
+      at('09:00:00'),
+    ).id;
+    updateEventComment(
+      db,
+      { eventId: reportEventId, commentId, userId: author.id, content: '改過' },
+      at('09:01:00'),
+    );
+    const report = (time: string) =>
+      createCommentReport(
+        db,
+        { eventId: reportEventId, commentId, reporterId: reporter.id, reason: 'spam', note: null },
+        at(time),
+      );
+    assert.deepEqual(report('09:02:00'), { ok: true });
+    reviewCommentReports(
+      db,
+      { commentId, action: 'dismiss', reviewerId: admin.id },
+      at('09:03:00'),
+    );
+    assert.deepEqual(report('09:04:00'), { ok: false, error: 'already_reported' });
   });
 });
