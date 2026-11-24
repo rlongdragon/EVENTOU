@@ -5724,6 +5724,160 @@ dressCampusRoads();
   pickables.push(...rest, ...addedPick);
 }
 
+// ---------- 共面重疊：兩個不同顏色的面剛好疊在同一平面上會互相閃爍（z-fighting） ----------
+// 載入時找出這些三角形：後加進場景的物件優先（通常是疊上去的色帶、球場線、斑馬線），
+// 只把它衝突的那幾個三角形沿自己的法向量往外推，每多一層 1 公分；其餘幾何不動。
+// 1 公分肉眼看不出來，但足以讓深度分出前後。
+{
+  const t0 = performance.now();
+  const EPS = 0.01;
+  scene.updateMatrixWorld(true);
+  const shownChain = (o) => {
+    for (let p = o; p; p = p.parent) if (!p.visible) return false;
+    return true;
+  };
+  const meshes = [];
+  scene.traverse((o) => {
+    if (!o.isMesh || o.isInstancedMesh || !shownChain(o)) return;
+    const m = o.material;
+    if (!m || Array.isArray(m) || m.transparent || m.polygonOffset || !m.depthWrite || !m.color)
+      return;
+    if (!o.geometry.getAttribute('position')) return;
+    meshes.push(o);
+  });
+  // 依平面（法向量、位置，1 毫米內）分桶，桶內再以 10 公尺格子分區，只比對鄰近的三角形
+  const planes = new Map();
+  const a = new THREE.Vector3(),
+    b = new THREE.Vector3(),
+    c = new THREE.Vector3(),
+    n = new THREE.Vector3(),
+    u = new THREE.Vector3(),
+    v = new THREE.Vector3(),
+    UP = new THREE.Vector3(0, 1, 0),
+    X = new THREE.Vector3(1, 0, 0);
+  meshes.forEach((o, id) => {
+    const pos = o.geometry.getAttribute('position');
+    const idx = o.geometry.index;
+    const cnt = idx ? idx.count : pos.count;
+    for (let i = 0; i + 2 < cnt; i += 3) {
+      a.fromBufferAttribute(pos, idx ? idx.getX(i) : i).applyMatrix4(o.matrixWorld);
+      b.fromBufferAttribute(pos, idx ? idx.getX(i + 1) : i + 1).applyMatrix4(o.matrixWorld);
+      c.fromBufferAttribute(pos, idx ? idx.getX(i + 2) : i + 2).applyMatrix4(o.matrixWorld);
+      n.crossVectors(u.subVectors(b, a), v.subVectors(c, a));
+      if (n.length() < 0.1) continue; // 面積 < 0.05 m² 的小面不管
+      n.normalize();
+      const key = `${Math.round(n.x * 2000)},${Math.round(n.y * 2000)},${Math.round(n.z * 2000)},${Math.round(n.dot(a) * 1000)}`;
+      u.crossVectors(Math.abs(n.y) < 0.9 ? UP : X, n).normalize();
+      v.crossVectors(n, u);
+      const au = a.dot(u),
+        bu = b.dot(u),
+        cu = c.dot(u),
+        av = a.dot(v),
+        bv = b.dot(v),
+        cv = c.dot(v);
+      const t = {
+        id,
+        tri: i / 3,
+        x0: Math.min(au, bu, cu),
+        y0: Math.min(av, bv, cv),
+        x1: Math.max(au, bu, cu),
+        y1: Math.max(av, bv, cv),
+      };
+      let list = planes.get(key);
+      if (!list) planes.set(key, (list = []));
+      list.push(t);
+    }
+  });
+  // 衝突：不同物件、不同顏色、重疊超過 20 公分見方。後加的 id 較大，要壓在前一個之上
+  const above = new Map(); // id → 要壓過的 id 集合
+  const pushTris = new Map(); // id → 要往外推的三角形編號
+  const check = (p, q) => {
+    if (p.id === q.id) return;
+    if (meshes[p.id].material.color.equals(meshes[q.id].material.color)) return;
+    if (Math.min(p.x1, q.x1) - Math.max(p.x0, q.x0) <= 0.2) return;
+    if (Math.min(p.y1, q.y1) - Math.max(p.y0, q.y0) <= 0.2) return;
+    const [lo, top] = p.id < q.id ? [p, q] : [q, p];
+    let s = above.get(top.id);
+    if (!s) above.set(top.id, (s = new Set()));
+    s.add(lo.id);
+    let tris = pushTris.get(top.id);
+    if (!tris) pushTris.set(top.id, (tris = new Set()));
+    tris.add(top.tri);
+  };
+  const pairsIn = (list) => {
+    for (let i = 0; i < list.length; i++)
+      for (let j = i + 1; j < list.length; j++) check(list[i], list[j]);
+  };
+  for (const list of planes.values()) {
+    if (list.length < 2) continue;
+    if (list.length <= 64) {
+      pairsIn(list);
+      continue;
+    }
+    // 三角形多的平面（地面）以 10 公尺格子分區，只比對同格；跨太多格的大三角形（海面、陸地）另外與全部比對
+    const cells = new Map();
+    const big = [];
+    for (const t of list) {
+      const gx0 = Math.floor(t.x0 / 10),
+        gx1 = Math.floor(t.x1 / 10),
+        gy0 = Math.floor(t.y0 / 10),
+        gy1 = Math.floor(t.y1 / 10);
+      if ((gx1 - gx0 + 1) * (gy1 - gy0 + 1) > 64) {
+        big.push(t);
+        continue;
+      }
+      for (let gx = gx0; gx <= gx1; gx++)
+        for (let gy = gy0; gy <= gy1; gy++) {
+          const ck = gx * 100003 + gy;
+          let cell = cells.get(ck);
+          if (!cell) cells.set(ck, (cell = []));
+          cell.push(t);
+        }
+    }
+    for (const cell of cells.values()) if (cell.length > 1) pairsIn(cell);
+    for (const t of big) for (const q of list) if (q !== t) check(t, q);
+  }
+  // 層數：比所有要壓過的對象多一層（id 由小到大計算，後加的一定在後面）
+  const level = new Map();
+  for (const id of [...above.keys()].sort((x, y) => x - y)) {
+    let L = 0;
+    for (const lo of above.get(id)) L = Math.max(L, (level.get(lo) ?? 0) + 1);
+    level.set(id, L);
+  }
+  const shared = new Map();
+  for (const o of meshes) shared.set(o.geometry, (shared.get(o.geometry) ?? 0) + 1);
+  for (const [id, L] of level) {
+    const o = meshes[id];
+    const d = EPS * L; // 場景裡的群組都沒有縮放，區域座標的 1 公分就是世界的 1 公分
+    // 有索引的幾何頂點是共用的，先展開，推一個三角形才不會牽動鄰面（展開後三角形順序不變）
+    if (o.geometry.index) o.geometry = o.geometry.toNonIndexed();
+    else if (shared.get(o.geometry) > 1) o.geometry = o.geometry.clone();
+    const pos = o.geometry.getAttribute('position');
+    for (const k of pushTris.get(id)) {
+      a.fromBufferAttribute(pos, k * 3);
+      b.fromBufferAttribute(pos, k * 3 + 1);
+      c.fromBufferAttribute(pos, k * 3 + 2);
+      n.crossVectors(u.subVectors(b, a), v.subVectors(c, a)).normalize().multiplyScalar(d);
+      for (let j = 0; j < 3; j++)
+        pos.setXYZ(
+          k * 3 + j,
+          pos.getX(k * 3 + j) + n.x,
+          pos.getY(k * 3 + j) + n.y,
+          pos.getZ(k * 3 + j) + n.z,
+        );
+    }
+    pos.needsUpdate = true;
+    o.geometry.computeBoundingSphere();
+    o.geometry.computeBoundingBox();
+  }
+  if (import.meta.env.DEV)
+    window.__coplanar = {
+      conflicts: above.size,
+      maxLevel: Math.max(0, ...level.values()),
+      ms: Math.round(performance.now() - t0),
+    };
+}
+
 // 道路頂點把手
 const HANDLE_GEO = new THREE.SphereGeometry(1, 14, 10);
 const HANDLE_MAT = new THREE.MeshBasicMaterial({ color: 0xe0782f, depthTest: false });
