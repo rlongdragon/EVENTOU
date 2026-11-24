@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
+import type { Role } from '../auth/roles.js';
 import { taipeiNow } from './events.dates.js';
 
 /** 留言內容上限（字元數，以 trim 後計算） */
@@ -26,7 +27,8 @@ export interface EventComment {
   createdAt: string;
   /** 最後一次編輯的時間；未編輯為 null */
   editedAt: string | null;
-  author: { id: number; displayName: string } | null;
+  /** role 用來顯示管理員徽章（#100），由 users.role 決定，與顯示名稱無關 */
+  author: { id: number; displayName: string; role: Role } | null;
   /** 留言者目前對這個活動的評分（US-11，1–5）；未評分為 null。改分數後舊留言也顯示新分數 */
   rating: number | null;
   likeCount: number;
@@ -47,7 +49,7 @@ export interface EventCommentList {
 const SELECT_COMMENT = `
   SELECT c.id, c.parent_id, c.content, c.created_at, c.edited_at,
     (c.deleted_at IS NOT NULL OR c.hidden_at IS NOT NULL) AS removed,
-    u.id AS user_id, u.display_name, r.score AS rating,
+    u.id AS user_id, u.display_name, u.role, r.score AS rating,
     (SELECT count(*) FROM comment_likes l WHERE l.comment_id = c.id) AS like_count,
     EXISTS (
       SELECT 1 FROM comment_likes l WHERE l.comment_id = c.id AND l.user_id = :viewerId
@@ -63,7 +65,13 @@ function toComment(row: Record<string, unknown>): EventComment {
     content: removed ? null : String(row.content),
     createdAt: String(row.created_at),
     editedAt: removed || row.edited_at === null ? null : String(row.edited_at),
-    author: removed ? null : { id: Number(row.user_id), displayName: String(row.display_name) },
+    author: removed
+      ? null
+      : {
+          id: Number(row.user_id),
+          displayName: String(row.display_name),
+          role: String(row.role) as Role,
+        },
     rating: removed || row.rating === null || row.rating === undefined ? null : Number(row.rating),
     likeCount: removed ? 0 : Number(row.like_count),
     likedByMe: !removed && Boolean(row.liked_by_me),

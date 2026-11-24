@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
+import { AdminBadge } from '../auth/AdminBadge';
 import type { User } from '../auth/api';
 import type { EventComment } from './api';
 import { CommentComposer } from './CommentComposer';
@@ -60,9 +61,13 @@ function CommentBody({ comment, actions, onReplyClick }: CommentBodyProps) {
   const likeLabel = comment.likeCount > 0 ? String(comment.likeCount) : '';
 
   return (
-    <article className="comment-body" aria-label={`${author.displayName} 的留言`}>
+    <article
+      className={author.role === 'admin' ? 'comment-body comment-body--admin' : 'comment-body'}
+      aria-label={`${author.displayName} 的留言`}
+    >
       <header className="comment-head">
         <strong className="comment-author">{author.displayName}</strong>
+        {author.role === 'admin' && <AdminBadge />}
         {mine && <span className="comment-badge">你</span>}
         {comment.rating !== null && (
           <span className="comment-rating" role="img" aria-label={`評分 ${comment.rating} / 5`}>

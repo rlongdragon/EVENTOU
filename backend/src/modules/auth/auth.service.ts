@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { getDb } from '../../db/index.js';
+import { defaultDisplayName } from './auth.displayName.js';
 import type { Role } from './roles.js';
 
 export interface User {
@@ -51,13 +52,27 @@ export function defaultSchoolEmail(studentId: string): string | null {
   return domain ? `${studentId.toLowerCase()}@${domain}` : null;
 }
 
-/** 以 CAS 驗證過的學號取得會員資料，第一次登入時自動建立。 */
+/**
+ * 以 CAS 驗證過的學號取得會員資料，第一次登入時自動建立。
+ * 預設顯示名稱需要 id 才能產生短代碼（#100），所以建立後再補上。
+ */
 export function findOrCreateUserByStudentId(studentId: string): User {
   const db = getDb();
-  db.prepare(
-    `INSERT INTO users (student_id, email, display_name) VALUES (?, ?, ?)
-    ON CONFLICT (student_id) DO NOTHING`,
-  ).run(studentId, defaultSchoolEmail(studentId), maskStudentId(studentId));
+  const masked = maskStudentId(studentId);
+  const inserted = db
+    .prepare(
+      `INSERT INTO users (student_id, email, display_name) VALUES (?, ?, ?)
+      ON CONFLICT (student_id) DO NOTHING
+      RETURNING id`,
+    )
+    .get(studentId, defaultSchoolEmail(studentId), masked);
+  if (inserted) {
+    const id = Number(inserted.id);
+    db.prepare('UPDATE users SET display_name = ? WHERE id = ?').run(
+      defaultDisplayName(masked, id),
+      id,
+    );
+  }
   return toUser(
     db.prepare('SELECT * FROM users WHERE student_id = ?').get(studentId) as unknown as UserRow,
   );

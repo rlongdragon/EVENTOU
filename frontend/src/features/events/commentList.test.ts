@@ -17,7 +17,7 @@ function comment(id: number, overrides: Partial<EventComment> = {}): EventCommen
     content: `留言 ${id}`,
     createdAt: '2026-11-17T10:00:00+08:00',
     editedAt: null,
-    author: { id: 1, displayName: 'Alice' },
+    author: { id: 1, displayName: 'Alice', role: 'user' },
     rating: null,
     likeCount: 0,
     likedByMe: false,

@@ -101,5 +101,7 @@ test('預設顯示名稱改成學號前 5 碼，使用者自己改過的名稱�
     .prepare('SELECT display_name FROM users ORDER BY id')
     .all()
     .map((row) => row.display_name);
-  assert.deepEqual(names, ['01357*', 'rlongdragon', 'old-account']);
+  // migration 17 改成 01357*，接著 migration 19（#100）再加上短代碼
+  assert.match(String(names[0]), /^01357\*-[0-9A-F]{5}$/);
+  assert.deepEqual(names.slice(1), ['rlongdragon', 'old-account']);
 });

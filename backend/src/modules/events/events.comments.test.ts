@@ -110,7 +110,7 @@ describe('活動留言（US-10）', () => {
     const comment = body.comment;
     assert.ok(comment);
     assert.equal(comment.content, '請問需要報名嗎？\n謝謝');
-    assert.deepEqual(comment.author, { id, displayName: 'Alice' });
+    assert.deepEqual(comment.author, { id, displayName: 'Alice', role: 'user' });
     assert.match(comment.createdAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+08:00$/);
     assert.equal('email' in comment.author, false);
   });
