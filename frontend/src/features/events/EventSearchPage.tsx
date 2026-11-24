@@ -8,6 +8,7 @@ import { DEFAULT_PHOTOS, PHOTO_CREDITS } from './defaultPhotos';
 import { pickEventImages } from './eventImage';
 import { EventTicker } from './EventTicker';
 import { formatEventTime } from './eventTime';
+import { WordmarkIntro, type IntroPhase } from './WordmarkIntro';
 
 type LoadState =
   | { status: 'loading' }
@@ -32,6 +33,7 @@ export function EventSearchPage() {
   const [result, setResult] = useState<{ queryKey: string; state: LoadState } | null>(null);
   // 類別選項來自後端，換頁或重新搜尋時沿用上一次的清單，避免下拉選單閃爍
   const [categories, setCategories] = useState<EventSearchResult['categories']>([]);
+  const [introPhase, setIntroPhase] = useState<IntroPhase>('done');
 
   useEffect(() => {
     const controller = new AbortController();
@@ -70,17 +72,12 @@ export function EventSearchPage() {
   return (
     <>
       <EventTicker />
-      <section className="cover">
+      <section className="cover" data-intro={introPhase === 'done' ? undefined : introPhase}>
         <div className="cover-main">
           <span className="cover-kicker">EVENT ∩ NTOU / EVENT TO U</span>
           <h1 className="cover-title">
             <span className="hero-title-line">
-              {/* 字標：EVENT 上方、NTOU 下方各一條線，兩者在 NT 重疊；報讀器只唸一次 EVENTOU */}
-              <span className="cover-wordmark" role="img" aria-label="EVENTOU">
-                <span className="wordmark-event">EVE</span>
-                <span className="wordmark-shared">NT</span>
-                <span className="wordmark-ntou">OU</span>
-              </span>
+              <WordmarkIntro onPhase={setIntroPhase} />
             </span>
             <span className="hero-title-line">
               <span className="cover-title-soft">

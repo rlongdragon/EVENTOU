@@ -217,6 +217,9 @@ input[type='range'] {
 }
 
 .site-logo {
+  display: inline-flex;
+  gap: 0.5rem;
+  align-items: center;
   margin-right: 0.75rem;
   font-family: var(--font-label);
   font-weight: 500;

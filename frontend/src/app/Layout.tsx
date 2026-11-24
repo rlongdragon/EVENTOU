@@ -2,6 +2,7 @@ import { NavLink, Outlet, useLocation } from 'react-router';
 import { casLoginUrl, type Role } from '../features/auth/api';
 import { useAuth } from '../features/auth/AuthContext';
 import { useTaipeiToday } from '../shared/taipeiToday';
+import logoMark from '../assets/logo/eventou-mark.svg';
 
 // role：只顯示給該角色；需登入但不限角色的頁面照常顯示，點進去會導向登入
 const NAV_ITEMS: { to: string; label: string; role?: Role }[] = [
@@ -40,7 +41,10 @@ export function Layout() {
           </div>
         </div>
         <nav className="site-nav">
-          <strong className="site-logo">EVENTOU</strong>
+          <strong className="site-logo">
+            <img src={logoMark} alt="" width={22} height={22} />
+            EVENTOU
+          </strong>
           {navItems.map((item) => (
             <NavLink key={item.to} to={item.to} end={item.to === '/'}>
               {item.label}

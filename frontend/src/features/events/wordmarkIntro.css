@@ -1,0 +1,67 @@
+/* 首頁字標開場（WordmarkIntro）：動畫字母疊在靜態字標上，不佔版面 */
+.wordmark-intro-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.wordmark-intro {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.wordmark-intro-glyph {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  white-space: pre;
+  transform-origin: 0 0;
+  will-change: transform;
+  transition:
+    transform 0.9s cubic-bezier(0.2, 0.8, 0.1, 1),
+    opacity 0.5s,
+    color 0.5s;
+}
+
+.wordmark-intro-rule {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 3px;
+  transform-origin: 0 50%;
+  transition:
+    transform 0.7s cubic-bezier(0.2, 0.8, 0.1, 1),
+    width 0.7s cubic-bezier(0.2, 0.8, 0.1, 1),
+    background-color 0.5s,
+    opacity 0.4s;
+}
+
+/* 播開場的那次不用標題的升起進場，也不裁切；值在掛載時決定，播完不會重跑升起動畫 */
+.hero-title-line:has(> .wordmark-intro-wrap[data-intro]) {
+  overflow: visible;
+}
+
+.hero-title-line > .wordmark-intro-wrap[data-intro] {
+  transform: none;
+  animation: none;
+}
+
+/* 第一格直接放到句子的位置，只淡入 */
+.wordmark-intro[data-step='0'] .wordmark-intro-glyph {
+  transition: opacity 0.6s;
+}
+
+/* 開場時字標會用到上方 kicker 與下方副標的位置，先藏起來 */
+.cover[data-intro] .cover-kicker,
+.cover[data-intro='sentence'] .cover-title-soft {
+  opacity: 0;
+}
+
+.cover-kicker,
+.cover-title-soft {
+  transition: opacity 0.8s;
+}
