@@ -3,11 +3,12 @@ import { httpUrl } from './events.cleaner.js';
 import { validateEvent } from './events.converter.js';
 import { taipeiNow } from './events.dates.js';
 import { RELEVANT_SCORE, relevanceScore, type RelevanceProfile } from './events.relevance.js';
-import { isDepartment, isEventTopic } from './events.types.js';
+import { isDepartment, isEventAudience, isEventTopic } from './events.types.js';
 import type {
   ConvertedAnnouncement,
   Event,
   EventCategory,
+  EventAudience,
   EventTopic,
   PublishedEvent,
 } from './events.types.js';
@@ -32,6 +33,7 @@ export function upsertEvent(
     topics: JSON.stringify(input.topics),
     summary: input.summary,
     is_event: Number(input.isEvent),
+    audiences: JSON.stringify(input.audiences),
     audience_departments: JSON.stringify(input.audienceDepartments),
     audience_grades: JSON.stringify(input.audienceGrades),
     start_time: input.startTime,
@@ -59,14 +61,14 @@ export function upsertEvent(
     row = db
       .prepare(
         `
-    INSERT INTO events (title, description, category, tags, topics, summary, is_event,
+    INSERT INTO events (title, description, category, tags, topics, summary, is_event, audiences,
       audience_departments, audience_grades, start_time, end_time, all_day,
       location, organizer, registration_url, source_id, original_url, status, review_reasons, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT (source_id, original_url) DO UPDATE SET
       title=excluded.title, description=excluded.description, category=excluded.category,
       tags=excluded.tags, topics=excluded.topics, summary=excluded.summary,
-      is_event=excluded.is_event, audience_departments=excluded.audience_departments,
+      is_event=excluded.is_event, audiences=excluded.audiences, audience_departments=excluded.audience_departments,
       audience_grades=excluded.audience_grades, start_time=excluded.start_time, end_time=excluded.end_time,
       all_day=excluded.all_day, location=excluded.location, organizer=excluded.organizer,
       registration_url=excluded.registration_url, status=excluded.status,
@@ -82,6 +84,7 @@ export function upsertEvent(
         content.topics,
         content.summary,
         content.is_event,
+        content.audiences,
         content.audience_departments,
         content.audience_grades,
         content.start_time,
@@ -151,6 +154,7 @@ function eventExtras(row: Record<string, SQLOutputValue>) {
     topics: list(row.topics).filter(isEventTopic),
     summary: row.summary === null || row.summary === undefined ? null : String(row.summary),
     isEvent: Number(row.is_event ?? 1) === 1,
+    audiences: list(row.audiences).filter(isEventAudience),
     audienceDepartments: list(row.audience_departments).filter(isDepartment),
     audienceGrades: list(row.audience_grades).filter(
       (grade): grade is number => typeof grade === 'number',
@@ -164,6 +168,7 @@ export interface EventSummary {
   title: string;
   category: EventCategory;
   topics: EventTopic[];
+  audiences: EventAudience[];
   summary: string | null;
   startTime: string;
   endTime: string | null;
@@ -175,8 +180,10 @@ export interface EventSearchOptions {
   /** 關鍵字，不分大小寫比對標題、說明、地點、主辦單位、摘要 */
   q?: string;
   category?: string;
-  /** 主題代碼（#69） */
+  /** 內容領域代碼（#69） */
   topic?: string;
+  /** 資訊受眾代碼 */
+  audience?: string;
   /** 只列出跟這位使用者相關的活動，依相關度排序（#88） */
   profile?: RelevanceProfile | null;
   page: number;
@@ -192,7 +199,7 @@ const DAY_MS = 86400000;
  */
 export function searchPublishedEvents(
   db: DatabaseSync,
-  { q, category, topic, profile, page, pageSize }: EventSearchOptions,
+  { q, category, topic, audience, profile, page, pageSize }: EventSearchOptions,
   now = new Date(),
 ): { items: EventSummary[]; total: number } {
   // 時間皆存成 +08:00 的 ISO 字串，可直接以字串比較先後。
@@ -220,8 +227,12 @@ export function searchPublishedEvents(
     conditions.push('EXISTS (SELECT 1 FROM json_each(topics) WHERE value = ?)');
     params.push(topic);
   }
+  if (audience) {
+    conditions.push('EXISTS (SELECT 1 FROM json_each(audiences) WHERE value = ?)');
+    params.push(audience);
+  }
   const where = `WHERE ${conditions.join(' AND ')}`;
-  const columns = `id, title, category, topics, summary, is_event, audience_departments,
+  const columns = `id, title, category, topics, summary, is_event, audiences, audience_departments,
     audience_grades, start_time, end_time, all_day, location`;
   const toSummary = (row: Record<string, SQLOutputValue>) => {
     const extras = eventExtras(row);
@@ -231,6 +242,7 @@ export function searchPublishedEvents(
         title: String(row.title),
         category: String(row.category) as EventCategory,
         topics: extras.topics,
+        audiences: extras.audiences,
         summary: extras.summary,
         startTime: String(row.start_time),
         endTime: row.end_time === null ? null : String(row.end_time),

@@ -11,6 +11,8 @@ export interface EventDetail {
   categoryLabel: string;
   /** 主題（#69），代碼與顯示名稱由後端依 EVENT_TOPIC_LABELS 提供 */
   topics: CodeLabel[];
+  /** 資訊受眾（全校學生、研究生、教職員等） */
+  audiences: CodeLabel[];
   /** LLM 寫的摘要；沒有時為 null */
   summary: string | null;
   /** Asia/Taipei ISO 8601；全天活動的 endTime 為結束日隔天 00:00 */
@@ -57,6 +59,7 @@ export type EventSummary = Pick<
   | 'category'
   | 'categoryLabel'
   | 'topics'
+  | 'audiences'
   | 'summary'
   | 'startTime'
   | 'endTime'
@@ -71,6 +74,7 @@ export interface EventSearchParams {
   q: string;
   category: string;
   topic: string;
+  audience: string;
   scope: EventScope;
   page: number;
 }
@@ -82,21 +86,24 @@ export interface EventSearchResult {
   total: number;
   /** 類別篩選選項，由後端依 EVENT_CATEGORY_LABELS 提供 */
   categories: CodeLabel[];
-  /** 主題篩選選項 */
+  /** 內容領域篩選選項 */
   topics: CodeLabel[];
+  /** 資訊受眾篩選選項 */
+  audiences: CodeLabel[];
   /** available：這位使用者能不能看「跟我相關」；active：這次結果是不是只列相關的 */
   personal: { available: boolean; active: boolean };
 }
 
 /** 搜尋活動（US-01），空字串的條件不送出。 */
 export async function searchEvents(
-  { q, category, topic, scope, page }: EventSearchParams,
+  { q, category, topic, audience, scope, page }: EventSearchParams,
   signal?: AbortSignal,
 ): Promise<EventSearchResult> {
   const query = new URLSearchParams();
   if (q) query.set('q', q);
   if (category) query.set('category', category);
   if (topic) query.set('topic', topic);
+  if (audience) query.set('audience', audience);
   if (scope === 'all') query.set('scope', 'all');
   if (page > 1) query.set('page', String(page));
   const response = await fetch(`/api/events?${query}`, { signal });
@@ -336,4 +343,17 @@ export function mergeDuplicate(eventId: number): Promise<DuplicatePair[]> {
 /** 拆開配對或還原誤合併，回傳更新後的配對清單。 */
 export function splitDuplicate(eventId: number): Promise<DuplicatePair[]> {
   return duplicatesRequest(`/api/events/duplicates/${eventId}/split`, 'POST');
+}
+
+/** 分類選項：資訊類別、內容領域、資訊受眾 */
+export interface Taxonomy {
+  categories: CodeLabel[];
+  topics: CodeLabel[];
+  audiences: CodeLabel[];
+}
+
+export async function fetchTaxonomy(signal?: AbortSignal): Promise<Taxonomy> {
+  const response = await fetch('/api/events/taxonomy', { signal });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return (await response.json()) as Taxonomy;
 }

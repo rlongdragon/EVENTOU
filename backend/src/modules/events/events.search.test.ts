@@ -161,7 +161,7 @@ describe('GET /api/events（US-01）', () => {
 describe('GET /api/events 主題篩選與跟我相關（#69、#88）', () => {
   test('可依主題篩選，回應附上主題清單；訪客沒有個人化', async () => {
     addEvent('人工智慧工作坊', '活動日期：2099/05/01 14:00-16:00', 'workshop');
-    const { body } = await search('?topic=it');
+    const { body } = await search('?topic=ai');
     assert.deepEqual(
       body.items.map((item) => item.title),
       ['人工智慧工作坊'],
@@ -171,7 +171,7 @@ describe('GET /api/events 主題篩選與跟我相關（#69、#88）', () => {
       personal: { available: boolean; active: boolean };
       items: (SearchItem & { topics: { code: string; label: string }[] })[];
     };
-    assert.deepEqual(withTopics.items[0]?.topics, [{ code: 'it', label: '資訊科技' }]);
+    assert.deepEqual(withTopics.items[0]?.topics, [{ code: 'ai', label: 'AI／資料科學' }]);
     assert.ok(withTopics.topics.some((topic) => topic.code === 'career'));
     assert.deepEqual(withTopics.personal, { available: false, active: false });
   });
@@ -204,7 +204,7 @@ describe('GET /api/events 主題篩選與跟我相關（#69、#88）', () => {
   });
 
   test('repository 傳入 profile 時只回傳分數夠高的活動', () => {
-    const profile = { department: 'csie' as const, grade: 3 };
+    const profile = { department: 'csie' as const, grade: 3, interests: [] };
     const { items } = searchPublishedEvents(getDb(), { profile, page: 1, pageSize: 20 });
     assert.deepEqual(
       items.map((item) => item.title),

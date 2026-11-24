@@ -35,6 +35,7 @@ const extraction: LlmExtraction = {
   publishedAt: '2026-09-30',
   category: 'lecture',
   topics: ['it'],
+  audiences: ['all_students'],
   summary: '業界講者分享生成式 AI 的實務應用。',
   audienceDepartments: ['csie'],
   audienceGrades: [],
@@ -109,7 +110,7 @@ test('LLM 結果覆寫規則擷取的欄位，仍經過驗證', () => {
   const ruleOnly = convertAnnouncement(raw);
   assert.equal(ruleOnly.status, 'needs_review');
   assert.equal(ruleOnly.summary, null);
-  assert.deepEqual(ruleOnly.topics, ['it']);
+  assert.deepEqual(ruleOnly.topics, ['ai', 'it']);
 });
 
 test('行政公告標成非活動，低信心維持待審核', () => {
@@ -179,11 +180,12 @@ test('相關度：系所、主題與年級加權', () => {
   const base = {
     category: 'lecture' as const,
     topics: [],
+    audiences: [],
     audienceDepartments: [],
     audienceGrades: [],
   };
-  const freshman = { department: 'csie' as const, grade: 1 };
-  const senior = { department: 'csie' as const, grade: 4 };
+  const freshman = { department: 'csie' as const, grade: 1, interests: [] };
+  const senior = { department: 'csie' as const, grade: 4, interests: [] };
   assert.equal(relevanceScore(freshman, base), 0);
   assert.equal(relevanceScore(freshman, { ...base, topics: ['it'] }), 2);
   assert.equal(relevanceScore(freshman, { ...base, audienceDepartments: ['csie'] }), 3);

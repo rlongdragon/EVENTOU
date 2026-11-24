@@ -37,8 +37,11 @@ import { gradeFromAdmissionYear, type RelevanceProfile } from './events.relevanc
 import {
   EVENT_CATEGORIES,
   EVENT_CATEGORY_LABELS,
+  EVENT_AUDIENCE_LABELS,
+  EVENT_AUDIENCES,
   EVENT_TOPIC_LABELS,
   EVENT_TOPICS,
+  type EventAudience,
   type EventTopic,
   type PublishedEvent,
 } from './events.types.js';
@@ -60,20 +63,32 @@ function positiveInt(value: unknown, fallback: number): number {
 function relevanceProfile(user: Express.Request['user']): RelevanceProfile | null {
   if (!user?.personalize) return null;
   const grade = gradeFromAdmissionYear(user.admissionYear);
-  if (!user.department && grade === null) return null;
-  return { department: user.department, grade };
+  if (!user.department && grade === null && !user.interestTopics.length) return null;
+  return { department: user.department, grade, interests: user.interestTopics };
 }
 
 const topicLabels = (topics: EventTopic[]) =>
   topics.map((code) => ({ code, label: EVENT_TOPIC_LABELS[code] }));
+const audienceLabels = (audiences: EventAudience[]) =>
+  audiences.map((code) => ({ code, label: EVENT_AUDIENCE_LABELS[code] }));
 
-// US-01 搜尋活動（未登入可用）：GET /api/events?q=&category=&topic=&scope=&page=&page_size=
-// 回應附上 categories、topics（代碼與顯示名稱），供前端篩選使用，不需各自寫死清單。
+/** 三個分類維度的選項，篩選與 #98 偏好設定共用。 */
+function taxonomy() {
+  return {
+    categories: EVENT_CATEGORIES.map((code) => ({ code, label: EVENT_CATEGORY_LABELS[code] })),
+    topics: topicLabels([...EVENT_TOPICS]),
+    audiences: audienceLabels([...EVENT_AUDIENCES]),
+  };
+}
+
+// US-01 搜尋活動（未登入可用）：GET /api/events?q=&category=&topic=&audience=&scope=&page=&page_size=
+// 回應附上 categories、topics、audiences（代碼與顯示名稱），供前端篩選使用，不需各自寫死清單。
 // #88 可個人化的使用者預設只列出跟他相關的活動，scope=all 切回全部；personal 告訴前端目前狀態。
 eventsRouter.get('/', (req, res) => {
   const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
   const category = typeof req.query.category === 'string' ? req.query.category : '';
   const topic = typeof req.query.topic === 'string' ? req.query.topic : '';
+  const audience = typeof req.query.audience === 'string' ? req.query.audience : '';
   const page = positiveInt(req.query.page, 1);
   const pageSize = Math.min(positiveInt(req.query.page_size, DEFAULT_PAGE_SIZE), MAX_PAGE_SIZE);
   const profile = relevanceProfile(req.user);
@@ -82,6 +97,7 @@ eventsRouter.get('/', (req, res) => {
     q,
     category,
     topic,
+    audience,
     profile: personal ? profile : null,
     page,
     pageSize,
@@ -91,14 +107,19 @@ eventsRouter.get('/', (req, res) => {
       ...item,
       categoryLabel: EVENT_CATEGORY_LABELS[item.category] ?? item.category,
       topics: topicLabels(item.topics),
+      audiences: audienceLabels(item.audiences),
     })),
     page,
     pageSize,
     total,
     personal: { available: profile !== null, active: personal },
-    categories: EVENT_CATEGORIES.map((code) => ({ code, label: EVENT_CATEGORY_LABELS[code] })),
-    topics: topicLabels([...EVENT_TOPICS]),
+    ...taxonomy(),
   });
+});
+
+// 分類選項：資訊類別、內容領域、資訊受眾（帳號頁的偏好設定用）
+eventsRouter.get('/taxonomy', (_req, res) => {
+  res.json(taxonomy());
 });
 
 // US-20 管理員的重複活動清單：可能重複（待確認）與已合併的配對
@@ -185,6 +206,7 @@ eventsRouter.get('/:eventId', (req, res) => {
       ...event,
       categoryLabel,
       topics: topicLabels(event.topics),
+      audiences: audienceLabels(event.audiences),
       sources: listEventSources(getDb(), event.id),
     },
   });

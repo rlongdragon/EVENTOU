@@ -252,6 +252,8 @@ test('手動入口與紀錄只允許管理員，並驗證來源識別碼', async
         department: null,
         admissionYear: null,
         personalize: true,
+        interestDescription: null,
+        interestTopics: [],
       };
     next();
   });

@@ -38,7 +38,8 @@ published_at 與 fetched_at 須為帶時區的 ISO 8601（如 `2026-10-01T09:00:
 | description      | description     | TEXT／string                | 否       | 純文字內文，預設空字串        |
 | category         | category        | TEXT／EventCategory 或 null | 是       | 下表類別代碼                  |
 | tags             | tags            | JSON TEXT／string[]         | 否       | 預設 []                       |
-| topics           | topics          | JSON TEXT／EventTopic[]     | 否       | 主題代碼（#69），預設 []      |
+| topics           | topics          | JSON TEXT／EventTopic[]     | 否       | 內容領域代碼，預設 []      |
+| audiences        | audiences       | JSON TEXT／EventAudience[]  | 否       | 資訊受眾代碼，預設 []         |
 | summary          | summary         | TEXT／string 或 null        | 否       | LLM 摘要，沒有 LLM 時為 null  |
 | is_event         | isEvent         | INTEGER 0／1 → boolean      | 否       | 0 為行政公告，維持待審但不算待審核活動 |
 | audience_departments | audienceDepartments | JSON TEXT／Department[] | 否 | 適用系所（#88），預設 []   |
@@ -60,40 +61,27 @@ published_at 與 fetched_at 須為帶時區的 ISO 8601（如 `2026-10-01T09:00:
 
 `source_id` 與 `original_url` 是儲存時必填的追溯鍵。缺少這兩個欄位的原始公告須由後續流程保留供人工檢查；不能用假來源或假網址建立 Event。
 
-### 類別（形式）與主題
+### 分類：資訊類別、內容領域、資訊受眾
 
-分類分兩層（#69）：`category` 是活動形式（單選），`topics` 是主題（可多選，最多 3 個），可組合篩選，例如「講座」＋「資訊科技」。
+分類分三個維度：`category` 是資訊類別（活動形式，單選）；`topics` 是內容領域（可多選，最多 3 個）；`audiences` 是資訊受眾（可多選）。可組合篩選，例如「講座」＋「資安」＋「大學部」。
 
-| 形式代碼     | 顯示名稱        |
-| ------------ | --------------- |
-| lecture      | 講座            |
-| workshop     | 工作坊／研習    |
-| info_session | 說明會          |
-| competition  | 競賽            |
-| exhibition   | 展覽／表演      |
-| camp         | 營隊／社團活動  |
-| sports       | 運動            |
-| welfare      | 福利／獎助      |
-| other        | 其他            |
+| 類別代碼     | 顯示名稱       |
+| ------------ | -------------- |
+| lecture      | 講座           |
+| workshop     | 工作坊／研習   |
+| info_session | 說明會         |
+| competition  | 競賽           |
+| exhibition   | 展覽／表演     |
+| camp         | 營隊／社團活動 |
+| sports       | 運動           |
+| welfare      | 福利／獎助     |
+| other        | 其他           |
 
-| 主題代碼       | 顯示名稱       |
-| -------------- | -------------- |
-| it             | 資訊科技       |
-| electrical     | 電機電子       |
-| engineering    | 機械與工程     |
-| ocean          | 海洋與水產     |
-| life_science   | 生命科學       |
-| business       | 商管           |
-| humanities     | 人文社會       |
-| arts           | 藝術文化       |
-| language       | 語言與國際交流 |
-| career         | 職涯與實習     |
-| graduate       | 升學           |
-| startup        | 創業           |
-| health         | 健康           |
-| sustainability | 永續環境       |
+內容領域（`EVENT_TOPICS`／`EVENT_TOPIC_LABELS`）：資訊 it、資安 security、AI／資料科學 ai、電機電子 electrical、機械工程 mechanical、造船航運 maritime、海洋科學 ocean_science、水產養殖 aquaculture、食品 food、生命醫藥 life_medical、環境永續 sustainability、商管金融 business、法律 law、語言 language、國際交流 international、人文歷史 humanities、藝術設計 arts、音樂表演 performing、心理健康 mental_health、醫療保健 healthcare、球類運動 ball_sports、水上活動 water_activities、戶外活動 outdoor、職涯實習 career、升學 graduate、創業 startup、志工服務 volunteer。使用者的偏好領域（#98）也從這份清單挑。
 
-主題代碼定義在 `EVENT_TOPICS`／`EVENT_TOPIC_LABELS`，同樣在 `events.types.ts`，搜尋 API 以 `topic=` 篩選。
+資訊受眾（`EVENT_AUDIENCES`／`EVENT_AUDIENCE_LABELS`）：全校學生 all_students、大學部 undergraduate、研究生 graduate、特定系所 department、教職員 staff、校外人士 public。
+
+三份清單都在 `events.types.ts`；搜尋 API 以 `category=`、`topic=`、`audience=` 篩選，`GET /api/events/taxonomy` 回傳全部選項。
 
 ### LLM 整理（#69）
 

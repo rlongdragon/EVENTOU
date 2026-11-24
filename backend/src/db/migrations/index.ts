@@ -546,4 +546,49 @@ export const migrations: Migration[] = [
         );
     `,
   },
+  {
+    id: 19,
+    name: 'add_event_audiences_and_user_interests',
+    // 分類改成三個維度：資訊類別（category）、內容領域（topics）、資訊受眾（audiences，值域見 EVENT_AUDIENCES）。
+    // #98 使用者用一段話描述自己，AI 建議偏好領域，使用者確認後存在 interest_topics；描述只存在後端。
+    // published_events 的欄位清單與 migration 18 相同，只多加上 audiences。
+    up: `
+      DROP VIEW published_events;
+
+      ALTER TABLE events ADD COLUMN audiences TEXT NOT NULL DEFAULT '[]'
+        CHECK (json_valid(audiences) AND json_type(audiences) = 'array');
+
+      ALTER TABLE users ADD COLUMN interest_description TEXT;
+      ALTER TABLE users ADD COLUMN interest_topics TEXT NOT NULL DEFAULT '[]'
+        CHECK (json_valid(interest_topics) AND json_type(interest_topics) = 'array');
+
+      CREATE VIEW published_events AS
+      SELECT
+        e.id, e.title, e.description, e.category, e.tags, e.start_time, e.end_time, e.all_day,
+        COALESCE(e.location, (
+          SELECT d.location FROM events d
+          WHERE d.duplicate_of = e.id AND d.dedup_status = 'merged' AND d.location IS NOT NULL
+          ORDER BY d.id LIMIT 1
+        )) AS location,
+        COALESCE(e.organizer, (
+          SELECT d.organizer FROM events d
+          WHERE d.duplicate_of = e.id AND d.dedup_status = 'merged' AND d.organizer IS NOT NULL
+          ORDER BY d.id LIMIT 1
+        )) AS organizer,
+        COALESCE(e.registration_url, (
+          SELECT d.registration_url FROM events d
+          WHERE d.duplicate_of = e.id AND d.dedup_status = 'merged' AND d.registration_url IS NOT NULL
+          ORDER BY d.id LIMIT 1
+        )) AS registration_url,
+        e.source_id, e.original_url, e.status, e.review_reasons, e.created_at, e.updated_at,
+        e.duplicate_of, e.dedup_status, e.dedup_score,
+        e.topics, e.summary, e.is_event, e.audience_departments, e.audience_grades, e.audiences
+      FROM events e
+      WHERE e.status = 'published'
+        AND NOT (
+          e.dedup_status = 'merged'
+          AND EXISTS (SELECT 1 FROM events k WHERE k.id = e.duplicate_of AND k.status = 'published')
+        );
+    `,
+  },
 ];

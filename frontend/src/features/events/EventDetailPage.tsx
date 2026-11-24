@@ -78,6 +78,14 @@ export function EventDetailPage() {
           <dd>{[event.categoryLabel, ...event.topics.map((topic) => topic.label)].join(' · ')}</dd>
         </div>
         <div>
+          <dt>對象</dt>
+          <dd>
+            {event.audiences.length
+              ? event.audiences.map((audience) => audience.label).join('、')
+              : '未註明'}
+          </dd>
+        </div>
+        <div>
           <dt>主辦單位</dt>
           <dd>{event.organizer ?? '未提供'}</dd>
         </div>

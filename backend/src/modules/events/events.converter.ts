@@ -37,6 +37,7 @@ function applyLlmExtraction(event: ConvertedAnnouncement, llm: LlmExtraction): v
   event.isEvent = llm.isEvent;
   event.summary = llm.summary;
   event.topics = llm.topics;
+  event.audiences = llm.audiences;
   event.audienceDepartments = llm.audienceDepartments;
   event.audienceGrades = llm.audienceGrades;
   // 公告原標題常帶「轉知」、機關全銜等冗字，LLM 整理過的活動名稱比較適合列表；原文仍可從原始連結查看
@@ -90,6 +91,7 @@ export function convertAnnouncement(
     topics: classifyTopics(title, cleaned.text),
     summary: null,
     isEvent: true,
+    audiences: [],
     audienceDepartments: [],
     audienceGrades: [],
     tags: [...new Set((options.tags ?? []).map(normalizeText).filter(Boolean))],

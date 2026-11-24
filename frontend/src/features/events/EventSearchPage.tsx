@@ -26,17 +26,19 @@ export function EventSearchPage() {
   const q = searchParams.get('q') ?? '';
   const category = searchParams.get('category') ?? '';
   const topic = searchParams.get('topic') ?? '';
+  const audience = searchParams.get('audience') ?? '';
   // #88 預設是「跟我相關」（後端判斷這位使用者能不能個人化），scope=all 切回全部
   const scope: EventScope = searchParams.get('scope') === 'all' ? 'all' : 'mine';
   const page = parsePage(searchParams.get('page'));
-  const queryKey = `${q}\n${category}\n${topic}\n${scope}\n${page}`;
-  const filtered = Boolean(q || category || topic);
+  const queryKey = `${q}\n${category}\n${topic}\n${audience}\n${scope}\n${page}`;
+  const filtered = Boolean(q || category || topic || audience);
 
   // 記錄是哪組條件的結果，條件改變時直接視為載入中
   const [result, setResult] = useState<{ queryKey: string; state: LoadState } | null>(null);
   // 篩選選項與個人化狀態來自後端，換頁或重新搜尋時沿用上一次的值，避免選單與切換鈕閃爍
   const [categories, setCategories] = useState<EventSearchResult['categories']>([]);
   const [topics, setTopics] = useState<EventSearchResult['topics']>([]);
+  const [audiences, setAudiences] = useState<EventSearchResult['audiences']>([]);
   const [personal, setPersonal] = useState<EventSearchResult['personal']>({
     available: false,
     active: false,
@@ -45,10 +47,11 @@ export function EventSearchPage() {
 
   useEffect(() => {
     const controller = new AbortController();
-    searchEvents({ q, category, topic, scope, page }, controller.signal)
+    searchEvents({ q, category, topic, audience, scope, page }, controller.signal)
       .then((data) => {
         setCategories(data.categories);
         setTopics(data.topics);
+        setAudiences(data.audiences);
         setPersonal(data.personal);
         setResult({ queryKey, state: { status: 'ok', result: data } });
       })
@@ -57,7 +60,7 @@ export function EventSearchPage() {
         setResult({ queryKey, state: { status: 'error', message: String(error) } });
       });
     return () => controller.abort();
-  }, [q, category, topic, scope, page, queryKey]);
+  }, [q, category, topic, audience, scope, page, queryKey]);
 
   const state: LoadState = result?.queryKey === queryKey ? result.state : { status: 'loading' };
 
@@ -68,9 +71,11 @@ export function EventSearchPage() {
     const nextQ = String(form.get('q') ?? '').trim();
     const nextCategory = String(form.get('category') ?? '');
     const nextTopic = String(form.get('topic') ?? '');
+    const nextAudience = String(form.get('audience') ?? '');
     if (nextQ) next.set('q', nextQ);
     if (nextCategory) next.set('category', nextCategory);
     if (nextTopic) next.set('topic', nextTopic);
+    if (nextAudience) next.set('audience', nextAudience);
     if (scope === 'all') next.set('scope', 'all');
     setSearchParams(next);
   }
@@ -112,7 +117,15 @@ export function EventSearchPage() {
           {/* key 讓網址條件改變（例如按上一頁）時表單跟著重設；選項載入後也重設，
               否則直接開帶條件的網址時，defaultValue 套用時選項還不存在，選單會停在「全部」 */}
           <form
-            key={`${q}\n${category}\n${topic}\n${categories.length}\n${topics.length}`}
+            key={[
+              q,
+              category,
+              topic,
+              audience,
+              categories.length,
+              topics.length,
+              audiences.length,
+            ].join('|')}
             role="search"
             onSubmit={handleSubmit}
             className="search-bar fade-in"
@@ -124,17 +137,25 @@ export function EventSearchPage() {
               placeholder="搜尋標題、摘要、地點、主辦單位"
               aria-label="關鍵字"
             />
-            <select name="category" defaultValue={category} aria-label="形式">
-              <option value="">全部形式</option>
+            <select name="category" defaultValue={category} aria-label="資訊類別">
+              <option value="">全部類別</option>
               {categories.map((option) => (
                 <option key={option.code} value={option.code}>
                   {option.label}
                 </option>
               ))}
             </select>
-            <select name="topic" defaultValue={topic} aria-label="主題">
-              <option value="">全部主題</option>
+            <select name="topic" defaultValue={topic} aria-label="內容領域">
+              <option value="">全部領域</option>
               {topics.map((option) => (
+                <option key={option.code} value={option.code}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <select name="audience" defaultValue={audience} aria-label="資訊受眾">
+              <option value="">全部對象</option>
+              {audiences.map((option) => (
                 <option key={option.code} value={option.code}>
                   {option.label}
                 </option>

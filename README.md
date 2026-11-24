@@ -93,7 +93,7 @@ backend/src/
   - `GET /api/auth/cas/login?redirect=/站內路徑`：導向 CAS 登入頁；`redirect` 只接受站內路徑。
   - `GET /api/auth/cas/callback`：CAS 登入完成後回到這裡，後端以 `serviceValidate` 向 CAS 驗證票證，通過才採用學號；第一次登入自動建立會員資料，之後登入對應到同一筆。失敗時導回 `/login?error=cas`。登入須從同一個瀏覽器發起（`state` 寫在 service 網址與短效 cookie 中），別人取得的票證無法塞進來。
   - `GET /api/auth/me`（需登入）：回傳 `{ user: { id, studentId, email, displayName, role, createdAt, department, admissionYear, grade, personalize } }`，學號只有本人看得到；`grade` 由入學學年推算（4 代表 4 年級以上）。
-  - `PATCH /api/auth/me`（需登入）：body 為 `{ "displayName"?: string, "email"?: string, "department"?: "csie" | null, "admissionYear"?: number | null, "personalize"?: boolean }`，修改顯示名稱（1–50 字）、通知信箱與個人化推薦設定；信箱傳空字串表示不寄通知。
+  - `PATCH /api/auth/me`（需登入）：body 為 `{ "displayName"?: string, "email"?: string, "department"?: "csie" | null, "admissionYear"?: number | null, "personalize"?: boolean, "interestDescription"?: string, "interestTopics"?: string[] }`，修改顯示名稱（1–50 字）、通知信箱、個人化推薦設定與偏好領域（#98）；信箱傳空字串表示不寄通知。
   - `POST /api/auth/logout`：清除站內 session，回傳 `{ casLogoutUrl }`。body 帶 `{ "cas": true }` 時 `casLogoutUrl` 為海大 CAS 的登出網址，前端導過去一併登出 CAS（TronClass 等校內系統也會一起登出），否則為 `null`。
 - 預設值：顯示名稱為學號前 5 碼加 `*`（例如 `01357*`，看得出入學年度與系所，但不露出完整學號），本人在帳號頁看得到完整學號；通知信箱為 `學號@mail.ntou.edu.tw`（`SCHOOL_EMAIL_DOMAIN` 可調整，設為空字串則不預設）。兩者都可在「帳號」頁修改。
 - CAS 只接受 `*.ntou.edu.tw` 的 service 網址，所以 `PUBLIC_BASE_URL` 必須是海大子網域（正式環境為 `https://eventou.ind.ntou.edu.tw`），回呼網址為 `PUBLIC_BASE_URL` + `/api/auth/cas/callback`。
@@ -211,11 +211,12 @@ npm run sources:seed-ntou -w backend -- 01357107
 
 ## 活動搜尋、LLM 整理與個人化推薦（US-01、#69、#88）
 
-- `GET /api/events?q=&category=&topic=&scope=&page=&page_size=`（未登入可用）：回傳 `{ items, page, pageSize, total, categories, topics, personal }`。
-  - `category` 是活動形式、`topic` 是主題，代碼見 [`docs/event-schema.md`](docs/event-schema.md)；每筆活動附 `topics`（代碼與顯示名稱）與 `summary`。
+- `GET /api/events?q=&category=&topic=&audience=&scope=&page=&page_size=`（未登入可用）：回傳 `{ items, page, pageSize, total, categories, topics, audiences, personal }`；`GET /api/events/taxonomy` 只回傳三份分類選項。
+  - `category` 是資訊類別、`topic` 是內容領域、`audience` 是資訊受眾，代碼見 [`docs/event-schema.md`](docs/event-schema.md)；每筆活動附 `topics`、`audiences`（代碼與顯示名稱）與 `summary`。
   - 已登入、開啟個人化且推得出系所或年級的使用者，預設只列出跟他相關的活動並依相關度排序；`scope=all` 切回全部。`personal` 為 `{ available, active }`。
 - LLM 整理公告：設定 `LLM_BASE_URL`、`LLM_MODEL`、`LLM_API_KEY`（見 `backend/.env.example`）後，擷取排程會先請 LLM 判斷是否為活動、擷取欄位、分類並寫摘要；沒設定時只用規則。回填既有公告：`npm run events:reprocess -w backend`。
 - 個人化：第一次以 CAS 登入時由學號推系所與入學學年，目前只支援資工系學士班（學號 `0yy57xxx`）；其他學號維持非個人化，使用者可在帳號頁自行設定或關閉。相關度規則見 `backend/src/modules/events/events.relevance.ts`。
+- 偏好領域（#98）：`POST /api/auth/me/interests/suggest`（需登入），body 為 `{ "description": string }`（1–200 字），回傳 `{ topics }`，只含清單內的領域，不會改使用者設定；每人每 10 分鐘 5 次，超過回 `429`，沒有設定 LLM 或呼叫失敗回 `503`（前端改成手動勾選）。使用者確認後以 `PATCH /api/auth/me` 的 `interestDescription`、`interestTopics` 儲存，空字串與空陣列代表清空；偏好領域每符合一個活動領域加 2 分（最多 4 分）。
 
 ## 活動留言（US-10、#79）
 
