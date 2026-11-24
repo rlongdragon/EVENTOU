@@ -1981,6 +1981,8 @@ for (const [no, name, x, y, w, d, floors, rot, roof] of BUILDINGS) {
   if (BOX_EXTRAS[no]) meshes.push(...BOX_EXTRAS[no](w, d, floors * FLOOR_H));
   group.add(...meshes);
   const info = { no, name, floorCount: floors, venue: false, group, body: meshes[0] };
+  // 一般建物的外形，展開樓層時依此切出每層樓板（見 buildFloors）
+  info.floorPlan = [{ poly: P.rect(w, d), y0: 0, h }];
   if (no === 61) info.note = 'B1 有演講廳；彩虹雨棚地下道從北寧路北側直通工學院餐廳';
   for (const m of meshes) {
     m.userData.info = info;
@@ -1998,8 +2000,10 @@ for (const [no, name, x, y, w, d, floors, rot, roof] of BUILDINGS) {
 for (const lm of LANDMARKS) {
   const group = new THREE.Group();
   const meshes = [];
+  const floorPlan = [];
   for (const [poly, y0, h, key, bands] of lm.parts(FLOOR_H)) {
     meshes.push(part(poly, y0, h, key));
+    floorPlan.push({ poly, y0, h });
     // 樓層腰帶：每層一圈淡色樓板線，讓高樓看得出層數
     if (bands)
       for (let k = 1; k * FLOOR_H < h - 0.5; k++)
@@ -2014,6 +2018,7 @@ for (const lm of LANDMARKS) {
     venue: false,
     group,
     body: meshes[0],
+    floorPlan,
   };
   if (lm.dorm)
     Object.assign(info, { always: true, badge: '宿舍', badgeCls: 'dorm', note: lm.dormNote || '' });
@@ -5363,20 +5368,86 @@ function select(info) {
   badgeEl.style.display = info.venue || info.badge ? 'inline-block' : 'none';
   badgeEl.textContent = info.badge || '活動常用場地';
   badgeEl.className = 'badge ' + (info.badgeCls || '');
-  explodeBtn.style.display = info.floorMeshes ? 'inline-block' : 'none';
+  explodeBtn.style.display = info.floorMeshes || info.floorPlan ? 'inline-block' : 'none';
   explodeBtn.textContent = info.exploded ? '收合樓層' : '展開樓層';
   floorNote.textContent = roomSummary(info);
   const c = new THREE.Vector3();
   info.group.getWorldPosition(c);
   c.y = (info.h || 0) / 2;
-  flyTo(c, info.floorMeshes ? 170 : 240);
+  flyTo(c, info.floorMeshes || info.floorPlan ? 170 : 240);
+}
+
+// 一般建物（沒有樓層模型）展開時用的樓層：第一次展開才依外形 floorPlan 逐層切出樓板。
+// 原本的外觀收進 shell，展開期間藏起來，收合動畫結束才換回來（見主迴圈）。
+const builtFloorInfos = [];
+function buildFloors(info) {
+  const plan = info.floorPlan.filter((q) => q.h >= FLOOR_H * 0.8);
+  const minY = Math.min(...plan.map((q) => q.y0));
+  const maxY = Math.max(...plan.map((q) => q.y0 + q.h));
+  const count = Math.max(1, Math.round((maxY - minY) / FLOOR_H));
+  const basement = Math.max(0, Math.round(-minY / FLOOR_H));
+  const shell = new THREE.Group();
+  for (const o of [...info.group.children]) if (o !== info.label) shell.add(o);
+  const floorsGroup = new THREE.Group();
+  floorsGroup.visible = false;
+  info.group.add(shell, floorsGroup);
+  const color = info.body?.material?.color?.getHex() ?? 0xf4f1ea;
+  const slabMat = mat(color);
+  const floors = [];
+  for (let i = 0; i < count; i++) {
+    const y = minY + i * FLOOR_H;
+    // 這一層高度範圍內有的量體；退縮的高樓層只剩較小的外形
+    const polys = plan.filter((q) => q.y0 <= y + 0.5 && q.y0 + q.h >= y + FLOOR_H - 0.5);
+    if (!polys.length) continue;
+    const fg = new THREE.Group();
+    const fname = i < basement ? `B${basement - i}` : `${i - basement + 1}F`;
+    for (const { poly } of polys) {
+      const slab = prism(poly, FLOOR_H - 0.5, slabMat);
+      const plate = prism(padPoly(poly, 1.2), 0.5, WHITE);
+      plate.position.y = FLOOR_H - 0.5;
+      fg.add(slab, plate);
+    }
+    const box = bbox(polys[0].poly);
+    fg.position.y = y;
+    fg.userData.baseY = y;
+    fg.userData.fname = fname;
+    const index = floors.length;
+    const fl = makeLabel(fname, 'floor hidden', () => showFloor(info, index));
+    fl.position.set(box.x1 + 6, FLOOR_H / 2, (box.z0 + box.z1) / 2);
+    fg.add(fl);
+    fg.userData.label = fl;
+    fg.traverse((o) => {
+      if (o.isMesh) {
+        o.userData.info = info;
+        pickables.push(o);
+      }
+    });
+    floorsGroup.add(fg);
+    floors.push(fg);
+  }
+  Object.assign(info, {
+    floorMeshes: floors,
+    shell,
+    floorsGroup,
+    basement,
+    h: maxY,
+    t: 0,
+    exploded: false,
+  });
+  builtFloorInfos.push(info);
 }
 
 function toggleExplode(info) {
+  if (!info.floorMeshes) buildFloors(info);
   info.exploded = !info.exploded;
   for (const fg of info.floorMeshes)
     fg.userData.label.element.classList.toggle('hidden', !info.exploded);
   if (info.roofMesh) info.roofMesh.visible = !info.exploded;
+  // 一般建物：展開時換成樓層；收合時等動畫結束再換回原外觀
+  if (info.shell && info.exploded) {
+    info.shell.visible = false;
+    info.floorsGroup.visible = true;
+  }
   // 展開時這棟要能動，改畫原物件；收合動畫結束後在主迴圈併回合併網格
   if (info.exploded && batchGroup) buildBatches();
   if (selected === info) {
@@ -8854,7 +8925,15 @@ function buildBatches() {
   const roots = new Set();
   for (const m of pickables) {
     const info = m.userData.info;
-    if (info?.group && !venueGroups.has(info.group) && !info.isBox) roots.add(info.group);
+    // 一般建物展開或收合動畫中時改畫原物件
+    if (
+      info?.group &&
+      !venueGroups.has(info.group) &&
+      !info.isBox &&
+      !info.exploded &&
+      !(info.t > 0)
+    )
+      roots.add(info.group);
   }
   for (const r of ROADS) for (const l of r.layers) roots.add(l.mesh);
   // 活動場地沒展開、也不在動畫中時一起合併
@@ -8964,12 +9043,16 @@ renderer.setAnimationLoop(() => {
     if (anim.t >= 1) anim = null;
     moving = true;
   }
-  for (const v of venueInfos) {
+  for (const v of venueInfos.concat(builtFloorInfos)) {
     const goal = v.exploded ? 1 : 0;
     if (Math.abs(goal - v.t) < 1e-4) continue;
     v.t += (goal - v.t) * Math.min(1, dt * 6);
     if (Math.abs(goal - v.t) < 1e-4) {
       v.t = goal;
+      if (goal === 0 && v.shell) {
+        v.shell.visible = true;
+        v.floorsGroup.visible = false;
+      }
       // 收合完成：併回合併網格（編輯模式下不合併）
       if (goal === 0 && batchGroup) collapsedVenue = true;
     }
