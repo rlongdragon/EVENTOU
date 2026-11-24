@@ -1,10 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
-import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import './campus3d.css';
 
@@ -5274,6 +5270,12 @@ const explodeBtn = document.getElementById('explode');
 const floorNote = document.getElementById('floorNote');
 let selected = null;
 const HILITE = new THREE.Color(0xffe2a8);
+// 繪製用合併副本的狀態（見檔案後段「繪製用的合併副本」）
+const PICK_LAYER = 1;
+const BATCH_TILE = 500; // 切塊邊長（公尺）
+let batchGroup = null;
+const batchedSources = new Set();
+let collapsedVenue = false; // 場地收合動畫剛結束，下一幀重建合併網格
 
 function setHighlight(info, on) {
   if (!info) return;
@@ -5282,11 +5284,17 @@ function setHighlight(info, on) {
       if (on) {
         if (!o.userData.ownMat) {
           o.material = o.material.clone();
+          // 平常由合併網格代畫；高亮時原物件疊畫在同一位置，往前推一點避免與合併網格互相閃爍
+          o.material.polygonOffset = true;
+          o.material.polygonOffsetFactor = -1;
+          o.material.polygonOffsetUnits = -1;
           o.userData.ownMat = true;
         }
         o.material.emissive.copy(HILITE).multiplyScalar(0.35);
+        if (batchedSources.has(o)) o.layers.enable(0);
       } else if (o.userData.ownMat) {
         o.material.emissive.setRGB(0, 0, 0);
+        if (batchedSources.has(o)) o.layers.disable(0);
       }
     }
   });
@@ -5342,6 +5350,8 @@ function toggleExplode(info) {
   for (const fg of info.floorMeshes)
     fg.userData.label.element.classList.toggle('hidden', !info.exploded);
   if (info.roofMesh) info.roofMesh.visible = !info.exploded;
+  // 展開時這棟要能動，改畫原物件；收合動畫結束後在主迴圈併回合併網格
+  if (info.exploded && batchGroup) buildBatches();
   if (selected === info) {
     explodeBtn.textContent = info.exploded ? '收合樓層' : '展開樓層';
     floorNote.textContent = info.exploded
@@ -5439,6 +5449,7 @@ for (const info of venueOrder) {
 }
 
 const raycaster = new THREE.Raycaster();
+raycaster.layers.enableAll(); // 原物件繪製時改由合併網格代畫，只留在點選層（見「繪製用的合併副本」）
 const pointer = new THREE.Vector2();
 let downAt = null;
 let hovered = null;
@@ -5879,6 +5890,8 @@ function setEditMode(on) {
   editBar.classList.toggle('on', on);
   hintEl.style.display = on ? 'none' : '';
   handleGroup.visible = on;
+  // 編輯時直接畫原物件（會被拖曳、刪除）；結束編輯再依新位置重建合併網格
+  if (on) dropBatches();
   if (on) {
     infoEl.style.display = 'none';
     if (selected?.exploded) toggleExplode(selected);
@@ -5892,6 +5905,7 @@ function setEditMode(on) {
       setHighlight(selected, false);
       selected = null;
     }
+    buildBatches();
   }
 }
 editToggle.addEventListener('click', () => setEditMode(!editMode));
@@ -6790,6 +6804,7 @@ scene.traverse((o) => {
   if (o.isMesh) hitMeshes.push(o);
 });
 const rayDown = new THREE.Raycaster();
+rayDown.layers.enableAll();
 // 標記放在該點最高的表面上（屋頂或地面）
 function surfaceY(x, z) {
   rayDown.set(new THREE.Vector3(x, 500, z), new THREE.Vector3(0, -1, 0));
@@ -6905,78 +6920,82 @@ const TILT_NEAR = 150; // 相機距離小於這個值時效果全開
 const TILT_FAR = 280; // 大於這個值時完全關閉（約為看得清整棟行政大樓的距離）
 const TILT_FOCUS = 0.5; // 清楚帶的中心（畫面由下往上 0–1）
 const TILT_BAND = 0.14; // 清楚帶的半寬
-const tiltBlurShader = {
-  uniforms: {
-    tDiffuse: { value: null },
-    dir: { value: new THREE.Vector2() },
-    amount: { value: 0 },
-    focus: { value: TILT_FOCUS },
-    band: { value: TILT_BAND },
-  },
-  vertexShader: /* glsl */ `
-    varying vec2 vUv;
-    void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+// 效能：模糊只在一半解析度上做（水平、垂直各一次），最後一次全解析度合成時依清楚帶的位置混合清楚與模糊畫面，
+// 同時做色散與色彩空間轉換。全解析度的處理只有「畫場景」與「合成」兩次。
+// 模糊量對應原本全解析度三輪 1.8px 的可分離高斯（σ 約 5px）。
+const TILT_SIGMA_HALF = 2.55; // 半解析度上的高斯 σ（像素）
+const TILT_KERNEL_SIGMA = 1.64; // 下面 5 點線性取樣核在間距 1 時的 σ
+const fsVert = /* glsl */ `
+  varying vec2 vUv;
+  void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
+const tiltBlurMat = new THREE.ShaderMaterial({
+  uniforms: { tDiffuse: { value: null }, dir: { value: new THREE.Vector2() } },
+  vertexShader: fsVert,
   fragmentShader: /* glsl */ `
     uniform sampler2D tDiffuse;
     uniform vec2 dir;
-    uniform float amount, focus, band;
     varying vec2 vUv;
     void main() {
-      float k = amount * smoothstep(band, band + 0.32, abs(vUv.y - focus));
+      vec2 o1 = dir * 1.3846153846, o2 = dir * 3.2307692308;
       vec4 sum = texture2D(tDiffuse, vUv) * 0.2270270270;
-      vec2 o1 = dir * k * 1.3846153846, o2 = dir * k * 3.2307692308;
       sum += (texture2D(tDiffuse, vUv + o1) + texture2D(tDiffuse, vUv - o1)) * 0.3162162162;
       sum += (texture2D(tDiffuse, vUv + o2) + texture2D(tDiffuse, vUv - o2)) * 0.0702702703;
       gl_FragColor = sum;
     }`,
-};
-const chromaShader = {
+  depthTest: false,
+  depthWrite: false,
+});
+const tiltMixMat = new THREE.ShaderMaterial({
   uniforms: {
-    tDiffuse: { value: null },
+    tSharp: { value: null },
+    tBlur: { value: null },
     amount: { value: 0 },
     focus: { value: TILT_FOCUS },
     band: { value: TILT_BAND },
   },
-  vertexShader: tiltBlurShader.vertexShader,
+  vertexShader: fsVert,
   fragmentShader: /* glsl */ `
-    uniform sampler2D tDiffuse;
+    uniform sampler2D tSharp, tBlur;
     uniform float amount, focus, band;
     varying vec2 vUv;
+    vec4 at(vec2 uv) {
+      float k = amount * smoothstep(band, band + 0.32, abs(uv.y - focus));
+      return mix(texture2D(tSharp, uv), texture2D(tBlur, uv), k);
+    }
     void main() {
-      float k = amount * smoothstep(band, band + 0.4, abs(vUv.y - focus));
-      vec2 off = (vUv - vec2(0.5, focus)) * k * 0.006;
-      vec4 c = texture2D(tDiffuse, vUv);
-      gl_FragColor = vec4(texture2D(tDiffuse, vUv + off).r, c.g, texture2D(tDiffuse, vUv - off).b, c.a);
+      float kc = amount * smoothstep(band, band + 0.4, abs(vUv.y - focus));
+      vec2 off = (vUv - vec2(0.5, focus)) * kc * 0.006;
+      vec4 c = at(vUv);
+      gl_FragColor = vec4(at(vUv + off).r, c.g, at(vUv - off).b, c.a);
+      #include <colorspace_fragment>
     }`,
+  depthTest: false,
+  depthWrite: false,
+});
+const fsQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), tiltBlurMat);
+fsQuad.frustumCulled = false;
+const fsScene = new THREE.Scene();
+fsScene.add(fsQuad);
+const fsCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+const rtOpts = { type: THREE.HalfFloatType, colorSpace: THREE.LinearSRGBColorSpace };
+const sharpRT = new THREE.WebGLRenderTarget(1, 1, rtOpts);
+const blurRTa = new THREE.WebGLRenderTarget(1, 1, { ...rtOpts, depthBuffer: false });
+const blurRTb = new THREE.WebGLRenderTarget(1, 1, { ...rtOpts, depthBuffer: false });
+function resizeTilt() {
+  const pr = renderer.getPixelRatio();
+  const w = Math.max(1, Math.floor(window.innerWidth * pr));
+  const h = Math.max(1, Math.floor(window.innerHeight * pr));
+  sharpRT.setSize(w, h);
+  blurRTa.setSize(Math.max(1, w >> 1), Math.max(1, h >> 1));
+  blurRTb.setSize(Math.max(1, w >> 1), Math.max(1, h >> 1));
+}
+resizeTilt();
+window.addEventListener('resize', resizeTilt);
+const fsPass = (material, target) => {
+  fsQuad.material = material;
+  renderer.setRenderTarget(target);
+  renderer.render(fsScene, fsCam);
 };
-const composer = new EffectComposer(renderer);
-composer.addPass(new RenderPass(scene, camera));
-// 可分離模糊（水平、垂直）做三輪，取樣間距小、不會出現重影
-const blurPasses = [];
-for (let i = 0; i < 3; i++) {
-  for (const axis of ['x', 'y']) {
-    const pass = new ShaderPass(tiltBlurShader);
-    pass.axis = axis;
-    blurPasses.push(pass);
-    composer.addPass(pass);
-  }
-}
-const chromaPass = new ShaderPass(chromaShader);
-composer.addPass(chromaPass);
-composer.addPass(new OutputPass());
-function resizeComposer() {
-  composer.setPixelRatio(renderer.getPixelRatio());
-  composer.setSize(window.innerWidth, window.innerHeight);
-  const blurPx = 1.8; // 每輪取樣間距（像素），三輪疊加
-  for (const pass of blurPasses) {
-    pass.uniforms.dir.value.set(
-      pass.axis === 'x' ? blurPx / window.innerWidth : 0,
-      pass.axis === 'y' ? blurPx / window.innerHeight : 0,
-    );
-  }
-}
-resizeComposer();
-window.addEventListener('resize', resizeComposer);
 function renderView() {
   const dist = camera.position.distanceTo(controls.target);
   const strength = 1 - THREE.MathUtils.smoothstep(dist, TILT_NEAR, TILT_FAR);
@@ -6984,9 +7003,20 @@ function renderView() {
     renderer.render(scene, camera);
     return;
   }
-  for (const pass of blurPasses) pass.uniforms.amount.value = strength;
-  chromaPass.uniforms.amount.value = strength;
-  composer.render();
+  renderer.setRenderTarget(sharpRT);
+  renderer.render(scene, camera);
+  // 一半解析度：取樣時雙線性內插剛好是 2×2 平均，先縮小再水平、垂直各模糊一次
+  const step = TILT_SIGMA_HALF / TILT_KERNEL_SIGMA;
+  tiltBlurMat.uniforms.tDiffuse.value = sharpRT.texture;
+  tiltBlurMat.uniforms.dir.value.set(step / blurRTa.width, 0);
+  fsPass(tiltBlurMat, blurRTa);
+  tiltBlurMat.uniforms.tDiffuse.value = blurRTa.texture;
+  tiltBlurMat.uniforms.dir.value.set(0, step / blurRTb.height);
+  fsPass(tiltBlurMat, blurRTb);
+  tiltMixMat.uniforms.tSharp.value = sharpRT.texture;
+  tiltMixMat.uniforms.tBlur.value = blurRTb.texture;
+  tiltMixMat.uniforms.amount.value = strength;
+  fsPass(tiltMixMat, null);
 }
 
 // ---------- 動態：北寧路汽機車、公車，人行道與校內步道行人（InstancedMesh，不投影） ----------
@@ -8587,8 +8617,131 @@ const dyn = (() => {
     location.reload();
   });
 }
+// ---------- 效能：繪製用的合併副本 ----------
+// 可點選的建物、外框線、道路平常不會動，卻各自是一個 draw call（每棟依材質數個），全場八百多個。
+// 這裡把它們跨棟合併成少數幾個網格來畫：顏色寫進頂點色，材質屬性相同的就能合成一個 draw call；
+// 再依位置切成幾塊，拉近時畫面外的塊仍會被裁掉。陰影也改由合併網格投射。
+// 原物件留在場景裡只負責點選與高度偵測：移到 PICK_LAYER，相機與陰影都不畫它，射線另外開啟這一層。
+// 選取高亮時把那一棟的原物件疊畫上去；編輯模式切回原物件，結束編輯再重建。
+// （PICK_LAYER 等狀態宣告在 setHighlight 前，網址帶 ?select= 時載入途中就會用到）
+// 材質除了顏色以外的屬性都一樣才能合併
+const matSignature = (m) =>
+  JSON.stringify([
+    m.type,
+    m.side,
+    m.transparent,
+    m.opacity,
+    m.depthWrite,
+    m.depthTest,
+    m.polygonOffset,
+    m.polygonOffsetFactor,
+    m.polygonOffsetUnits,
+    m.roughness,
+    m.metalness,
+    m.flatShading,
+    m.emissive?.getHex(),
+    m.emissiveIntensity,
+    m.wireframe,
+    m.fog,
+    m.toneMapped,
+    m.alphaTest,
+  ]);
+function dropBatches() {
+  if (!batchGroup) return;
+  scene.remove(batchGroup);
+  batchGroup.traverse((o) => {
+    if (o.isMesh || o.isLineSegments) {
+      o.geometry.dispose();
+      o.material.dispose();
+    }
+  });
+  batchGroup = null;
+  for (const o of batchedSources) o.layers.set(0);
+  batchedSources.clear();
+}
+function buildBatches() {
+  dropBatches();
+  scene.updateMatrixWorld(true);
+  const venueGroups = new Set(venueInfos.map((v) => v.group));
+  const roots = new Set();
+  for (const m of pickables) {
+    const info = m.userData.info;
+    if (info?.group && !venueGroups.has(info.group) && !info.isBox) roots.add(info.group);
+  }
+  for (const r of ROADS) for (const l of r.layers) roots.add(l.mesh);
+  // 活動場地沒展開、也不在動畫中時一起合併
+  for (const v of venueInfos) if (!v.exploded && !(v.t > 0)) roots.add(v.group);
+  const shown = (o) => {
+    for (let p = o; p; p = p.parent) if (!p.visible) return false;
+    return true;
+  };
+  const buckets = new Map();
+  const center = new THREE.Vector3();
+  for (const root of roots) {
+    if (!shown(root)) continue;
+    root.traverse((o) => {
+      if (!(o.isMesh || o.isLineSegments) || o.isInstancedMesh || o.userData.noMerge) return;
+      const m = o.material;
+      if (!m || Array.isArray(m) || m.map || m.vertexColors || !m.color) return;
+      // 半透明的面要排序，不合併；半透明的線（外框）可以
+      if (o.isMesh && m.transparent) return;
+      if (!shown(o) || !o.geometry.getAttribute('position')) return;
+      const kind = o.isMesh ? 'm' : 'l';
+      if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere();
+      center.copy(o.geometry.boundingSphere.center).applyMatrix4(o.matrixWorld);
+      const tile = `${Math.floor(center.x / BATCH_TILE)},${Math.floor(center.z / BATCH_TILE)}`;
+      const key = `${kind}|${matSignature(m)}|${o.castShadow}|${o.receiveShadow}|${tile}`;
+      let g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+      for (const name of Object.keys(g.attributes))
+        if (name !== 'position' && !(kind === 'm' && name === 'normal')) g.deleteAttribute(name);
+      if (kind === 'm' && !g.getAttribute('normal')) g.computeVertexNormals();
+      g.morphAttributes = {};
+      g.applyMatrix4(o.matrixWorld);
+      const n = g.getAttribute('position').count;
+      const col = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) {
+        col[i * 3] = m.color.r;
+        col[i * 3 + 1] = m.color.g;
+        col[i * 3 + 2] = m.color.b;
+      }
+      g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+      let b = buckets.get(key);
+      if (!b)
+        buckets.set(
+          key,
+          (b = { kind, mat: m, cast: o.castShadow, recv: o.receiveShadow, geos: [] }),
+        );
+      b.geos.push(g);
+      batchedSources.add(o);
+    });
+  }
+  batchGroup = new THREE.Group();
+  batchGroup.name = 'batches';
+  for (const b of buckets.values()) {
+    const merged = mergeGeometries(b.geos, false);
+    for (const g of b.geos) g.dispose();
+    if (!merged) continue;
+    const mat = b.mat.clone();
+    mat.color.set(0xffffff);
+    mat.vertexColors = true;
+    const obj = b.kind === 'm' ? new THREE.Mesh(merged, mat) : new THREE.LineSegments(merged, mat);
+    obj.castShadow = b.cast;
+    obj.receiveShadow = b.recv;
+    obj.matrixAutoUpdate = false;
+    obj.raycast = () => {}; // 點選一律打在原物件上
+    batchGroup.add(obj);
+  }
+  scene.add(batchGroup);
+  for (const o of batchedSources) o.layers.set(PICK_LAYER);
+  shadowDirty = true;
+  invalidate();
+}
+buildBatches();
+
 const clock = new THREE.Clock();
 const ease = (t) => 1 - Math.pow(1 - t, 3);
+const DYN_STEP = 1 / 30; // 只有車流、行人在動時的重畫間隔（秒）
+let dynAcc = 0;
 renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 0.05);
   if (morph) {
@@ -8613,13 +8766,21 @@ renderer.setAnimationLoop(() => {
     const goal = v.exploded ? 1 : 0;
     if (Math.abs(goal - v.t) < 1e-4) continue;
     v.t += (goal - v.t) * Math.min(1, dt * 6);
-    if (Math.abs(goal - v.t) < 1e-4) v.t = goal;
+    if (Math.abs(goal - v.t) < 1e-4) {
+      v.t = goal;
+      // 收合完成：併回合併網格（編輯模式下不合併）
+      if (goal === 0 && batchGroup) collapsedVenue = true;
+    }
     moving = true;
     shadowDirty = true;
     const lift = (v.basement || 0) * (FLOOR_H + 9);
     v.floorMeshes.forEach((fg, i) => {
       fg.position.y = fg.userData.baseY + v.t * (i * 9 + lift);
     });
+  }
+  if (collapsedVenue) {
+    collapsedVenue = false;
+    buildBatches();
   }
   // 鍵盤移動：速度隨與目標的距離縮放，加減速平滑
   {
@@ -8647,10 +8808,14 @@ renderer.setAnimationLoop(() => {
   }
   // update() 在阻尼減速還沒停下時回傳 true
   if (controls.update()) moving = true;
-  // 車流與行人一直在動，開著時每幀都要畫
+  // 車流與行人一直在動，開著時要持續重畫；畫面上只剩它們在動時降到每秒 30 格，省一半閒置負擔
   if (dyn.on) {
-    dyn.update(dt);
-    moving = true;
+    dynAcc += dt;
+    if (moving || dirtyFrames > 0 || dynAcc >= DYN_STEP) {
+      dyn.update(dynAcc);
+      dynAcc = 0;
+      moving = true;
+    }
   }
   if (moving) invalidate(1);
   if (dirtyFrames <= 0) return;
@@ -8663,4 +8828,6 @@ renderer.setAnimationLoop(() => {
   labelRenderer.render(scene, camera);
 });
 window.__ready = true;
+// 開發模式：給效能分析工具讀場景
+if (import.meta.env.DEV) window.__campus = { THREE, scene, renderer, camera, controls, dyn };
 postToParent({ type: 'eventou:3d-loaded' });
