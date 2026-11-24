@@ -214,7 +214,7 @@ eventsRouter.post('/:eventId/comments', requireAuth, (req, res) => {
   res.status(201).json({ comment });
 });
 
-// #79 留言者編輯自己的留言
+// #79 留言者編輯自己的留言；有待審檢舉時回 409 under_review（#87）
 eventsRouter.patch('/:eventId/comments/:commentId', requireAuth, (req, res) => {
   const event = findPublishedEventOr404(req.params.eventId, res);
   if (!event || !req.user) return;
@@ -231,6 +231,12 @@ eventsRouter.patch('/:eventId/comments/:commentId', requireAuth, (req, res) => {
   if (result.ok) res.json({ comment: result.comment });
   else if (result.error === 'forbidden') {
     res.status(403).json({ error: 'forbidden', message: '只能編輯自己的留言' });
+  } else if (result.error === 'under_review') {
+    // #87 被檢舉的留言在管理員審核完成前不能編輯
+    res.status(409).json({
+      error: 'under_review',
+      message: '這則留言被檢舉、正在等待管理員審核，審核完成前無法編輯',
+    });
   } else sendCommentNotFound(res);
 });
 

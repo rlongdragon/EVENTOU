@@ -204,7 +204,7 @@ npm run sources:seed-ntou -w backend -- someone@example.com
 - 後端 API（`:eventId` 須為已發布的活動；活動不存在、待審（`needs_review`）或 id 無效時回傳 `404`）：
   - `GET /api/events/:eventId/comments?sort=oldest|newest|top`（未登入可看）：回傳 `{ comments, total }`。頂層留言依 `sort` 排序（預設 `oldest`；`top` 依讚數，同讚數較新的在前），每則的 `replies` 為它的回覆（由舊到新）；`total` 為對外顯示的留言數（含回覆）。
   - `POST /api/events/:eventId/comments`（需登入）：body 為 `{ "content": string, "parentId"?: number }`，帶 `parentId` 時為回覆。只有一層回覆：回覆「回覆」會掛到同一則頂層留言；要回覆的留言不存在、屬於其他活動或已刪除時回 `404`。
-  - `PATCH /api/events/:eventId/comments/:commentId`（需登入）：留言者編輯自己的留言，body 為 `{ "content": string }`；別人的留言回 `403`。
+  - `PATCH /api/events/:eventId/comments/:commentId`（需登入）：留言者編輯自己的留言，body 為 `{ "content": string }`；別人的留言回 `403`；留言有待審的檢舉時回 `409 under_review`，審核完成前不能編輯（#87，避免把內容改成無害來躲過審核）。
   - `DELETE /api/events/:eventId/comments/:commentId`（需登入）：留言者刪除自己的留言，或管理員刪除任何留言，成功回 `204`；一般使用者刪除別人的留言回 `403`。
   - `PUT`／`DELETE /api/events/:eventId/comments/:commentId/like`（需登入）：按讚／取消讚，可重複呼叫，回傳 `{ likeCount, likedByMe }`。
 - 留言內容會去除前後空白，空白留言回傳 `400 validation_error`（`fields.content`），上限 1000 字元。
@@ -216,7 +216,7 @@ npm run sources:seed-ntou -w backend -- someone@example.com
 ## 留言檢舉（#65）
 
 - `POST /api/events/:eventId/comments/:commentId/reports`（需登入），body 為 `{ "reason": "spam" | "abusive" | "off_topic" | "other", "note"?: string }`，成功回 `201`。補充說明會去除前後空白，上限 500 字元。
-  - 原因不合法或補充說明過長回 `400 validation_error`（`fields.reason`／`fields.note`）；檢舉自己的留言回 `400 own_comment`；同一人重複檢舉同一則回 `409 already_reported`；活動或留言不存在、留言不屬於該活動或已被隱藏或刪除回 `404`。
+  - 原因不合法或補充說明過長回 `400 validation_error`（`fields.reason`／`fields.note`）；檢舉自己的留言回 `400 own_comment`；同一人重複檢舉同一則回 `409 already_reported`（例外：檢舉結案後留言又被編輯過時可以重新檢舉，原檢舉改回待審，#87）；活動或留言不存在、留言不屬於該活動或已被隱藏或刪除回 `404`。
 - 管理員 API（`requireRole('admin')`）：
   - `GET /api/events/comment-reports`：列出有待審檢舉的留言（留言者已自行刪除的不列出），每筆含留言內容與留言者、所屬活動、檢舉次數、各原因次數與補充說明（不含檢舉者身分）。
   - `POST /api/events/comment-reports/:commentId/hide`：隱藏留言；`POST /api/events/comment-reports/:commentId/dismiss`：駁回檢舉。同一則留言的待審檢舉一併結案，回傳更新後的清單；沒有待審檢舉時回 `404`。

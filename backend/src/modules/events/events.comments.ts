@@ -184,9 +184,23 @@ export function createEventComment(
 }
 
 export type CommentChangeResult =
-  { ok: true; comment: EventComment } | { ok: false; error: 'not_found' | 'forbidden' };
+  | { ok: true; comment: EventComment }
+  | { ok: false; error: 'not_found' | 'forbidden' | 'under_review' };
 
-/** 留言者編輯自己的留言；content 須先驗證。已刪除或隱藏的留言視為不存在。 */
+/** 留言是否有待審的檢舉（#65）。 */
+function hasPendingReports(db: DatabaseSync, commentId: number): boolean {
+  return Boolean(
+    db
+      .prepare("SELECT 1 FROM comment_reports WHERE comment_id = ? AND status = 'pending' LIMIT 1")
+      .get(commentId),
+  );
+}
+
+/**
+ * 留言者編輯自己的留言；content 須先驗證。已刪除或隱藏的留言視為不存在。
+ * #87 有待審檢舉時不能編輯（under_review），避免把內容改成無害來躲過審核；
+ * 檢舉結案後再編輯的話，原檢舉人可以重新檢舉（見 events.reports.ts 的 createCommentReport）。
+ */
 export function updateEventComment(
   db: DatabaseSync,
   input: { eventId: number; commentId: number; userId: number; content: string },
@@ -195,6 +209,7 @@ export function updateEventComment(
   const comment = findComment(db, input.eventId, input.commentId);
   if (!comment || comment.removed) return { ok: false, error: 'not_found' };
   if (comment.userId !== input.userId) return { ok: false, error: 'forbidden' };
+  if (hasPendingReports(db, input.commentId)) return { ok: false, error: 'under_review' };
   db.prepare('UPDATE event_comments SET content = ?, edited_at = ? WHERE id = ?').run(
     input.content,
     taipeiNow(now),
@@ -222,15 +237,23 @@ export function deleteEventComment(
     return { ok: true };
   }
   if (input.user.role !== 'admin') return { ok: false, error: 'forbidden' };
-  db.prepare('UPDATE event_comments SET hidden_at = ?, hidden_by = ? WHERE id = ?').run(
-    at,
-    input.user.id,
-    input.commentId,
-  );
-  db.prepare(
-    `UPDATE comment_reports SET status = 'hidden', reviewed_by = ?, reviewed_at = ?
-    WHERE comment_id = ? AND status = 'pending'`,
-  ).run(input.user.id, at, input.commentId);
+  // 隱藏留言與結案檢舉要一起成功，避免留言已隱藏但檢舉仍是待審（#87）
+  db.exec('BEGIN');
+  try {
+    db.prepare('UPDATE event_comments SET hidden_at = ?, hidden_by = ? WHERE id = ?').run(
+      at,
+      input.user.id,
+      input.commentId,
+    );
+    db.prepare(
+      `UPDATE comment_reports SET status = 'hidden', reviewed_by = ?, reviewed_at = ?
+      WHERE comment_id = ? AND status = 'pending'`,
+    ).run(input.user.id, at, input.commentId);
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
   return { ok: true };
 }
 
