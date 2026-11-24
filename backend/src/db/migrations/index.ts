@@ -460,4 +460,21 @@ export const migrations: Migration[] = [
       DELETE FROM sessions;
     `,
   },
+  {
+    id: 17,
+    name: 'shorten_default_display_names',
+    // #90 預設顯示名稱改為學號前 5 碼加 *（01357107 → 01357*），看得出系所但不露出完整學號。
+    // 只更新還在用舊預設值（0135****）的帳號，使用者自己改過的名稱不動。
+    up: `
+      UPDATE users
+      SET display_name = CASE
+        WHEN length(student_id) > 5 THEN substr(student_id, 1, 5) || '*'
+        ELSE substr(student_id, 1, max(0, length(student_id) - 2)) || '*'
+      END
+      WHERE student_id IS NOT NULL
+        AND display_name = substr(student_id, 1, min(4, max(0, length(student_id) - 4)))
+          || substr('********************************', 1,
+            max(4, length(student_id) - min(4, max(0, length(student_id) - 4))));
+    `,
+  },
 ];

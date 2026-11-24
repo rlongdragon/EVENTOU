@@ -95,7 +95,7 @@ backend/src/
   - `GET /api/auth/me`（需登入）：回傳 `{ user: { id, studentId, email, displayName, role, createdAt } }`，學號只有本人看得到。
   - `PATCH /api/auth/me`（需登入）：body 為 `{ "displayName"?: string, "email"?: string }`，修改顯示名稱（1–50 字）與通知信箱；信箱傳空字串表示不寄通知。
   - `POST /api/auth/logout`：清除站內 session，回傳 `{ casLogoutUrl }`。body 帶 `{ "cas": true }` 時 `casLogoutUrl` 為海大 CAS 的登出網址，前端導過去一併登出 CAS（TronClass 等校內系統也會一起登出），否則為 `null`。
-- 預設值：顯示名稱為遮蔽後的學號（例如 `0135****`），避免在留言等公開位置露出完整學號；通知信箱為 `學號@mail.ntou.edu.tw`（`SCHOOL_EMAIL_DOMAIN` 可調整，設為空字串則不預設）。兩者都可在「帳號」頁修改。
+- 預設值：顯示名稱為學號前 5 碼加 `*`（例如 `01357*`，看得出入學年度與系所，但不露出完整學號），本人在帳號頁看得到完整學號；通知信箱為 `學號@mail.ntou.edu.tw`（`SCHOOL_EMAIL_DOMAIN` 可調整，設為空字串則不預設）。兩者都可在「帳號」頁修改。
 - CAS 只接受 `*.ntou.edu.tw` 的 service 網址，所以 `PUBLIC_BASE_URL` 必須是海大子網域（正式環境為 `https://eventou.ind.ntou.edu.tw`），回呼網址為 `PUBLIC_BASE_URL` + `/api/auth/cas/callback`。
 - 開發模式與正式環境的登入頁不同：`npm run dev` 時登入頁是「模擬登入」，輸入任意學號並選角色即可登入，不經 CAS（`POST /api/auth/dev-login`，由 `backend/.env.development` 的 `AUTH_DEV_LOGIN=1` 開啟）；正式建置只有「使用海大帳號登入」。後端在 `NODE_ENV=production` 時一律停用模擬登入。
 - 登入狀態以 httpOnly cookie（`eventou_session`）保存，session 存在 SQLite，有效期 7 天。

@@ -77,3 +77,29 @@ test('學號唯一，信箱可為空且不再唯一', () => {
   insert.run('01357110', 'same@example.com', 'd');
   assert.throws(() => insert.run('01357107', null, 'e'));
 });
+
+test('預設顯示名稱改成學號前 5 碼，使用者自己改過的名稱不動', () => {
+  const db = new DatabaseSync(':memory:');
+  db.exec(
+    "CREATE TABLE schema_migrations (id INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL DEFAULT (datetime('now')))",
+  );
+  for (const migration of migrations.filter((m) => m.id < 17)) {
+    db.exec(migration.up);
+    db.prepare('INSERT INTO schema_migrations (id, name) VALUES (?, ?)').run(
+      migration.id,
+      migration.name,
+    );
+  }
+  const insert = db.prepare('INSERT INTO users (student_id, display_name) VALUES (?, ?)');
+  insert.run('01357107', '0135****');
+  insert.run('01357144', 'rlongdragon');
+  insert.run(null, 'old-account');
+
+  migrate(db);
+
+  const names = db
+    .prepare('SELECT display_name FROM users ORDER BY id')
+    .all()
+    .map((row) => row.display_name);
+  assert.deepEqual(names, ['01357*', 'rlongdragon', 'old-account']);
+});

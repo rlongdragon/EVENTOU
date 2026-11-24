@@ -36,10 +36,13 @@ function toUser(row: UserRow): User {
   };
 }
 
-/** 預設顯示名稱：遮蔽學號後段，避免在留言等公開位置露出完整學號 */
+/**
+ * 預設顯示名稱：學號只留前 5 碼（入學年度與系所代碼），其餘遮成 `*`，例如 01357107 → 01357*。
+ * 留言等公開位置看得出是哪個系，但不露出完整學號；本人在帳號頁看得到完整學號。
+ */
 export function maskStudentId(studentId: string): string {
-  const visible = Math.min(4, Math.max(0, studentId.length - 4));
-  return studentId.slice(0, visible) + '*'.repeat(Math.max(4, studentId.length - visible));
+  const visible = studentId.length > 5 ? 5 : Math.max(0, studentId.length - 2);
+  return `${studentId.slice(0, visible)}*`;
 }
 
 /** 預設通知信箱：學號@學校信箱網域；SCHOOL_EMAIL_DOMAIN 設為空字串時不預設 */
