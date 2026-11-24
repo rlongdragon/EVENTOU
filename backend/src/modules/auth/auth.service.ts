@@ -1,5 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { getDb } from '../../db/index.js';
+import { profileFromStudentId } from '../events/events.relevance.js';
+import type { Department } from '../events/events.types.js';
 import type { Role } from './roles.js';
 
 export interface User {
@@ -11,6 +13,10 @@ export interface User {
   displayName: string;
   role: Role;
   createdAt: string;
+  /** #88 個人化推薦：系所、入學學年（民國）、是否開啟；第一次登入時由學號推得，本人可修正 */
+  department: Department | null;
+  admissionYear: number | null;
+  personalize: boolean;
 }
 
 interface UserRow {
@@ -20,6 +26,9 @@ interface UserRow {
   display_name: string;
   role: Role;
   created_at: string;
+  department: Department | null;
+  admission_year: number | null;
+  personalize: number;
 }
 
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -33,6 +42,9 @@ function toUser(row: UserRow): User {
     displayName: row.display_name,
     role: row.role,
     createdAt: row.created_at,
+    department: row.department,
+    admissionYear: row.admission_year,
+    personalize: row.personalize === 1,
   };
 }
 
@@ -54,10 +66,18 @@ export function defaultSchoolEmail(studentId: string): string | null {
 /** 以 CAS 驗證過的學號取得會員資料，第一次登入時自動建立。 */
 export function findOrCreateUserByStudentId(studentId: string): User {
   const db = getDb();
+  const profile = profileFromStudentId(studentId);
   db.prepare(
-    `INSERT INTO users (student_id, email, display_name) VALUES (?, ?, ?)
+    `INSERT INTO users (student_id, email, display_name, department, admission_year)
+    VALUES (?, ?, ?, ?, ?)
     ON CONFLICT (student_id) DO NOTHING`,
-  ).run(studentId, defaultSchoolEmail(studentId), maskStudentId(studentId));
+  ).run(
+    studentId,
+    defaultSchoolEmail(studentId),
+    maskStudentId(studentId),
+    profile?.department ?? null,
+    profile?.admissionYear ?? null,
+  );
   return toUser(
     db.prepare('SELECT * FROM users WHERE student_id = ?').get(studentId) as unknown as UserRow,
   );
@@ -66,9 +86,24 @@ export function findOrCreateUserByStudentId(studentId: string): User {
 /** 更新本人的顯示名稱與通知信箱；欄位須先驗證，undefined 表示不變。 */
 export function updateUserProfile(
   userId: number,
-  input: { displayName?: string; email?: string | null },
+  input: {
+    displayName?: string;
+    email?: string | null;
+    department?: Department | null;
+    admissionYear?: number | null;
+    personalize?: boolean;
+  },
 ): User {
   const db = getDb();
+  if (input.department !== undefined)
+    db.prepare('UPDATE users SET department = ? WHERE id = ?').run(input.department, userId);
+  if (input.admissionYear !== undefined)
+    db.prepare('UPDATE users SET admission_year = ? WHERE id = ?').run(input.admissionYear, userId);
+  if (input.personalize !== undefined)
+    db.prepare('UPDATE users SET personalize = ? WHERE id = ?').run(
+      Number(input.personalize),
+      userId,
+    );
   if (input.displayName !== undefined) {
     db.prepare('UPDATE users SET display_name = ? WHERE id = ?').run(input.displayName, userId);
   }

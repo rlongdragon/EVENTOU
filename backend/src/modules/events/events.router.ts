@@ -33,7 +33,15 @@ import {
   upsertEventRating,
 } from './events.ratings.js';
 import { findPublishedEventById, searchPublishedEvents } from './events.repository.js';
-import { EVENT_CATEGORIES, EVENT_CATEGORY_LABELS, type PublishedEvent } from './events.types.js';
+import { gradeFromAdmissionYear, type RelevanceProfile } from './events.relevance.js';
+import {
+  EVENT_CATEGORIES,
+  EVENT_CATEGORY_LABELS,
+  EVENT_TOPIC_LABELS,
+  EVENT_TOPICS,
+  type EventTopic,
+  type PublishedEvent,
+} from './events.types.js';
 
 // 活動（Event）：RawAnnouncement → Event，唯一鍵 source_id + original_url
 // US-19 轉換入口為 events.service.ts 的 processAnnouncement；資料格式見 events.types.ts。
@@ -48,23 +56,48 @@ function positiveInt(value: unknown, fallback: number): number {
   return typeof value === 'string' && /^[1-9]\d{0,8}$/.test(value) ? Number(value) : fallback;
 }
 
-// US-01 搜尋活動（未登入可用）：GET /api/events?q=&category=&page=&page_size=
-// 回應附上 categories（代碼與顯示名稱），供前端類別篩選使用，不需各自寫死類別清單
+/** 已登入、開啟個人化且推得出系所或年級的使用者才有「跟我相關」（#88）。 */
+function relevanceProfile(user: Express.Request['user']): RelevanceProfile | null {
+  if (!user?.personalize) return null;
+  const grade = gradeFromAdmissionYear(user.admissionYear);
+  if (!user.department && grade === null) return null;
+  return { department: user.department, grade };
+}
+
+const topicLabels = (topics: EventTopic[]) =>
+  topics.map((code) => ({ code, label: EVENT_TOPIC_LABELS[code] }));
+
+// US-01 搜尋活動（未登入可用）：GET /api/events?q=&category=&topic=&scope=&page=&page_size=
+// 回應附上 categories、topics（代碼與顯示名稱），供前端篩選使用，不需各自寫死清單。
+// #88 可個人化的使用者預設只列出跟他相關的活動，scope=all 切回全部；personal 告訴前端目前狀態。
 eventsRouter.get('/', (req, res) => {
   const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
   const category = typeof req.query.category === 'string' ? req.query.category : '';
+  const topic = typeof req.query.topic === 'string' ? req.query.topic : '';
   const page = positiveInt(req.query.page, 1);
   const pageSize = Math.min(positiveInt(req.query.page_size, DEFAULT_PAGE_SIZE), MAX_PAGE_SIZE);
-  const { items, total } = searchPublishedEvents(getDb(), { q, category, page, pageSize });
+  const profile = relevanceProfile(req.user);
+  const personal = profile !== null && req.query.scope !== 'all';
+  const { items, total } = searchPublishedEvents(getDb(), {
+    q,
+    category,
+    topic,
+    profile: personal ? profile : null,
+    page,
+    pageSize,
+  });
   res.json({
     items: items.map((item) => ({
       ...item,
       categoryLabel: EVENT_CATEGORY_LABELS[item.category] ?? item.category,
+      topics: topicLabels(item.topics),
     })),
     page,
     pageSize,
     total,
+    personal: { available: profile !== null, active: personal },
     categories: EVENT_CATEGORIES.map((code) => ({ code, label: EVENT_CATEGORY_LABELS[code] })),
+    topics: topicLabels([...EVENT_TOPICS]),
   });
 });
 
@@ -147,7 +180,14 @@ eventsRouter.get('/:eventId', (req, res) => {
   // categoryLabel 取自 EVENT_CATEGORY_LABELS（類別顯示名稱的單一來源）；查無對照時顯示代碼
   const categoryLabel = EVENT_CATEGORY_LABELS[event.category] ?? event.category;
   // US-20 sources：自己的來源與合併進來的活動的來源，活動頁列出全部
-  res.json({ event: { ...event, categoryLabel, sources: listEventSources(getDb(), event.id) } });
+  res.json({
+    event: {
+      ...event,
+      categoryLabel,
+      topics: topicLabels(event.topics),
+      sources: listEventSources(getDb(), event.id),
+    },
+  });
 });
 
 /** 讀取 JSON body 的欄位；body 不是物件時回傳 undefined。 */

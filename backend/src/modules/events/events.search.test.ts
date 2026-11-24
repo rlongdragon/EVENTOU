@@ -5,6 +5,7 @@ import { after, before, describe, test } from 'node:test';
 import { createApp } from '../../app.js';
 import { closeDb, getDb, migrate } from '../../db/index.js';
 import { seedSources } from '../sources/sources.testHelpers.js';
+import { createTestUser } from '../auth/auth.testHelpers.js';
 import { searchPublishedEvents } from './events.repository.js';
 import { processAnnouncement } from './events.service.js';
 import type { EventCategory, RawAnnouncement } from './events.types.js';
@@ -114,7 +115,7 @@ describe('GET /api/events（US-01）', () => {
       ['海大活動 C'],
     );
     assert.deepEqual(body.categories[0], { code: 'lecture', label: '講座' });
-    assert.equal(body.categories.length, 5);
+    assert.equal(body.categories.length, 9);
   });
 
   test('已結束與待審（needs_review）的活動不會出現', async () => {
@@ -154,5 +155,60 @@ describe('GET /api/events（US-01）', () => {
     assert.equal(invalid.body.page, 1);
     assert.equal(invalid.body.pageSize, 20);
     assert.equal((await search('?page_size=1000')).body.pageSize, 100);
+  });
+});
+
+describe('GET /api/events 主題篩選與跟我相關（#69、#88）', () => {
+  test('可依主題篩選，回應附上主題清單；訪客沒有個人化', async () => {
+    addEvent('人工智慧工作坊', '活動日期：2099/05/01 14:00-16:00', 'workshop');
+    const { body } = await search('?topic=it');
+    assert.deepEqual(
+      body.items.map((item) => item.title),
+      ['人工智慧工作坊'],
+    );
+    const withTopics = body as SearchBody & {
+      topics: { code: string }[];
+      personal: { available: boolean; active: boolean };
+      items: (SearchItem & { topics: { code: string; label: string }[] })[];
+    };
+    assert.deepEqual(withTopics.items[0]?.topics, [{ code: 'it', label: '資訊科技' }]);
+    assert.ok(withTopics.topics.some((topic) => topic.code === 'career'));
+    assert.deepEqual(withTopics.personal, { available: false, active: false });
+  });
+
+  test('資工系使用者預設只看相關活動，scope=all 切回全部，關閉個人化後不再篩選', async () => {
+    const user = createTestUser();
+    getDb()
+      .prepare("UPDATE users SET department = 'csie', admission_year = 113 WHERE id = ?")
+      .run(user.id);
+    const get = async (query: string) => {
+      const response = await fetch(`${baseUrl}/api/events${query}`, {
+        headers: { Cookie: user.cookie },
+      });
+      return (await response.json()) as SearchBody & {
+        personal: { available: boolean; active: boolean };
+      };
+    };
+    const mine = await get('');
+    assert.deepEqual(mine.personal, { available: true, active: true });
+    assert.deepEqual(
+      mine.items.map((item) => item.title),
+      ['人工智慧工作坊'],
+    );
+    const all = await get('?scope=all');
+    assert.deepEqual(all.personal, { available: true, active: false });
+    assert.ok(all.total > 1);
+
+    getDb().prepare('UPDATE users SET personalize = 0 WHERE id = ?').run(user.id);
+    assert.deepEqual((await get('')).personal, { available: false, active: false });
+  });
+
+  test('repository 傳入 profile 時只回傳分數夠高的活動', () => {
+    const profile = { department: 'csie' as const, grade: 3 };
+    const { items } = searchPublishedEvents(getDb(), { profile, page: 1, pageSize: 20 });
+    assert.deepEqual(
+      items.map((item) => item.title),
+      ['人工智慧工作坊'],
+    );
   });
 });

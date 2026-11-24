@@ -36,7 +36,7 @@ export function EventTicker() {
 
   useEffect(() => {
     const controller = new AbortController();
-    searchEvents({ q: '', category: '', page: 1 }, controller.signal)
+    searchEvents({ q: '', category: '', topic: '', scope: 'all', page: 1 }, controller.signal)
       .then((data) => setItems(data.items.slice(0, TICKER_LIMIT)))
       .catch(() => {
         // 跑馬燈只是輔助資訊，載入失敗時不顯示即可

@@ -10,11 +10,19 @@ export interface User {
   displayName: string;
   role: Role;
   createdAt: string;
+  /** #88 個人化推薦：系所代碼（目前只有 csie）、入學學年（民國）、由後端推算的年級 */
+  department: string | null;
+  admissionYear: number | null;
+  grade: number | null;
+  personalize: boolean;
 }
 
 export interface ProfileInput {
   displayName?: string;
   email?: string;
+  department?: string | null;
+  admissionYear?: number | null;
+  personalize?: boolean;
 }
 
 /** 後端回傳的錯誤，fields 為各欄位的錯誤訊息。 */

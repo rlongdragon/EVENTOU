@@ -24,9 +24,13 @@ export function AccountPage() {
     setFieldErrors({});
     setSubmitting(true);
     try {
+      const admissionYear = String(form.get('admissionYear') ?? '').trim();
       await updateProfile({
         displayName: String(form.get('displayName') ?? ''),
         email: String(form.get('email') ?? ''),
+        personalize: form.get('personalize') === 'on',
+        department: String(form.get('department') ?? '') || null,
+        admissionYear: admissionYear ? Number(admissionYear) : null,
       });
       setSaved(true);
     } catch (caught) {
@@ -72,6 +76,37 @@ export function AccountPage() {
           />
           {fieldErrors.email && <p style={errorStyle}>{fieldErrors.email}</p>}
         </label>
+        <fieldset style={{ ...fieldStyle, gap: '0.75rem', border: 0, padding: 0, margin: 0 }}>
+          <legend style={{ marginBottom: '0.5rem' }}>個人化推薦</legend>
+          <label style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <input type="checkbox" name="personalize" defaultChecked={user.personalize} />
+            首頁預設顯示跟我相關的活動
+          </label>
+          <label style={fieldStyle}>
+            系所
+            <select name="department" defaultValue={user.department ?? ''}>
+              <option value="">未設定</option>
+              <option value="csie">資訊工程學系</option>
+            </select>
+            {fieldErrors.department && <p style={errorStyle}>{fieldErrors.department}</p>}
+          </label>
+          <label style={fieldStyle}>
+            入學學年
+            <input
+              name="admissionYear"
+              type="number"
+              inputMode="numeric"
+              min={90}
+              defaultValue={user.admissionYear ?? ''}
+              placeholder="例如 113"
+            />
+            {user.grade !== null && (
+              <small>{user.grade >= 4 ? '4 年級以上' : `${user.grade} 年級`}</small>
+            )}
+            {fieldErrors.admissionYear && <p style={errorStyle}>{fieldErrors.admissionYear}</p>}
+          </label>
+          <small>系所與入學學年由學號推算，可自行修正。</small>
+        </fieldset>
         {error && (
           <p role="alert" style={errorStyle}>
             {error}

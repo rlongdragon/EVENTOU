@@ -9,6 +9,8 @@ import {
   updateUserProfile,
   type User,
 } from './auth.service.js';
+import { currentAcademicYear, gradeFromAdmissionYear } from '../events/events.relevance.js';
+import { isDepartment } from '../events/events.types.js';
 import { isRole } from './roles.js';
 import { casLoginUrl, casLogoutUrl, casServiceUrl, validateServiceTicket } from './cas.js';
 import {
@@ -101,7 +103,7 @@ authRouter.post('/dev-login', (req, res) => {
     user = { ...user, role };
   }
   startSession(res, user);
-  res.json({ user });
+  res.json({ user: withGrade(user) });
 });
 
 authRouter.post('/logout', (req, res) => {
@@ -112,13 +114,14 @@ authRouter.post('/logout', (req, res) => {
 });
 
 authRouter.get('/me', requireAuth, (req, res) => {
-  res.json({ user: req.user });
+  if (!req.user) return;
+  res.json({ user: withGrade(req.user) });
 });
 
 authRouter.patch('/me', requireAuth, (req, res) => {
   if (!req.user) return;
   const body: unknown = req.body;
-  const input: { displayName?: string; email?: string | null } = {};
+  const input: Parameters<typeof updateUserProfile>[1] = {};
   const fields: Record<string, string> = {};
   const raw = typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : {};
 
@@ -137,10 +140,32 @@ authRouter.patch('/me', requireAuth, (req, res) => {
       fields.email = 'Email 格式不正確';
     } else input.email = email;
   }
+  // #88 系所、入學學年（民國）、個人化開關；null 代表清除
+  if (raw.department !== undefined) {
+    if (raw.department === null || isDepartment(raw.department)) input.department = raw.department;
+    else fields.department = '不支援的系所';
+  }
+  if (raw.admissionYear !== undefined) {
+    const year = raw.admissionYear;
+    const latest = currentAcademicYear();
+    if (year === null) input.admissionYear = null;
+    else if (typeof year === 'number' && Number.isInteger(year) && year >= 90 && year <= latest)
+      input.admissionYear = year;
+    else fields.admissionYear = `入學學年需介於 90 到 ${latest}`;
+  }
+  if (raw.personalize !== undefined) {
+    if (typeof raw.personalize === 'boolean') input.personalize = raw.personalize;
+    else fields.personalize = '格式不正確';
+  }
 
   if (Object.keys(fields).length > 0) {
     res.status(400).json({ error: 'validation_error', message: '會員資料有誤', fields });
     return;
   }
-  res.json({ user: updateUserProfile(req.user.id, input) });
+  res.json({ user: withGrade(updateUserProfile(req.user.id, input)) });
 });
+
+/** 回應附上由入學學年推算的年級，前端不必自己算學年度。 */
+function withGrade(user: User) {
+  return { ...user, grade: gradeFromAdmissionYear(user.admissionYear) };
+}

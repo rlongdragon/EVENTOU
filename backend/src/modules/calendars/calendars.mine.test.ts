@@ -150,7 +150,7 @@ describe('GET /api/calendars/events（月曆）', () => {
       ['系上講座', '攝影展', '系際盃'],
     );
     assert.equal(items[1].sourceName, '攝影社');
-    assert.equal(items[1].categoryLabel, '展覽');
+    assert.equal(items[1].categoryLabel, '展覽／表演');
     assert.ok(items.every((item) => !item.mine && item.mark === null));
   });
 
