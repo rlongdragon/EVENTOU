@@ -10,6 +10,12 @@
   isolation: isolate;
 }
 
+/* 活動頁：較矮的框 */
+.campus-map-stage--compact {
+  height: min(60vh, 480px);
+  min-height: 360px;
+}
+
 .campus-map-layer {
   position: absolute;
   inset: 0;

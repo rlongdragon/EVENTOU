@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Campus3DView } from '../map/Campus3DView';
+import { CampusMapStage } from '../map/CampusMapStage';
 import { campus3DUrl, findCampus3DVenue } from '../map/campus3dVenues';
 import { MapModeToggle, type MapMode } from '../map/MapModeToggle';
-import { MapView } from '../map/MapView';
 import type { MapCoordinates } from '../map/api';
 
 type LocationState = 'loading' | 'found' | 'not_found' | 'error';
@@ -70,41 +70,55 @@ export function EventLocationMap({ eventId, location, category }: EventLocationM
       {!query && <p>此活動沒有地點資料，無法顯示地圖。</p>}
       {query && <MapModeToggle mode={mode} onChange={setMode} order={['2d', '3d']} />}
       {show3d && (
-        <>
-          <p className="map-mode-note">
-            {venue
-              ? `已在立體模型標出「${venue.name}」，可展開樓層查看。`
-              : `立體模型目前只能定位到常用場地，「${query}」請切換平面地圖查看位置。`}
-          </p>
-          <Campus3DView
-            key={venue?.id ?? 'campus'}
-            title={venue ? `${venue.name} 3D 模型` : '3D 校園模型'}
-            src={campus3DUrl(venue)}
-            compact
-          />
-        </>
+        <p className="map-mode-note">
+          {venue
+            ? `已在立體模型標出「${venue.name}」，可展開樓層查看。`
+            : `立體模型目前只能定位到常用場地，「${query}」請切換平面地圖查看位置。`}
+        </p>
       )}
-      {query && !show3d && state === 'loading' && <p role="status">正在載入地點地圖…</p>}
-      {query && !show3d && state === 'not_found' && (
-        <p>「{query}」無法對應到校內建物，暫時無法在地圖上顯示。</p>
-      )}
-      {query && !show3d && state === 'error' && (
-        <p role="status">暫時無法載入地點地圖，請稍後再試。</p>
-      )}
-      {query && !show3d && state === 'found' && current?.coordinates && (
-        <MapView
-          markers={[
-            {
-              id: eventId,
-              ...current.coordinates,
-              label: query,
-              category,
-              details:
-                current.placeName && current.placeName !== query ? [current.placeName] : undefined,
-            },
-          ]}
-          ariaLabel={`${query}地圖`}
+      {query && state === 'found' && current?.coordinates ? (
+        // 平面與立體疊在同一框，切換時對齊位置再淡入淡出（與地圖頁相同）
+        <CampusMapStage
+          mode={mode}
+          map2d={{
+            markers: [
+              {
+                id: eventId,
+                ...current.coordinates,
+                label: query,
+                category,
+                details:
+                  current.placeName && current.placeName !== query
+                    ? [current.placeName]
+                    : undefined,
+              },
+            ],
+            ariaLabel: `${query}地圖`,
+          }}
+          src3d={campus3DUrl(venue)}
+          title3d={venue ? `${venue.name} 3D 模型` : '3D 校園模型'}
+          compact
+          lazy3d
         />
+      ) : (
+        <>
+          {/* 平面地圖定位不到時，立體模型仍可單獨看 */}
+          {show3d && (
+            <Campus3DView
+              key={venue?.id ?? 'campus'}
+              title={venue ? `${venue.name} 3D 模型` : '3D 校園模型'}
+              src={campus3DUrl(venue)}
+              compact
+            />
+          )}
+          {query && !show3d && state === 'loading' && <p role="status">正在載入地點地圖…</p>}
+          {query && !show3d && state === 'not_found' && (
+            <p>「{query}」無法對應到校內建物，暫時無法在地圖上顯示。</p>
+          )}
+          {query && !show3d && state === 'error' && (
+            <p role="status">暫時無法載入地點地圖，請稍後再試。</p>
+          )}
+        </>
       )}
     </section>
   );
