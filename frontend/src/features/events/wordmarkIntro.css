@@ -4,6 +4,21 @@
   display: inline-flex;
 }
 
+/* 字標本身是重播按鈕：拿掉全站按鈕的外框、底色與高度 */
+.wordmark-replay,
+.wordmark-replay:hover:not(:disabled) {
+  display: inline-flex;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+  cursor: pointer;
+}
+
 .wordmark-intro {
   position: absolute;
   inset: 0;

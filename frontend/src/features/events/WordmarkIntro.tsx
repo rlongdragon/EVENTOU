@@ -4,11 +4,11 @@ import './wordmarkIntro.css';
 // 首頁字標開場：名字是「EVENT in NTOU, TO U」縮成的
 //   1 整句 → 2 拿掉 in，EVENT 與 NTOU 上下排、共用 NT → 3 合成 EVENTOU（上線 EVENT、下線 NTOU）
 //   → 4 上線縮到 EVEN、下線移到 TO：EVEN・TO・U → 回到 3，換成靜態字標
-// 最後一格的位置量自頁面上的靜態字標，結束時切換不會跳動。每個分頁只播一次。
+// 最後一格的位置量自頁面上的靜態字標，結束時切換不會跳動。每次進首頁都播，點字標可重播；
+// 系統設定減少動態效果時不播。
 
 export type IntroPhase = 'sentence' | 'merged' | 'done';
 
-const SEEN_KEY = 'eventou.wordmarkIntro';
 const TOKENS: [string, string][] = [
   ['E1', 'E'], ['V1', 'V'], ['E2', 'E'], ['N1', 'N'], ['T1', 'T'], ['sp1', ' '],
   ['i', 'i'], ['n', 'n'], ['sp2', ' '],
@@ -48,13 +48,8 @@ interface Frame {
   bottom: Rule;
 }
 
-function canPlay(): boolean {
-  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return false;
-  try {
-    return !sessionStorage.getItem(SEEN_KEY);
-  } catch {
-    return true;
-  }
+function motionAllowed(): boolean {
+  return !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
 /** 量靜態字標，算出四格的位置 */
@@ -157,8 +152,8 @@ function buildFrames(wrap: HTMLElement, mark: HTMLElement): Frame[] {
 export function WordmarkIntro({ onPhase }: { onPhase?: (phase: IntroPhase) => void }) {
   const wrapRef = useRef<HTMLSpanElement>(null);
   const markRef = useRef<HTMLSpanElement>(null);
-  const [willPlay] = useState(canPlay);
-  const [playing, setPlaying] = useState(willPlay);
+  const [motionOk] = useState(motionAllowed);
+  const [playing, setPlaying] = useState(motionOk);
   const [frames, setFrames] = useState<Frame[] | null>(null);
   const [step, setStep] = useState(-1);
   const onPhaseRef = useRef(onPhase);
@@ -167,23 +162,25 @@ export function WordmarkIntro({ onPhase }: { onPhase?: (phase: IntroPhase) => vo
     onPhaseRef.current = onPhase;
   });
 
-  // 第一次繪製前就決定要不要播，避免靜態字標閃一下
+  // 第一次繪製前就通知外層，避免小標與副標先出現再藏起來
   useLayoutEffect(() => {
-    onPhaseRef.current?.(willPlay ? 'sentence' : 'done');
-  }, [willPlay]);
+    onPhaseRef.current?.(motionOk ? 'sentence' : 'done');
+  }, [motionOk]);
+
+  const replay = () => {
+    if (!motionOk || playing) return;
+    setFrames(null);
+    setStep(-1);
+    setPlaying(true);
+    onPhaseRef.current?.('sentence');
+  };
 
   useEffect(() => {
     if (!playing) return;
     let cancelled = false;
     const timers: ReturnType<typeof setTimeout>[] = [];
-    // 播完（或中途結束）才記下來；元件被重新掛載時不會誤判成已播過
     const finish = () => {
       timers.forEach(clearTimeout);
-      try {
-        sessionStorage.setItem(SEEN_KEY, '1');
-      } catch {
-        // 無法記錄時下次照樣播放
-      }
       setPlaying(false);
       onPhaseRef.current?.('done');
     };
@@ -218,19 +215,27 @@ export function WordmarkIntro({ onPhase }: { onPhase?: (phase: IntroPhase) => vo
   });
 
   return (
-    <span ref={wrapRef} className="wordmark-intro-wrap" data-intro={willPlay || undefined}>
-      {/* 字標：EVENT 上方、NTOU 下方各一條線，兩者在 NT 重疊；報讀器只唸一次 EVENTOU */}
-      <span
-        ref={markRef}
-        className="cover-wordmark"
-        role="img"
-        aria-label="EVENTOU"
-        style={playing ? { visibility: 'hidden' } : undefined}
+    <span ref={wrapRef} className="wordmark-intro-wrap" data-intro={motionOk || undefined}>
+      {/* 點字標重播開場 */}
+      <button
+        type="button"
+        className="wordmark-replay"
+        title={motionOk ? '再播一次' : undefined}
+        onClick={replay}
       >
-        <span className="wordmark-event">EVE</span>
-        <span className="wordmark-shared">NT</span>
-        <span className="wordmark-ntou">OU</span>
-      </span>
+        {/* 字標：EVENT 上方、NTOU 下方各一條線，兩者在 NT 重疊；報讀器只唸一次 EVENTOU */}
+        <span
+          ref={markRef}
+          className="cover-wordmark"
+          role="img"
+          aria-label="EVENTOU"
+          style={playing ? { visibility: 'hidden' } : undefined}
+        >
+          <span className="wordmark-event">EVE</span>
+          <span className="wordmark-shared">NT</span>
+          <span className="wordmark-ntou">OU</span>
+        </span>
+      </button>
       {playing && (
         <span className="wordmark-intro" aria-hidden="true" data-step={step}>
           {TOKENS.map(([id, c]) => {
