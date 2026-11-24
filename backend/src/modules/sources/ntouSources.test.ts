@@ -12,7 +12,7 @@ function setup() {
   db.exec('PRAGMA foreign_keys=ON');
   migrate(db);
   db.prepare(
-    "INSERT INTO users (email, password_hash, display_name, role) VALUES ('admin@example.com', 'x', '管理員', 'admin')",
+    "INSERT INTO users (student_id, email, display_name, role) VALUES ('A0000001', 'admin@example.com', '管理員', 'admin')",
   ).run();
   return db;
 }

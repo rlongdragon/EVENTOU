@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { after, before, describe, test } from 'node:test';
 import { createApp } from '../../app.js';
 import { closeDb, getDb, migrate } from '../../db/index.js';
+import { createTestUser } from '../auth/auth.testHelpers.js';
 import { seedSources } from '../sources/sources.testHelpers.js';
 import {
   COMMENT_MAX_LENGTH,
@@ -85,19 +86,6 @@ async function request(
   return { status: response.status, body: (text ? JSON.parse(text) : {}) as CommentsBody };
 }
 
-async function registerUser(email: string, displayName: string) {
-  const response = await fetch(`${baseUrl}/api/auth/register`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password: 'password123', displayName }),
-  });
-  assert.equal(response.status, 201);
-  const cookie = response.headers.getSetCookie()[0]?.split(';')[0];
-  assert.ok(cookie);
-  const { user } = (await response.json()) as { user: { id: number } };
-  return { cookie, id: user.id };
-}
-
 function postComment(id: number, content: unknown, cookie?: string) {
   return request('POST', `/api/events/${id}/comments`, { cookie, body: { content } });
 }
@@ -116,7 +104,7 @@ describe('活動留言（US-10）', () => {
   });
 
   test('登入後留言成功，回傳留言者與時間，內容去除前後空白', async () => {
-    const { cookie, id } = await registerUser('alice@example.com', 'Alice');
+    const { cookie, id } = createTestUser({ displayName: 'Alice' });
     const { status, body } = await postComment(eventId, '  請問需要報名嗎？\n謝謝  ', cookie);
     assert.equal(status, 201);
     const comment = body.comment;
@@ -128,7 +116,7 @@ describe('活動留言（US-10）', () => {
   });
 
   test('留言依時間由舊到新排序，只列出該活動的留言', async () => {
-    const { id: bobId } = await registerUser('bob@example.com', 'Bob');
+    const { id: bobId } = createTestUser({ displayName: 'Bob' });
     const db = getDb();
     // 直接指定時間寫入，確保排序與寫入順序無關
     createEventComment(
@@ -154,7 +142,7 @@ describe('活動留言（US-10）', () => {
   });
 
   test('空白、非字串或過長的留言被擋下', async () => {
-    const { cookie } = await registerUser('carol@example.com', 'Carol');
+    const { cookie } = createTestUser({ displayName: 'Carol' });
     for (const content of ['', '   ', '\n\t', undefined, 123, null]) {
       const { status, body } = await postComment(eventId, content, cookie);
       assert.equal(status, 400, JSON.stringify(content));
@@ -169,8 +157,8 @@ describe('活動留言（US-10）', () => {
   });
 
   test('留言附上留言者目前對該活動的評分，沒評分為 null，改分數後跟著更新', async () => {
-    const erin = await registerUser('erin@example.com', 'Erin');
-    const frank = await registerUser('frank@example.com', 'Frank');
+    const erin = createTestUser({ displayName: 'Erin' });
+    const frank = createTestUser({ displayName: 'Frank' });
     const rated = await postComment(otherEventId, '很推薦', erin.cookie);
     assert.equal(rated.body.comment?.rating, null);
     const rate = (score: number) =>
@@ -196,7 +184,7 @@ describe('活動留言（US-10）', () => {
   });
 
   test('不存在、待審或無效的活動回傳 404', async () => {
-    const { cookie } = await registerUser('dave@example.com', 'Dave');
+    const { cookie } = createTestUser({ displayName: 'Dave' });
     for (const id of ['999999', String(reviewId), 'abc']) {
       assert.equal((await request('GET', `/api/events/${id}/comments`)).status, 404, id);
       const posted = await request('POST', `/api/events/${id}/comments`, {
@@ -222,15 +210,9 @@ describe('留言編輯、刪除、按讚、回覆與排序（#79）', () => {
   const path = (suffix = '') => `/api/events/${threadEventId}/comments${suffix}`;
   const list = async (cookie?: string) => (await request('GET', path(), { cookie })).body;
 
-  async function makeAdmin(email: string, displayName: string) {
-    const admin = await registerUser(email, displayName);
-    getDb().prepare("UPDATE users SET role = 'admin' WHERE id = ?").run(admin.id);
-    return admin;
-  }
-
   test('留言者可編輯自己的留言，記錄編輯時間；別人不能編輯', async () => {
-    const owner = await registerUser('edit-owner@example.com', 'EditOwner');
-    const other = await registerUser('edit-other@example.com', 'EditOther');
+    const owner = createTestUser({ displayName: 'EditOwner' });
+    const other = createTestUser({ displayName: 'EditOther' });
     const posted = await postComment(threadEventId, '原本的內容', owner.cookie);
     const id = posted.body.comment?.id;
     assert.equal(posted.body.comment?.editedAt, null);
@@ -249,8 +231,8 @@ describe('留言編輯、刪除、按讚、回覆與排序（#79）', () => {
   });
 
   test('回覆掛在頂層留言下，回覆「回覆」也掛在同一則頂層留言', async () => {
-    const alice = await registerUser('thread-alice@example.com', 'ThreadAlice');
-    const bob = await registerUser('thread-bob@example.com', 'ThreadBob');
+    const alice = createTestUser({ displayName: 'ThreadAlice' });
+    const bob = createTestUser({ displayName: 'ThreadBob' });
     const reply = (parentId: unknown, content: string, cookie: string) =>
       request('POST', path(), { cookie, body: { content, parentId } });
     const top = (await postComment(threadEventId, '有人要一起去嗎？', alice.cookie)).body.comment;
@@ -279,8 +261,8 @@ describe('留言編輯、刪除、按讚、回覆與排序（#79）', () => {
   });
 
   test('按讚與取消讚可重複呼叫，訪客看得到讚數但不能按', async () => {
-    const author = await registerUser('like-author@example.com', 'LikeAuthor');
-    const fan = await registerUser('like-fan@example.com', 'LikeFan');
+    const author = createTestUser({ displayName: 'LikeAuthor' });
+    const fan = createTestUser({ displayName: 'LikeFan' });
     const id = (await postComment(threadEventId, '值得按讚', author.cookie)).body.comment?.id;
 
     for (let i = 0; i < 2; i += 1) {
@@ -306,7 +288,7 @@ describe('留言編輯、刪除、按讚、回覆與排序（#79）', () => {
 
   test('排序：最舊（預設）、最新、最多讚', async () => {
     const db = getDb();
-    const { id: userId } = await registerUser('sort@example.com', 'Sorter');
+    const { id: userId } = createTestUser({ displayName: 'Sorter' });
     const sortEventId = processAnnouncement(
       db,
       { ...raw, url: 'https://www.ntou.edu.tw/event/comments-sort' },
@@ -317,7 +299,7 @@ describe('留言編輯、刪除、按讚、回覆與排序（#79）', () => {
     make('早', '2026-10-02T01:00:00Z');
     const middle = make('中', '2026-10-02T02:00:00Z');
     make('晚', '2026-10-02T03:00:00Z');
-    const fan = await registerUser('sort-fan@example.com', 'SortFan');
+    const fan = createTestUser({ displayName: 'SortFan' });
     await request('PUT', `/api/events/${sortEventId}/comments/${middle}/like`, {
       cookie: fan.cookie,
     });
@@ -334,8 +316,8 @@ describe('留言編輯、刪除、按讚、回覆與排序（#79）', () => {
   });
 
   test('刪除：沒有回覆的留言消失；有回覆的保留佔位，回覆照常顯示', async () => {
-    const owner = await registerUser('delete-owner@example.com', 'DeleteOwner');
-    const replier = await registerUser('delete-replier@example.com', 'DeleteReplier');
+    const owner = createTestUser({ displayName: 'DeleteOwner' });
+    const replier = createTestUser({ displayName: 'DeleteReplier' });
     const lone = (await postComment(threadEventId, '沒人回', owner.cookie)).body.comment?.id;
     const parent = (await postComment(threadEventId, '有人回', owner.cookie)).body.comment?.id;
     await request('POST', path(), {
@@ -378,9 +360,9 @@ describe('留言編輯、刪除、按讚、回覆與排序（#79）', () => {
   });
 
   test('管理員可刪除別人的留言（記為隱藏），待審檢舉一併結案', async () => {
-    const author = await registerUser('admin-target@example.com', 'AdminTarget');
-    const reporter = await registerUser('admin-reporter@example.com', 'AdminReporter');
-    const admin = await makeAdmin('comment-admin@example.com', 'CommentAdmin');
+    const author = createTestUser({ displayName: 'AdminTarget' });
+    const reporter = createTestUser({ displayName: 'AdminReporter' });
+    const admin = createTestUser({ displayName: 'CommentAdmin', role: 'admin' });
     const id = (await postComment(threadEventId, '違規留言', author.cookie)).body.comment?.id;
     const reported = await request('POST', path(`/${id}/reports`), {
       cookie: reporter.cookie,
@@ -404,9 +386,9 @@ describe('留言編輯、刪除、按讚、回覆與排序（#79）', () => {
   });
 
   test('留言者自行刪除後，不再出現在檢舉審核清單，也不能再被檢舉', async () => {
-    const author = await registerUser('self-delete@example.com', 'SelfDelete');
-    const reporter = await registerUser('self-delete-reporter@example.com', 'SelfReporter');
-    const admin = await makeAdmin('self-delete-admin@example.com', 'SelfAdmin');
+    const author = createTestUser({ displayName: 'SelfDelete' });
+    const reporter = createTestUser({ displayName: 'SelfReporter' });
+    const admin = createTestUser({ displayName: 'SelfAdmin', role: 'admin' });
     const id = (await postComment(threadEventId, '會被刪', author.cookie)).body.comment?.id;
     await request('POST', path(`/${id}/reports`), {
       cookie: reporter.cookie,
@@ -438,10 +420,9 @@ describe('被檢舉的留言不能靠編輯躲過審核（#87）', () => {
   });
 
   test('有待審檢舉時編輯回 409，內容不變；檢舉結案後可以編輯', async () => {
-    const author = await registerUser('review-author@example.com', 'ReviewAuthor');
-    const reporter = await registerUser('review-reporter@example.com', 'ReviewReporter');
-    const admin = await registerUser('review-admin@example.com', 'ReviewAdmin');
-    getDb().prepare("UPDATE users SET role = 'admin' WHERE id = ?").run(admin.id);
+    const author = createTestUser({ displayName: 'ReviewAuthor' });
+    const reporter = createTestUser({ displayName: 'ReviewReporter' });
+    const admin = createTestUser({ displayName: 'ReviewAdmin', role: 'admin' });
     const id = (await postComment(reportEventId, '不當內容', author.cookie)).body.comment?.id;
     const reported = await request('POST', `/api/events/${reportEventId}/comments/${id}/reports`, {
       cookie: reporter.cookie,
@@ -470,9 +451,9 @@ describe('被檢舉的留言不能靠編輯躲過審核（#87）', () => {
 
   test('檢舉被駁回後留言又被編輯，原檢舉人可以重新檢舉；沒編輯就不行', async () => {
     const db = getDb();
-    const author = await registerUser('reopen-author@example.com', 'ReopenAuthor');
-    const reporter = await registerUser('reopen-reporter@example.com', 'ReopenReporter');
-    const admin = await registerUser('reopen-admin@example.com', 'ReopenAdmin');
+    const author = createTestUser({ displayName: 'ReopenAuthor' });
+    const reporter = createTestUser({ displayName: 'ReopenReporter' });
+    const admin = createTestUser({ displayName: 'ReopenAdmin' });
     const at = (time: string) => new Date(`2026-11-20T${time}+08:00`);
     const commentId = createEventComment(
       db,
@@ -519,9 +500,9 @@ describe('被檢舉的留言不能靠編輯躲過審核（#87）', () => {
 
   test('結案前就編輯過（例如被檢舉前）的留言，駁回後不能重新檢舉', async () => {
     const db = getDb();
-    const author = await registerUser('early-edit-author@example.com', 'EarlyAuthor');
-    const reporter = await registerUser('early-edit-reporter@example.com', 'EarlyReporter');
-    const admin = await registerUser('early-edit-admin@example.com', 'EarlyAdmin');
+    const author = createTestUser({ displayName: 'EarlyAuthor' });
+    const reporter = createTestUser({ displayName: 'EarlyReporter' });
+    const admin = createTestUser({ displayName: 'EarlyAdmin' });
     const at = (time: string) => new Date(`2026-11-21T${time}+08:00`);
     const commentId = createEventComment(
       db,

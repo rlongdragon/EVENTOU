@@ -2,12 +2,61 @@
   min-width: 0;
 }
 
-.campus-map-filters {
+/* 立體／平面切換與篩選條件同一行；手機版篩選收進「…」 */
+.campus-map-toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: end;
   gap: 0.75rem;
   margin-block: 1rem;
+}
+
+.campus-map-toolbar .map-mode-toggle {
+  margin-block-end: 0;
+}
+
+/* 輸入框、下拉選單、按鈕同高，底部才會切齊 */
+.campus-map-toolbar :is(input, select, button) {
+  box-sizing: border-box;
+  height: 2.5rem;
+  min-height: 2.5rem;
+}
+
+.campus-map-more {
+  display: none;
+}
+
+.campus-map-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.75rem;
+}
+
+@media (max-width: 640px) {
+  .campus-map-more {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.75rem;
+    min-height: 2.5rem;
+    padding: 0;
+    font-size: 1.25rem;
+    line-height: 1;
+  }
+
+  .campus-map-more[aria-expanded='true'] {
+    background: var(--color-text);
+    color: var(--color-on-dark);
+  }
+
+  .campus-map-filters {
+    flex-basis: 100%;
+  }
+
+  .campus-map-filters:not([data-open]) {
+    display: none;
+  }
 }
 
 .campus-map-filters label {

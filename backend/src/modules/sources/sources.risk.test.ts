@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { after, before, describe, test } from 'node:test';
 import { createApp } from '../../app.js';
 import { closeDb, getDb, migrate } from '../../db/index.js';
-import { setUserRole } from '../auth/auth.service.js';
+import { createTestUser } from '../auth/auth.testHelpers.js';
 import { assessSourceRisk, riskLevelForScore, type RiskInput } from './sources.risk.js';
 
 process.env.DATABASE_PATH = ':memory:';
@@ -130,21 +130,6 @@ async function request(method: string, path: string, cookie?: string, body?: unk
   return { status: response.status, body: text ? JSON.parse(text) : undefined, setCookie };
 }
 
-async function register(email: string, admin = false): Promise<string> {
-  await request('POST', '/api/auth/register', undefined, {
-    email,
-    password: 'password123',
-    displayName: email.split('@')[0],
-  });
-  if (admin) assert.equal(setUserRole(email, 'admin'), true);
-  const login = await request('POST', '/api/auth/login', undefined, {
-    email,
-    password: 'password123',
-  });
-  assert.ok(login.setCookie);
-  return login.setCookie;
-}
-
 function insertSource(url: string, reviewStatus: string, enabled = 1): number {
   const row = getDb()
     .prepare(
@@ -165,7 +150,7 @@ function insertRuns(sourceId: number, statuses: string[]): void {
 
 describe('來源風險 API', () => {
   test('管理員可看到風險等級、分數與主要原因，且不改變審核與啟用狀態', async () => {
-    const adminCookie = await register('risk-admin@example.com', true);
+    const adminCookie = createTestUser({ role: 'admin' }).cookie;
     const id = insertSource('http://broken.example.com', 'approved');
     insertRuns(id, ['success', 'failure', 'failure', 'failure', 'running']);
 
@@ -187,7 +172,7 @@ describe('來源風險 API', () => {
   });
 
   test('一般使用者與訪客只看到已核准來源的風險等級，看不到原因', async () => {
-    const userCookie = await register('risk-user@example.com');
+    const userCookie = createTestUser().cookie;
     const approved = insertSource('https://ok.example.com', 'approved');
     const pending = insertSource('https://pending.example.com', 'pending');
 
@@ -206,7 +191,7 @@ describe('來源風險 API', () => {
   });
 
   test('「我提交的來源」只有已核准的來源帶風險等級，未核准為 null', async () => {
-    const cookie = await register('risk-mine@example.com');
+    const cookie = createTestUser().cookie;
     const submitted = await request('POST', '/api/sources', cookie, {
       name: '我的來源',
       url: 'http://mine.example.com',
@@ -224,7 +209,7 @@ describe('來源風險 API', () => {
   });
 
   test('找不到或 id 不正確回傳 404', async () => {
-    const adminCookie = await register('risk-admin2@example.com', true);
+    const adminCookie = createTestUser({ role: 'admin' }).cookie;
     assert.equal((await request('GET', '/api/sources/99999/risk', adminCookie)).status, 404);
     assert.equal((await request('GET', '/api/sources/abc/risk', adminCookie)).status, 404);
   });

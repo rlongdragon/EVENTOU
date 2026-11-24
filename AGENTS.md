@@ -48,7 +48,7 @@ eslint.config.js        # 前後端共用的 ESLint flat config
 - `frontend/` 只負責畫面與呼叫 `/api`；dev server 會把 `/api` proxy 到後端。
 - `backend/` 負責 API、資料存取與背景擷取排程，所有 API 都掛在 `/api` 底下。
 - 資料庫為 SQLite（Node 內建 `node:sqlite`），連線與 migration 在 `backend/src/db/`；要變更 schema 請在 `db/migrations/index.ts` 新增一筆 migration，不要修改已存在的。
-- 帳號與權限：角色統一定義在 `backend/src/modules/auth/roles.ts`；需登入的 API 掛 `requireAuth`、管理員 API 掛 `requireRole('admin')`，前端頁面用 `<RequireAuth>` 包起來（只是體驗，權限以後端為準）。
+- 帳號與權限：登入只走海大 CAS（#90），不保存密碼，`users.student_id` 是 CAS 回傳的學號，屬個人資料，不要放進網址、紀錄檔或公開欄位；`npm run dev` 時登入頁是模擬登入（`backend/.env.development` 開啟），測試用 `createTestUser()`。角色統一定義在 `backend/src/modules/auth/roles.ts`；需登入的 API 掛 `requireAuth`、管理員 API 掛 `requireRole('admin')`，前端頁面用 `<RequireAuth>` 包起來（只是體驗，權限以後端為準）。
 - 新功能放進對應的 `features/<模組>/` 與 `modules/<模組>/`；各模組對應的 User Story 與負責人見 `README.md` 與 `docs/user-story-分工.md`。
 
 ## 常用指令

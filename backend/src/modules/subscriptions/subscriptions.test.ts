@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { after, before, describe, test } from 'node:test';
 import { createApp } from '../../app.js';
 import { closeDb, getDb, migrate } from '../../db/index.js';
+import { createTestUser } from '../auth/auth.testHelpers.js';
 import { EVENT_CATEGORIES } from '../events/events.types.js';
 import type { EventCategory } from '../events/events.types.js';
 import { listEventSubscribers } from './subscriptions.service.js';
@@ -67,19 +68,6 @@ async function request(
   };
 }
 
-async function registerUser(email: string) {
-  const response = await fetch(`${baseUrl}/api/auth/register`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password: 'password123', displayName: email.split('@')[0] }),
-  });
-  assert.equal(response.status, 201);
-  const cookie = response.headers.getSetCookie()[0]?.split(';')[0];
-  assert.ok(cookie);
-  const { user } = (await response.json()) as { user: { id: number } };
-  return { cookie, id: user.id };
-}
-
 function subscribedCategories(categories: CategorySubscription[] | undefined): string[] {
   assert.ok(categories);
   return categories.filter((item) => item.subscribed).map((item) => item.category);
@@ -100,7 +88,7 @@ describe('訂閱活動類別（US-07）', () => {
   });
 
   test('登入後列出所有類別，預設皆未訂閱', async () => {
-    const { cookie } = await registerUser('list@example.com');
+    const { cookie } = createTestUser();
     const { status, body } = await request('GET', '/api/subscriptions', { cookie });
     assert.equal(status, 200);
     assert.deepEqual(
@@ -116,7 +104,7 @@ describe('訂閱活動類別（US-07）', () => {
   });
 
   test('可以訂閱多個類別，訂閱狀態會反映在清單', async () => {
-    const { cookie } = await registerUser('multi@example.com');
+    const { cookie } = createTestUser();
     const first = await request('PUT', '/api/subscriptions/lecture', { cookie });
     assert.equal(first.status, 200);
     assert.deepEqual(subscribedCategories(first.body.categories), ['lecture']);
@@ -126,7 +114,7 @@ describe('訂閱活動類別（US-07）', () => {
   });
 
   test('重複訂閱同一類別不會產生重複資料', async () => {
-    const { cookie, id } = await registerUser('repeat@example.com');
+    const { cookie, id } = createTestUser();
     assert.equal((await request('PUT', '/api/subscriptions/sports', { cookie })).status, 200);
     const again = await request('PUT', '/api/subscriptions/sports', { cookie });
     assert.equal(again.status, 200);
@@ -135,7 +123,7 @@ describe('訂閱活動類別（US-07）', () => {
   });
 
   test('取消訂閱後狀態更新，且不再被視為訂閱者', async () => {
-    const { cookie, id } = await registerUser('cancel@example.com');
+    const { cookie, id } = createTestUser({ email: 'cancel@example.com' });
     await request('PUT', '/api/subscriptions/workshop', { cookie });
     await request('PUT', '/api/subscriptions/exhibition', { cookie });
     assert.deepEqual(
@@ -154,8 +142,8 @@ describe('訂閱活動類別（US-07）', () => {
   });
 
   test('每個使用者只看到自己的訂閱', async () => {
-    const alice = await registerUser('alice@example.com');
-    const bob = await registerUser('bob@example.com');
+    const alice = createTestUser();
+    const bob = createTestUser();
     await request('PUT', '/api/subscriptions/lecture', { cookie: alice.cookie });
     const { body } = await request('GET', '/api/subscriptions', { cookie: bob.cookie });
     assert.deepEqual(subscribedCategories(body.categories), []);
@@ -167,7 +155,7 @@ describe('訂閱活動類別（US-07）', () => {
   });
 
   test('不存在的類別回傳 404，且不會寫入資料', async () => {
-    const { cookie, id } = await registerUser('unknown@example.com');
+    const { cookie, id } = createTestUser();
     for (const category of ['unknown', 'LECTURE', '1']) {
       const subscribed = await request('PUT', `/api/subscriptions/${category}`, { cookie });
       assert.equal(subscribed.status, 404, category);
@@ -179,7 +167,7 @@ describe('訂閱活動類別（US-07）', () => {
   });
 
   test('刪除使用者時一併刪除訂閱', async () => {
-    const { cookie, id } = await registerUser('removed@example.com');
+    const { cookie, id } = createTestUser();
     await request('PUT', '/api/subscriptions/lecture', { cookie });
     getDb().prepare('DELETE FROM users WHERE id = ?').run(id);
     assert.equal(countRows(id), 0);
@@ -227,7 +215,7 @@ describe('追蹤來源與 Email 通知開關（#76）', () => {
   });
 
   test('只列出已核准的來源，可追蹤與取消追蹤，重複操作結果相同', async () => {
-    const { cookie, id } = await registerUser('follow-source@example.com');
+    const { cookie, id } = createTestUser();
     const sources = seedSourcePair(id, 'follow');
 
     const initial = await request('GET', '/api/subscriptions', { cookie });
@@ -254,7 +242,7 @@ describe('追蹤來源與 Email 通知開關（#76）', () => {
   });
 
   test('未核准、不存在或格式錯誤的來源回傳 404', async () => {
-    const { cookie, id } = await registerUser('follow-invalid@example.com');
+    const { cookie, id } = createTestUser();
     const sources = seedSourcePair(id, 'invalid');
     for (const sourceId of [String(sources.pending), '99999', 'abc', '0']) {
       const response = await request('PUT', `/api/subscriptions/sources/${sourceId}`, { cookie });
@@ -267,7 +255,7 @@ describe('追蹤來源與 Email 通知開關（#76）', () => {
   });
 
   test('追蹤來源的使用者是該來源新活動的通知對象；關閉 Email 通知後不是', async () => {
-    const { cookie, id } = await registerUser('follow-notify@example.com');
+    const { cookie, id } = createTestUser();
     const sources = seedSourcePair(id, 'notify');
     await request('PUT', `/api/subscriptions/sources/${sources.approved}`, { cookie });
     const recipients = () =>
@@ -295,7 +283,7 @@ describe('追蹤來源與 Email 通知開關（#76）', () => {
   });
 
   test('同時追蹤類別與來源的使用者只會出現一次', async () => {
-    const { cookie, id } = await registerUser('follow-both@example.com');
+    const { cookie, id } = createTestUser();
     const sources = seedSourcePair(id, 'both');
     await request('PUT', `/api/subscriptions/sources/${sources.approved}`, { cookie });
     await request('PUT', '/api/subscriptions/welfare', { cookie });
@@ -304,7 +292,7 @@ describe('追蹤來源與 Email 通知開關（#76）', () => {
   });
 
   test('通知設定的值不是布林時回傳 400', async () => {
-    const { cookie } = await registerUser('settings-invalid@example.com');
+    const { cookie } = createTestUser();
     for (const body of [{}, { emailNotifications: 'no' }, { emailNotifications: 0 }]) {
       const response = await request('PATCH', '/api/subscriptions/settings', { cookie, body });
       assert.equal(response.status, 400);

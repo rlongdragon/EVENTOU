@@ -1,141 +1,103 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Navigate, useSearchParams } from 'react-router';
-import { ApiError } from './api';
+import { ApiError, casLoginUrl, type Role } from './api';
 import { useAuth } from './AuthContext';
-
-type Mode = 'login' | 'register';
-
-const PASSWORD_MIN_LENGTH = 8;
 
 /** 只接受站內路徑，避免 ?redirect= 被拿來導向外部網站 */
 function safeRedirect(value: string | null): string {
-  return value && value.startsWith('/') && !value.startsWith('//') ? value : '/';
+  return value && value.startsWith('/') && !value.startsWith('//') && !value.startsWith('/\\')
+    ? value
+    : '/';
 }
 
-const fieldStyle = { display: 'flex', flexDirection: 'column', gap: '0.25rem' } as const;
 const errorStyle = { color: '#cf222e', margin: 0 } as const;
+const fieldStyle = { display: 'flex', flexDirection: 'column', gap: '0.25rem' } as const;
 
+// 開發模式（npm run dev）只有模擬登入；正式建置直接轉到海大 CAS，只有登入失敗回來時才停在這頁
 export function LoginPage() {
-  const { user, login, register } = useAuth();
+  const { user, loading } = useAuth();
   const [searchParams] = useSearchParams();
-  const [mode, setMode] = useState<Mode>('login');
+  const redirect = safeRedirect(searchParams.get('redirect'));
+  const casFailed = searchParams.get('error') === 'cas';
+  const goToCas = !import.meta.env.DEV && !casFailed && !loading && !user;
+
+  useEffect(() => {
+    if (goToCas) window.location.replace(casLoginUrl(redirect));
+  }, [goToCas, redirect]);
+
+  if (user) return <Navigate to={redirect} replace />;
+  if (loading || goToCas) return null;
+
+  return (
+    <section style={{ maxWidth: 360 }}>
+      <h1>{import.meta.env.DEV ? '模擬登入' : '登入'}</h1>
+      {import.meta.env.DEV ? (
+        <DevLoginForm />
+      ) : (
+        <>
+          <p role="alert" style={errorStyle}>
+            海大帳號登入沒有完成，請再試一次
+          </p>
+          <p>
+            <a className="button-primary" href={casLoginUrl(redirect)}>
+              重新登入
+            </a>
+          </p>
+        </>
+      )}
+    </section>
+  );
+}
+
+function DevLoginForm() {
+  const { devLogin } = useAuth();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-
-  if (user) return <Navigate to={safeRedirect(searchParams.get('redirect'))} replace />;
-
-  function switchMode(next: Mode) {
-    setMode(next);
-    setError(null);
-    setFieldErrors({});
-  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const email = String(form.get('email') ?? '');
-    const password = String(form.get('password') ?? '');
-
     setError(null);
-    setFieldErrors({});
-
-    if (mode === 'register' && password !== form.get('confirmPassword')) {
-      setFieldErrors({ confirmPassword: '兩次輸入的密碼不一致' });
-      return;
-    }
-
     setSubmitting(true);
     try {
-      if (mode === 'login') {
-        await login({ email, password });
-      } else {
-        await register({ email, password, displayName: String(form.get('displayName') ?? '') });
-      }
+      await devLogin(String(form.get('studentId') ?? ''), form.get('role') as Role);
     } catch (caught) {
-      if (caught instanceof ApiError) {
-        setError(caught.message);
-        setFieldErrors(caught.fields);
-      } else {
-        setError('無法連線到伺服器，請稍後再試');
-      }
+      setError(
+        caught instanceof ApiError && caught.status === 404
+          ? '後端沒有開啟模擬登入，請用 npm run dev 啟動'
+          : caught instanceof ApiError
+            ? caught.message
+            : '無法連線到伺服器',
+      );
     } finally {
       setSubmitting(false);
     }
   }
 
-  const isRegister = mode === 'register';
-
   return (
-    <section style={{ maxWidth: 360 }}>
-      <h1>{isRegister ? '註冊' : '登入'}</h1>
-
-      <form
-        key={mode}
-        onSubmit={handleSubmit}
-        style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}
-      >
-        {isRegister && (
-          <label style={fieldStyle}>
-            顯示名稱
-            <input name="displayName" autoComplete="nickname" maxLength={50} required />
-            {fieldErrors.displayName && <p style={errorStyle}>{fieldErrors.displayName}</p>}
-          </label>
-        )}
-
-        <label style={fieldStyle}>
-          Email
-          <input name="email" type="email" autoComplete="email" required />
-          {fieldErrors.email && <p style={errorStyle}>{fieldErrors.email}</p>}
-        </label>
-
-        <label style={fieldStyle}>
-          密碼
-          <input
-            name="password"
-            type="password"
-            autoComplete={isRegister ? 'new-password' : 'current-password'}
-            minLength={isRegister ? PASSWORD_MIN_LENGTH : undefined}
-            required
-          />
-          {fieldErrors.password && <p style={errorStyle}>{fieldErrors.password}</p>}
-        </label>
-
-        {isRegister && (
-          <label style={fieldStyle}>
-            確認密碼
-            <input name="confirmPassword" type="password" autoComplete="new-password" required />
-            {fieldErrors.confirmPassword && <p style={errorStyle}>{fieldErrors.confirmPassword}</p>}
-          </label>
-        )}
-
-        {error && (
-          <p role="alert" style={errorStyle}>
-            {error}
-          </p>
-        )}
-
-        <button type="submit" disabled={submitting}>
-          {submitting ? '處理中…' : isRegister ? '註冊' : '登入'}
-        </button>
-      </form>
-
-      <p>
-        {isRegister ? '已經有帳號？' : '還沒有帳號？'}
-        <button
-          type="button"
-          onClick={() => switchMode(isRegister ? 'login' : 'register')}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: 'var(--color-primary)',
-            cursor: 'pointer',
-            padding: 0,
-          }}
-        >
-          {isRegister ? '登入' : '註冊新帳號'}
-        </button>
-      </p>
-    </section>
+    <form
+      onSubmit={handleSubmit}
+      style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}
+    >
+      <label style={fieldStyle}>
+        學號
+        <input name="studentId" defaultValue="00000001" pattern="[A-Za-z0-9]{1,32}" required />
+      </label>
+      <label style={fieldStyle}>
+        角色
+        <select name="role" defaultValue="user">
+          <option value="user">一般使用者</option>
+          <option value="admin">管理員</option>
+        </select>
+      </label>
+      {error && (
+        <p role="alert" style={errorStyle}>
+          {error}
+        </p>
+      )}
+      <button type="submit" disabled={submitting}>
+        {submitting ? '登入中…' : '登入'}
+      </button>
+    </form>
   );
 }

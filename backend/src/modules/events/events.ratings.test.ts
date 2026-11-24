@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { after, before, describe, test } from 'node:test';
 import { createApp } from '../../app.js';
 import { closeDb, getDb, migrate } from '../../db/index.js';
+import { createTestUser } from '../auth/auth.testHelpers.js';
 import { seedSources } from '../sources/sources.testHelpers.js';
 import type { EventRatingSummary } from './events.ratings.js';
 import { processAnnouncement } from './events.service.js';
@@ -75,18 +76,6 @@ async function request(
   return { status: response.status, body: (text ? JSON.parse(text) : {}) as RatingBody };
 }
 
-async function registerUser(email: string) {
-  const response = await fetch(`${baseUrl}/api/auth/register`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password: 'password123', displayName: email.split('@')[0] }),
-  });
-  assert.equal(response.status, 201);
-  const cookie = response.headers.getSetCookie()[0]?.split(';')[0];
-  assert.ok(cookie);
-  return cookie;
-}
-
 function rate(id: number, score: unknown, cookie?: string) {
   return request('PUT', `/api/events/${id}/ratings`, { cookie, body: { score } });
 }
@@ -113,9 +102,9 @@ describe('活動評價（US-11）', () => {
   });
 
   test('評分後平均分數與人數正確更新', async () => {
-    const alice = await registerUser('alice@example.com');
-    const bob = await registerUser('bob@example.com');
-    const carol = await registerUser('carol@example.com');
+    const alice = createTestUser({ displayName: 'alice' }).cookie;
+    const bob = createTestUser({ displayName: 'bob' }).cookie;
+    const carol = createTestUser({ displayName: 'carol' }).cookie;
 
     assert.deepEqual((await rate(eventId, 5, alice)).body.rating, {
       average: 5,
@@ -148,7 +137,7 @@ describe('活動評價（US-11）', () => {
   });
 
   test('再次評分是修改而非新增', async () => {
-    const dave = await registerUser('dave@example.com');
+    const dave = createTestUser({ displayName: 'dave' }).cookie;
     await rate(otherEventId, 2, dave);
     const { status, body } = await rate(otherEventId, 5, dave);
     assert.equal(status, 200);
@@ -157,7 +146,7 @@ describe('活動評價（US-11）', () => {
   });
 
   test('分數不是 1–5 的整數時被擋下', async () => {
-    const erin = await registerUser('erin@example.com');
+    const erin = createTestUser({ displayName: 'erin' }).cookie;
     for (const score of [0, 6, 3.5, '3', null, undefined, -1]) {
       const { status, body } = await rate(otherEventId, score, erin);
       assert.equal(status, 400, JSON.stringify(score));
@@ -167,7 +156,7 @@ describe('活動評價（US-11）', () => {
   });
 
   test('不存在、待審或無效的活動回傳 404', async () => {
-    const frank = await registerUser('frank@example.com');
+    const frank = createTestUser({ displayName: 'frank' }).cookie;
     for (const id of ['999999', String(reviewId), 'abc']) {
       assert.equal((await request('GET', `/api/events/${id}/ratings`)).status, 404, id);
       const put = await request('PUT', `/api/events/${id}/ratings`, {

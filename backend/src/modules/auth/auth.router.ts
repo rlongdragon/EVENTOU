@@ -1,33 +1,44 @@
+import { randomBytes } from 'node:crypto';
 import { Router, type Response } from 'express';
 import { requireAuth } from './auth.middleware.js';
 import {
   createSession,
-  createUser,
   deleteSession,
-  findUserByEmail,
+  findOrCreateUserByStudentId,
+  setUserRole,
+  updateUserProfile,
   type User,
 } from './auth.service.js';
-import { hashPassword, verifyDummyPassword, verifyPassword } from './password.js';
-import { clearSessionCookie, readSessionToken, setSessionCookie } from './session.js';
+import { isRole } from './roles.js';
+import { casLoginUrl, casLogoutUrl, casServiceUrl, validateServiceTicket } from './cas.js';
+import {
+  clearCasStateCookie,
+  clearSessionCookie,
+  readCasStateCookie,
+  readSessionToken,
+  setCasStateCookie,
+  setSessionCookie,
+} from './session.js';
 
-// 帳號：US-06 註冊／登入（#20）
+// 帳號：#90 以海大 CAS 登入，EVENTOU 不保存密碼，只維護會員資料
 // 需登入或限定角色的 API 請使用 auth.middleware.ts 的 requireAuth / requireRole
 export const authRouter = Router();
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const EMAIL_MAX_LENGTH = 254;
-const PASSWORD_MIN_LENGTH = 8;
-const PASSWORD_MAX_LENGTH = 128;
 const DISPLAY_NAME_MAX_LENGTH = 50;
+const STUDENT_ID_PATTERN = /^[A-Za-z0-9]{1,32}$/;
+const LOGIN_FAILED_PATH = '/login?error=cas';
 
-type FieldErrors = Record<string, string>;
-
-function asString(value: unknown): string {
-  return typeof value === 'string' ? value : '';
-}
-
-function sendValidationError(res: Response, message: string, fields: FieldErrors): void {
-  res.status(400).json({ error: 'validation_error', message, fields });
+/** 只接受站內路徑，避免登入後被導到外部網站 */
+export function safeRedirectPath(value: unknown): string {
+  if (typeof value !== 'string' || !value.startsWith('/')) return '/';
+  try {
+    const url = new URL(value, 'http://eventou.invalid');
+    return url.origin === 'http://eventou.invalid' ? url.pathname + url.search + url.hash : '/';
+  } catch {
+    return '/';
+  }
 }
 
 function startSession(res: Response, user: User): void {
@@ -35,78 +46,101 @@ function startSession(res: Response, user: User): void {
   setSessionCookie(res, token, expiresAt);
 }
 
-authRouter.post('/register', async (req, res) => {
-  const email = asString(req.body?.email).trim().toLowerCase();
-  const password = asString(req.body?.password);
-  const displayName = asString(req.body?.displayName).trim();
+authRouter.get('/cas/login', (req, res) => {
+  const state = randomBytes(16).toString('base64url');
+  setCasStateCookie(res, { state, redirect: safeRedirectPath(req.query.redirect) });
+  res.redirect(casLoginUrl(casServiceUrl(state)));
+});
 
-  const fields: FieldErrors = {};
-  if (!email) {
-    fields.email = '請輸入 Email';
-  } else if (email.length > EMAIL_MAX_LENGTH || !EMAIL_PATTERN.test(email)) {
-    fields.email = 'Email 格式不正確';
-  }
-  if (!password) {
-    fields.password = '請輸入密碼';
-  } else if (password.length < PASSWORD_MIN_LENGTH) {
-    fields.password = `密碼至少需要 ${PASSWORD_MIN_LENGTH} 個字元`;
-  } else if (password.length > PASSWORD_MAX_LENGTH) {
-    fields.password = `密碼不可超過 ${PASSWORD_MAX_LENGTH} 個字元`;
-  }
-  if (!displayName) {
-    fields.displayName = '請輸入顯示名稱';
-  } else if (displayName.length > DISPLAY_NAME_MAX_LENGTH) {
-    fields.displayName = `顯示名稱不可超過 ${DISPLAY_NAME_MAX_LENGTH} 個字元`;
-  }
-
-  if (Object.keys(fields).length > 0) {
-    sendValidationError(res, '註冊資料有誤', fields);
+authRouter.get('/cas/callback', async (req, res) => {
+  const saved = readCasStateCookie(req);
+  const { ticket, state } = req.query;
+  clearCasStateCookie(res);
+  // 登入須從這個瀏覽器發起（state 相符），防止被塞進別人的登入票
+  if (!saved || typeof ticket !== 'string' || !ticket || state !== saved.state) {
+    res.redirect(LOGIN_FAILED_PATH);
     return;
   }
-  if (findUserByEmail(email)) {
-    res.status(409).json({
-      error: 'email_taken',
-      message: '此 Email 已被註冊',
-      fields: { email: '此 Email 已被註冊' },
+  const result = await validateServiceTicket(ticket, casServiceUrl(saved.state));
+  if (!result.ok) {
+    console.warn(`[auth] CAS 登入失敗：${result.error}`);
+    res.redirect(LOGIN_FAILED_PATH);
+    return;
+  }
+  startSession(res, findOrCreateUserByStudentId(result.account));
+  res.redirect(saved.redirect);
+});
+
+// 本機開發的模擬登入（npm run dev 由 .env.development 開啟）；正式環境（NODE_ENV=production）一律停用
+authRouter.post('/dev-login', (req, res) => {
+  if (process.env.NODE_ENV === 'production' || process.env.AUTH_DEV_LOGIN !== '1') {
+    res.status(404).json({ error: 'not_found', message: '找不到此 API' });
+    return;
+  }
+  const studentId = typeof req.body?.studentId === 'string' ? req.body.studentId.trim() : '';
+  if (!STUDENT_ID_PATTERN.test(studentId)) {
+    res.status(400).json({
+      error: 'validation_error',
+      message: '學號格式不正確',
+      fields: { studentId: '學號只能是英數字' },
     });
     return;
   }
-
-  const user = createUser({ email, displayName, passwordHash: await hashPassword(password) });
+  const role: unknown = req.body?.role;
+  if (role !== undefined && !isRole(role)) {
+    res.status(400).json({
+      error: 'validation_error',
+      message: '角色不正確',
+      fields: { role: '角色不正確' },
+    });
+    return;
+  }
+  let user = findOrCreateUserByStudentId(studentId);
+  if (role && role !== user.role) {
+    setUserRole(studentId, role);
+    user = { ...user, role };
+  }
   startSession(res, user);
-  res.status(201).json({ user });
-});
-
-authRouter.post('/login', async (req, res) => {
-  const email = asString(req.body?.email).trim().toLowerCase();
-  const password = asString(req.body?.password);
-
-  const fields: FieldErrors = {};
-  if (!email) fields.email = '請輸入 Email';
-  if (!password) fields.password = '請輸入密碼';
-  if (Object.keys(fields).length > 0) {
-    sendValidationError(res, '請輸入 Email 與密碼', fields);
-    return;
-  }
-
-  const found = findUserByEmail(email);
-  if (!found) await verifyDummyPassword(password);
-  if (!found || !(await verifyPassword(password, found.passwordHash))) {
-    res.status(401).json({ error: 'invalid_credentials', message: 'Email 或密碼錯誤' });
-    return;
-  }
-
-  startSession(res, found.user);
-  res.json({ user: found.user });
+  res.json({ user });
 });
 
 authRouter.post('/logout', (req, res) => {
   const token = readSessionToken(req);
   if (token) deleteSession(token);
   clearSessionCookie(res);
-  res.status(204).end();
+  res.json({ casLogoutUrl: req.body?.cas === true ? casLogoutUrl() : null });
 });
 
 authRouter.get('/me', requireAuth, (req, res) => {
   res.json({ user: req.user });
+});
+
+authRouter.patch('/me', requireAuth, (req, res) => {
+  if (!req.user) return;
+  const body: unknown = req.body;
+  const input: { displayName?: string; email?: string | null } = {};
+  const fields: Record<string, string> = {};
+  const raw = typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : {};
+
+  if (raw.displayName !== undefined) {
+    const displayName = typeof raw.displayName === 'string' ? raw.displayName.trim() : '';
+    if (!displayName) fields.displayName = '請輸入顯示名稱';
+    else if (displayName.length > DISPLAY_NAME_MAX_LENGTH) {
+      fields.displayName = `顯示名稱不可超過 ${DISPLAY_NAME_MAX_LENGTH} 個字元`;
+    } else input.displayName = displayName;
+  }
+  if (raw.email !== undefined) {
+    const email = typeof raw.email === 'string' ? raw.email.trim().toLowerCase() : null;
+    if (email === null && raw.email !== null) fields.email = 'Email 格式不正確';
+    else if (!email) input.email = null;
+    else if (email.length > EMAIL_MAX_LENGTH || !EMAIL_PATTERN.test(email)) {
+      fields.email = 'Email 格式不正確';
+    } else input.email = email;
+  }
+
+  if (Object.keys(fields).length > 0) {
+    res.status(400).json({ error: 'validation_error', message: '會員資料有誤', fields });
+    return;
+  }
+  res.json({ user: updateUserProfile(req.user.id, input) });
 });

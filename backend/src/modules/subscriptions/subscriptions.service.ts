@@ -88,7 +88,7 @@ export function unfollowSource(userId: number, sourceId: number): void {
 }
 
 /**
- * US-08 的通知對象：追蹤該活動的類別或來源、且沒有關閉 Email 通知的使用者。
+ * US-08 的通知對象：追蹤該活動的類別或來源、有通知信箱且沒有關閉 Email 通知的使用者。
  * 沒有行事曆設定資料列的使用者視為通知開啟；同一位使用者只會出現一次。
  */
 export function listEventSubscribers(event: {
@@ -101,6 +101,7 @@ export function listEventSubscribers(event: {
       FROM users
       LEFT JOIN user_calendar_settings settings ON settings.user_id = users.id
       WHERE COALESCE(settings.email_notifications, 1) = 1
+        AND users.email IS NOT NULL
         AND (
           EXISTS (SELECT 1 FROM category_subscriptions cs
             WHERE cs.user_id = users.id AND cs.category = ?)

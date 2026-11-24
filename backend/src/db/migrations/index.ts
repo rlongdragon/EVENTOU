@@ -432,4 +432,49 @@ export const migrations: Migration[] = [
       CREATE INDEX comment_likes_user ON comment_likes (user_id);
     `,
   },
+  {
+    id: 16,
+    name: 'switch_users_to_ntou_cas',
+    // #90 登入改用海大 CAS，不再保存密碼：
+    // - student_id：CAS 驗證後回傳的學號（cas:user），唯一；改版前的帳號沒有學號，保留資料但無法再登入。
+    // - email：改為選填的通知信箱（US-08），不再唯一，也不再當登入帳號。
+    // - 移除 password_hash；清空 sessions，所有人重新以 CAS 登入。
+    // 15 個資料表以外鍵參照 users，SQLite 無法直接改欄位限制，所以重建整張表（見 migrate.ts）。
+    rebuildsReferencedTable: true,
+    up: `
+      CREATE TABLE users_new (
+        id INTEGER PRIMARY KEY,
+        student_id TEXT UNIQUE,
+        email TEXT COLLATE NOCASE,
+        display_name TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'admin')),
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      INSERT INTO users_new (id, email, display_name, role, created_at)
+        SELECT id, email, display_name, role, created_at FROM users;
+
+      DROP TABLE users;
+      ALTER TABLE users_new RENAME TO users;
+
+      DELETE FROM sessions;
+    `,
+  },
+  {
+    id: 17,
+    name: 'shorten_default_display_names',
+    // #90 預設顯示名稱改為學號前 5 碼加 *（01357107 → 01357*），看得出系所但不露出完整學號。
+    // 只更新還在用舊預設值（0135****）的帳號，使用者自己改過的名稱不動。
+    up: `
+      UPDATE users
+      SET display_name = CASE
+        WHEN length(student_id) > 5 THEN substr(student_id, 1, 5) || '*'
+        ELSE substr(student_id, 1, max(0, length(student_id) - 2)) || '*'
+      END
+      WHERE student_id IS NOT NULL
+        AND display_name = substr(student_id, 1, min(4, max(0, length(student_id) - 4)))
+          || substr('********************************', 1,
+            max(4, length(student_id) - min(4, max(0, length(student_id) - 4))));
+    `,
+  },
 ];

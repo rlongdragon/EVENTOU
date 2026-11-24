@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { after, before, describe, test } from 'node:test';
 import { createApp } from '../../app.js';
 import { closeDb, getDb, migrate } from '../../db/index.js';
+import { createTestUser } from '../auth/auth.testHelpers.js';
 import { seedSources } from '../sources/sources.testHelpers.js';
 import { processAnnouncement } from './events.service.js';
 import type { RawAnnouncement } from './events.types.js';
@@ -75,25 +76,6 @@ async function request(
   return { status: response.status, body: (text ? JSON.parse(text) : {}) as Body };
 }
 
-async function registerUser(email: string, displayName: string) {
-  const response = await fetch(`${baseUrl}/api/auth/register`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password: 'password123', displayName }),
-  });
-  assert.equal(response.status, 201);
-  const cookie = response.headers.getSetCookie()[0]?.split(';')[0];
-  assert.ok(cookie);
-  const { user } = (await response.json()) as { user: { id: number } };
-  return { cookie, id: user.id };
-}
-
-async function registerAdmin(email: string) {
-  const admin = await registerUser(email, '管理員');
-  getDb().prepare("UPDATE users SET role = 'admin' WHERE id = ?").run(admin.id);
-  return admin;
-}
-
 async function postComment(id: number, content: string, cookie: string) {
   const { status, body } = await request('POST', `/api/events/${id}/comments`, {
     cookie,
@@ -110,8 +92,8 @@ function report(id: number, commentId: number, body: unknown, cookie?: string) {
 
 describe('留言檢舉（#65）', () => {
   test('登入後可以檢舉別人的留言；訪客、自己的留言、重複檢舉都被擋下', async () => {
-    const author = await registerUser('author@example.com', '作者');
-    const reporter = await registerUser('reporter@example.com', '檢舉者');
+    const author = createTestUser({ displayName: '作者' });
+    const reporter = createTestUser({ displayName: '檢舉者' });
     const commentId = await postComment(eventId, '廣告訊息', author.cookie);
 
     assert.equal((await report(eventId, commentId, { reason: 'spam' })).status, 401);
@@ -132,8 +114,8 @@ describe('留言檢舉（#65）', () => {
   });
 
   test('原因與補充說明需驗證；留言不存在或不屬於該活動回 404', async () => {
-    const author = await registerUser('author2@example.com', '作者二');
-    const reporter = await registerUser('reporter2@example.com', '檢舉者二');
+    const author = createTestUser({ displayName: '作者二' });
+    const reporter = createTestUser({ displayName: '檢舉者二' });
     const commentId = await postComment(eventId, '留言', author.cookie);
 
     for (const body of [{}, { reason: 'unknown' }, { reason: 123 }]) {
@@ -158,10 +140,10 @@ describe('留言檢舉（#65）', () => {
   });
 
   test('只有管理員能看檢舉清單；同一則留言的檢舉合併顯示次數與原因', async () => {
-    const author = await registerUser('author3@example.com', '作者三');
-    const a = await registerUser('a3@example.com', 'A');
-    const b = await registerUser('b3@example.com', 'B');
-    const admin = await registerAdmin('admin3@example.com');
+    const author = createTestUser({ displayName: '作者三' });
+    const a = createTestUser({ displayName: 'A' });
+    const b = createTestUser({ displayName: 'B' });
+    const admin = createTestUser({ displayName: '管理員', role: 'admin' });
     const commentId = await postComment(otherEventId, '不當言論', author.cookie);
     await report(otherEventId, commentId, { reason: 'abusive', note: '人身攻擊' }, a.cookie);
     await report(otherEventId, commentId, { reason: 'abusive' }, b.cookie);
@@ -185,10 +167,10 @@ describe('留言檢舉（#65）', () => {
   });
 
   test('隱藏留言後不再出現在留言列表，同則留言的檢舉一併結案，也不能再被檢舉', async () => {
-    const author = await registerUser('author4@example.com', '作者四');
-    const reporter = await registerUser('reporter4@example.com', '檢舉者四');
-    const late = await registerUser('late4@example.com', '晚到的');
-    const admin = await registerAdmin('admin4@example.com');
+    const author = createTestUser({ displayName: '作者四' });
+    const reporter = createTestUser({ displayName: '檢舉者四' });
+    const late = createTestUser({ displayName: '晚到的' });
+    const admin = createTestUser({ displayName: '管理員', role: 'admin' });
     const commentId = await postComment(eventId, '要被隱藏的留言', author.cookie);
     await report(eventId, commentId, { reason: 'spam' }, reporter.cookie);
 
@@ -218,9 +200,9 @@ describe('留言檢舉（#65）', () => {
   });
 
   test('駁回後留言照常顯示，檢舉從清單移除；不支援的動作回 404', async () => {
-    const author = await registerUser('author5@example.com', '作者五');
-    const reporter = await registerUser('reporter5@example.com', '檢舉者五');
-    const admin = await registerAdmin('admin5@example.com');
+    const author = createTestUser({ displayName: '作者五' });
+    const reporter = createTestUser({ displayName: '檢舉者五' });
+    const admin = createTestUser({ displayName: '管理員', role: 'admin' });
     const commentId = await postComment(eventId, '其實沒問題的留言', author.cookie);
     await report(eventId, commentId, { reason: 'other' }, reporter.cookie);
 

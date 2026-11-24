@@ -56,7 +56,7 @@ npm run dev
 frontend/src/
 ├── app/            # Router 與共用版面
 ├── features/       # 依功能模組分資料夾，每個頁面標示對應 issue
-│   ├── auth/           # US-06
+│   ├── auth/           # US-06（海大 CAS 登入，#90）
 │   ├── events/         # US-01、US-02、US-03、US-10、US-11、US-12
 │   ├── map/            # US-04
 │   ├── subscriptions/  # 追蹤 API（行事曆頁使用）
@@ -69,7 +69,7 @@ backend/src/
 ├── index.ts        # 啟動 HTTP server 與擷取排程
 ├── modules/
 │   ├── health/         # GET /api/health
-│   ├── auth/           # /api/auth          US-06
+│   ├── auth/           # /api/auth          US-06（海大 CAS 登入，#90）
 │   ├── sources/        # /api/sources       US-13 ~ US-16
 │   ├── ingestion/      # 背景排程           US-17、US-18
 │   ├── events/         # /api/events        US-19、US-20、US-01、US-02、US-03、US-10、US-11
@@ -86,17 +86,27 @@ backend/src/
 - `GET /api/map/events?from=YYYY-MM-DD&to=YYYY-MM-DD&category=lecture` 回傳有地點的已發布活動（含 `coordinates` 與對到的建物名稱 `placeName`，對不到時皆為 `null`）、校園中心點 `campus` 及類別選項。`from`、`to` 為台北日期，範圍含兩端，任一端省略即不設限；活動期間與範圍有重疊就會顯示，跨多天的活動在進行中的每一天都查得到（全天活動的 `end_time` 是結束日隔天 00:00，不算進最後一天）；開始日期晚於結束日期時回 400（`invalid_date_range`）。前端預設為今天起 7 天，並提供「今天」「未來 7 天」「未來 30 天」快速選擇，清除篩選後顯示所有日期。`category` 可省略以包含全部類別。
 - 座標來自 `backend/src/modules/map/map.places.ts` 的海大建物對照表（名稱、別名、座標，初始資料取自 OpenStreetMap），不呼叫外部地理編碼服務。活動地點文字包含任一別名即算對到，多個符合時取最長的別名。新地點對不到時，把建物或別名補進對照表即可。
 
-## 帳號與權限（US-06）
+## 帳號與權限（US-06、#90）
 
-- 後端 API：`POST /api/auth/register`、`POST /api/auth/login`、`POST /api/auth/logout`、`GET /api/auth/me`。
-- 登入狀態以 httpOnly cookie（`eventou_session`）保存，session 存在 SQLite，有效期 7 天；密碼以 scrypt 雜湊。
+- 登入一律使用海大 CAS（`https://tccas.ntou.edu.tw/cas`），EVENTOU 不保存密碼，也沒有註冊。CAS 驗證成功只回傳帳號（學生為學號），沒有姓名等其他資料。
+- 後端 API：
+  - `GET /api/auth/cas/login?redirect=/站內路徑`：導向 CAS 登入頁；`redirect` 只接受站內路徑。
+  - `GET /api/auth/cas/callback`：CAS 登入完成後回到這裡，後端以 `serviceValidate` 向 CAS 驗證票證，通過才採用學號；第一次登入自動建立會員資料，之後登入對應到同一筆。失敗時導回 `/login?error=cas`。登入須從同一個瀏覽器發起（`state` 寫在 service 網址與短效 cookie 中），別人取得的票證無法塞進來。
+  - `GET /api/auth/me`（需登入）：回傳 `{ user: { id, studentId, email, displayName, role, createdAt } }`，學號只有本人看得到。
+  - `PATCH /api/auth/me`（需登入）：body 為 `{ "displayName"?: string, "email"?: string }`，修改顯示名稱（1–50 字）與通知信箱；信箱傳空字串表示不寄通知。
+  - `POST /api/auth/logout`：清除站內 session，回傳 `{ casLogoutUrl }`。body 帶 `{ "cas": true }` 時 `casLogoutUrl` 為海大 CAS 的登出網址，前端導過去一併登出 CAS（TronClass 等校內系統也會一起登出），否則為 `null`。
+- 預設值：顯示名稱為學號前 5 碼加 `*`（例如 `01357*`，看得出入學年度與系所，但不露出完整學號），本人在帳號頁看得到完整學號；通知信箱為 `學號@mail.ntou.edu.tw`（`SCHOOL_EMAIL_DOMAIN` 可調整，設為空字串則不預設）。兩者都可在「帳號」頁修改。
+- CAS 只接受 `*.ntou.edu.tw` 的 service 網址，所以 `PUBLIC_BASE_URL` 必須是海大子網域（正式環境為 `https://eventou.ind.ntou.edu.tw`），回呼網址為 `PUBLIC_BASE_URL` + `/api/auth/cas/callback`。
+- 開發模式與正式環境的登入頁不同：`npm run dev` 時登入頁是「模擬登入」，輸入任意學號並選角色即可登入，不經 CAS（`POST /api/auth/dev-login`，由 `backend/.env.development` 的 `AUTH_DEV_LOGIN=1` 開啟）；正式建置只有「使用海大帳號登入」。後端在 `NODE_ENV=production` 時一律停用模擬登入。
+- 登入狀態以 httpOnly cookie（`eventou_session`）保存，session 存在 SQLite，有效期 7 天。
 - 角色統一定義在 `backend/src/modules/auth/roles.ts`：`user`（一般使用者）、`admin`（管理員）；訪客就是未登入。
 - 需登入的 API 掛 `requireAuth`，管理員 API 掛 `requireRole('admin')`（`backend/src/modules/auth/auth.middleware.ts`），handler 內用 `req.user` 取得目前使用者。
 - 前端用 `useAuth()` 取得登入狀態，需登入的頁面包在 `<RequireAuth>`（管理員頁面用 `<RequireAuth role="admin">`）。
-- 註冊的帳號預設為一般使用者，設為管理員：
+- 測試中要登入的使用者用 `createTestUser()`（`backend/src/modules/auth/auth.testHelpers.ts`）直接建立。
+- 新帳號預設為一般使用者。設為管理員時，該學號須先用 CAS 登入過一次：
 
 ```bash
-npm run user:set-role -w backend -- someone@example.com admin
+npm run user:set-role -w backend -- 01357107 admin
 ```
 
 資料庫為 SQLite（`backend/data/eventou.db`，可用 `DATABASE_PATH` 調整），後端啟動時會自動執行 migration。
@@ -104,7 +114,7 @@ npm run user:set-role -w backend -- someone@example.com admin
 資料庫在各自的電腦上，不在 repo 中，新環境一開始沒有任何來源。要擷取學校公告，先把自己的帳號設為管理員，再一次建立擷取設定中所有海大官方公告列表的來源（已核准、啟用中；已存在相同網址的來源會略過，可重複執行），重開後端後就會開始擷取：
 
 ```bash
-npm run sources:seed-ntou -w backend -- someone@example.com
+npm run sources:seed-ntou -w backend -- 01357107
 ```
 
 ## 來源提交（US-13）
@@ -186,9 +196,9 @@ npm run sources:seed-ntou -w backend -- someone@example.com
 ### 追蹤與 Email 通知（US-07、US-08）
 
 - 後端 API（皆需登入）：`GET /api/subscriptions`、`PUT|DELETE /api/subscriptions/:category`（追蹤類別）、`PUT|DELETE /api/subscriptions/sources/:sourceId`（追蹤來源，只能追蹤已核准的來源）、`PATCH /api/subscriptions/settings`（body `{ "emailNotifications": boolean }`）。全部回傳 `{ categories: [{ category, label, subscribed }], sources: [{ id, name, type, followed }], emailNotifications }`。重複追蹤或取消都視為成功。
-- 通知對象為追蹤該活動類別或來源、且沒有關閉 Email 通知的使用者（`listEventSubscribers()`，`backend/src/modules/subscriptions/subscriptions.service.ts`），同一人只算一次。
+- 通知對象為追蹤該活動類別或來源、有通知信箱、且沒有關閉 Email 通知的使用者（`listEventSubscribers()`，`backend/src/modules/subscriptions/subscriptions.service.ts`），同一人只算一次。
 - 新活動通知由後端背景排程處理（`subscriptions.scheduler.ts`），預設每 5 分鐘一輪，可用 `NOTIFICATION_INTERVAL_MS`（毫秒，預設 `300000`）調整。每一輪從 `published_events` 找出**還沒有派送紀錄**的活動建立寄送紀錄並寄信：重跑擷取或活動內容更新不會再寄，`needs_review` 轉為已發布時才第一次通知。
-- 不通知的情況：活動已經結束、來源審核狀態不是 `approved`、使用者在活動派送之後才追蹤、寄出前已取消追蹤或關閉通知。
+- 不通知的情況：活動已經結束、來源審核狀態不是 `approved`、使用者在活動派送之後才追蹤、寄出前已取消追蹤、關閉通知或清空通知信箱。
 - 寄送狀態：`pending`（待寄送或待重試）、`sent`、`failed`（試滿 5 次）、`skipped`。`failed` 的可用 `npm run notifications:retry -w backend` 重新排入。
 - 信件說明收到通知的原因（追蹤的類別或來源），並附活動頁、原始公告與行事曆頁（取消追蹤、關閉通知）的連結；網站位址由 `PUBLIC_BASE_URL` 決定。
 - 寄信使用 SMTP（`nodemailer`），設定見 `backend/.env.example` 的 `SMTP_*` 與 `MAIL_FROM`。**沒有設定 `SMTP_HOST` 時不會真的寄信**，只把信件內容印在後端主控台。

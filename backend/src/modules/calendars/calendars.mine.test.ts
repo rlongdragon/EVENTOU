@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { after, before, describe, test } from 'node:test';
 import { createApp } from '../../app.js';
 import { closeDb, getDb, migrate } from '../../db/index.js';
+import { createTestUser } from '../auth/auth.testHelpers.js';
 import { convertAnnouncement } from '../events/events.converter.js';
 import { upsertEvent } from '../events/events.repository.js';
 import type { EventCategory, RawAnnouncement } from '../events/events.types.js';
@@ -49,7 +50,7 @@ before(async () => {
   migrate();
   const db = getDb();
   db.prepare(
-    "INSERT INTO users (email, password_hash, display_name) VALUES ('owner@example.com', 'x', 'owner')",
+    "INSERT INTO users (student_id, email, display_name) VALUES ('S0000001', 'owner@example.com', 'owner')",
   ).run();
   const insertSource = db.prepare(
     `INSERT INTO sources (name, url, type, review_status, submitted_by)
@@ -122,18 +123,6 @@ async function request(
   };
 }
 
-async function registerUser(email: string): Promise<string> {
-  const response = await fetch(`${baseUrl}/api/auth/register`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password: 'password123', displayName: email.split('@')[0] }),
-  });
-  assert.equal(response.status, 201);
-  const cookie = response.headers.getSetCookie()[0]?.split(';')[0];
-  assert.ok(cookie);
-  return cookie;
-}
-
 interface Item {
   id: number;
   title: string;
@@ -194,12 +183,12 @@ describe('GET /api/calendars/events（月曆）', () => {
 
 describe('我的行事曆：追蹤、加入與隱藏', () => {
   test('剛註冊時我的行事曆是空的', async () => {
-    const cookie = await registerUser('empty@example.com');
+    const cookie = createTestUser().cookie;
     assert.deepEqual(await titles(`${MAY}&scope=mine`, cookie), []);
   });
 
   test('追蹤類別或來源的活動會出現在我的行事曆，並標示原因', async () => {
-    const cookie = await registerUser('follow@example.com');
+    const cookie = createTestUser().cookie;
     await request('PUT', '/api/subscriptions/exhibition', { cookie });
     await request('PUT', `/api/subscriptions/sources/${sources.dept}`, { cookie });
     const { body } = await request('GET', `/api/calendars/events?${MAY}&scope=mine`, { cookie });
@@ -214,7 +203,7 @@ describe('我的行事曆：追蹤、加入與隱藏', () => {
   });
 
   test('手動加入單一活動，移除標記後消失；重複加入結果相同', async () => {
-    const cookie = await registerUser('add@example.com');
+    const cookie = createTestUser().cookie;
     const path = `/api/calendars/events/${ids.sports}/mark`;
     const added = await request('PUT', path, { cookie, body: { state: 'added' } });
     assert.equal(added.status, 200);
@@ -239,7 +228,7 @@ describe('我的行事曆：追蹤、加入與隱藏', () => {
   });
 
   test('隱藏追蹤帶進來的活動；hidden=1 時列出以便還原，移除標記後恢復', async () => {
-    const cookie = await registerUser('hide@example.com');
+    const cookie = createTestUser().cookie;
     await request('PUT', '/api/subscriptions/lecture', { cookie });
     const path = `/api/calendars/events/${ids.lecture}/mark`;
     const hidden = await request('PUT', path, { cookie, body: { state: 'hidden' } });
@@ -256,8 +245,8 @@ describe('我的行事曆：追蹤、加入與隱藏', () => {
   });
 
   test('每個人的行事曆互不影響', async () => {
-    const alice = await registerUser('alice-mine@example.com');
-    const bob = await registerUser('bob-mine@example.com');
+    const alice = createTestUser().cookie;
+    const bob = createTestUser().cookie;
     await request('PUT', `/api/calendars/events/${ids.photo}/mark`, {
       cookie: alice,
       body: { state: 'added' },
@@ -272,7 +261,7 @@ describe('我的行事曆：追蹤、加入與隱藏', () => {
     const path = `/api/calendars/events/${ids.lecture}/mark`;
     assert.equal((await request('GET', path)).status, 401);
     assert.equal((await request('PUT', path, { body: { state: 'added' } })).status, 401);
-    const cookie = await registerUser('mark-invalid@example.com');
+    const cookie = createTestUser().cookie;
     for (const eventId of ['99999', 'abc', String(ids.pending)]) {
       const response = await request('PUT', `/api/calendars/events/${eventId}/mark`, {
         cookie,
@@ -286,7 +275,7 @@ describe('我的行事曆：追蹤、加入與隱藏', () => {
   });
 
   test('GET 標記回傳活動與自己的關係', async () => {
-    const cookie = await registerUser('mark-get@example.com');
+    const cookie = createTestUser().cookie;
     await request('PUT', '/api/subscriptions/sports', { cookie });
     const { status, body } = await request('GET', `/api/calendars/events/${ids.sports}/mark`, {
       cookie,
@@ -305,8 +294,8 @@ describe('跨來源重複活動合併後（US-20）', () => {
       '2099-05-25T10:00:00+08:00',
     );
     const merged = seedEvent('被合併的活動', sources.club, 'workshop', '2099-05-25T10:00:00+08:00');
-    const added = await registerUser('merged-added@example.com');
-    const follower = await registerUser('merged-follow@example.com');
+    const added = createTestUser().cookie;
+    const follower = createTestUser().cookie;
     await request('PUT', `/api/calendars/events/${merged}/mark`, {
       cookie: added,
       body: { state: 'added' },
@@ -329,7 +318,7 @@ describe('跨來源重複活動合併後（US-20）', () => {
 
 describe('同步網址（iCal）', () => {
   test('同步網址輸出我的行事曆，未登入的行事曆軟體也能讀取', async () => {
-    const cookie = await registerUser('feed@example.com');
+    const cookie = createTestUser().cookie;
     await request('PUT', '/api/subscriptions/exhibition', { cookie });
     await request('PUT', `/api/calendars/events/${ids.sports}/mark`, {
       cookie,
@@ -352,7 +341,7 @@ describe('同步網址（iCal）', () => {
   });
 
   test('重設後舊網址失效，新網址可用', async () => {
-    const cookie = await registerUser('feed-reset@example.com');
+    const cookie = createTestUser().cookie;
     const before = String((await request('GET', '/api/calendars/feed', { cookie })).body.icsPath);
     const reset = await request('POST', '/api/calendars/feed/reset', { cookie });
     assert.equal(reset.status, 200);

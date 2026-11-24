@@ -15,6 +15,13 @@ interface CampusMapStageProps {
     ariaLabel: string;
     emptyCenter?: { latitude: number; longitude: number };
   } | null;
+  /** 3D 模型頁網址，可帶 ?select= 聚焦某個場地；預設全景 */
+  src3d?: string;
+  title3d?: string;
+  /** 嵌在活動頁等較小的區塊時用較矮的高度 */
+  compact?: boolean;
+  /** 第一次切到立體才載入 3D 模型，載入完再播過場 */
+  lazy3d?: boolean;
 }
 
 const FADE_MS = 600;
@@ -39,7 +46,14 @@ function isPositioned(map: L.Map): boolean {
  * - 立體 → 平面：3D 先轉回北方朝上的俯視並收成近平行投影，平面地圖對到同一點後再淡入。
  * 兩邊透過 postMessage 溝通（3D 模型在同源的 iframe 裡）。
  */
-export function CampusMapStage({ mode, map2d }: CampusMapStageProps) {
+export function CampusMapStage({
+  mode,
+  map2d,
+  src3d,
+  title3d = '3D 校園模型',
+  compact = false,
+  lazy3d = false,
+}: CampusMapStageProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const leafletRef = useRef<L.Map | null>(null);
   const waitersRef = useRef(new Map<string, (reply: Reply) => void>());
@@ -47,6 +61,10 @@ export function CampusMapStage({ mode, map2d }: CampusMapStageProps) {
   const shownRef = useRef<MapMode>(mode);
   // 3D 模型每次載入完成就加一，用來重送活動標記
   const [frameLoads, setFrameLoads] = useState(0);
+  // lazy3d：切到立體過一次之後才放進 iframe，之後保留，再切換就不用重新載入
+  const [wanted3d, setWanted3d] = useState(mode === '3d');
+  if (mode === '3d' && !wanted3d) setWanted3d(true);
+  const mount3d = !lazy3d || wanted3d;
 
   const show = useCallback((next: MapMode) => {
     shownRef.current = next;
@@ -90,7 +108,14 @@ export function CampusMapStage({ mode, map2d }: CampusMapStageProps) {
     let cancelled = false;
 
     const run = async () => {
-      const win = iframeRef.current?.contentWindow as (Window & { __ready?: boolean }) | null;
+      type FrameWindow = Window & { __ready?: boolean };
+      let win = iframeRef.current?.contentWindow as FrameWindow | null;
+      // 剛放進來的 3D 模型還在載入：等它好了再播過場
+      if (mode === '3d' && lazy3d && !win?.__ready) {
+        await waitFor('eventou:3d-loaded', 20000);
+        if (cancelled) return;
+        win = iframeRef.current?.contentWindow as FrameWindow | null;
+      }
       const map = leafletRef.current;
       // 3D 還沒載入、平面地圖還沒定位，或使用者偏好減少動態時，直接切換
       if (!win?.__ready || !map || !isPositioned(map) || prefersReducedMotion()) {
@@ -130,7 +155,7 @@ export function CampusMapStage({ mode, map2d }: CampusMapStageProps) {
     return () => {
       cancelled = true;
     };
-  }, [mode, show, waitFor]);
+  }, [mode, show, waitFor, lazy3d]);
 
   // 立體模型被藏起來時通知它暫停繪製，省下整頁的 CPU／GPU
   useEffect(() => {
@@ -165,11 +190,11 @@ export function CampusMapStage({ mode, map2d }: CampusMapStageProps) {
 
   return (
     <div
-      className="campus-map-stage"
+      className={compact ? 'campus-map-stage campus-map-stage--compact' : 'campus-map-stage'}
       style={{ '--fade-ms': `${FADE_MS}ms` } as React.CSSProperties}
     >
       <div className="campus-map-layer" data-active={shown === '3d'} inert={shown !== '3d'}>
-        <Campus3DView title="3D 校園模型" iframeRef={iframeRef} />
+        {mount3d && <Campus3DView title={title3d} src={src3d} iframeRef={iframeRef} />}
       </div>
       <div className="campus-map-layer" data-active={shown === '2d'} inert={shown !== '2d'}>
         {map2d && <MapView {...map2d} onReady={onMapReady} />}

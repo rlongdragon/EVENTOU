@@ -1981,6 +1981,8 @@ for (const [no, name, x, y, w, d, floors, rot, roof] of BUILDINGS) {
   if (BOX_EXTRAS[no]) meshes.push(...BOX_EXTRAS[no](w, d, floors * FLOOR_H));
   group.add(...meshes);
   const info = { no, name, floorCount: floors, venue: false, group, body: meshes[0] };
+  // 一般建物的外形，展開樓層時依此切出每層樓板（見 buildFloors）
+  info.floorPlan = [{ poly: P.rect(w, d), y0: 0, h }];
   if (no === 61) info.note = 'B1 有演講廳；彩虹雨棚地下道從北寧路北側直通工學院餐廳';
   for (const m of meshes) {
     m.userData.info = info;
@@ -1998,8 +2000,10 @@ for (const [no, name, x, y, w, d, floors, rot, roof] of BUILDINGS) {
 for (const lm of LANDMARKS) {
   const group = new THREE.Group();
   const meshes = [];
+  const floorPlan = [];
   for (const [poly, y0, h, key, bands] of lm.parts(FLOOR_H)) {
     meshes.push(part(poly, y0, h, key));
+    floorPlan.push({ poly, y0, h });
     // 樓層腰帶：每層一圈淡色樓板線，讓高樓看得出層數
     if (bands)
       for (let k = 1; k * FLOOR_H < h - 0.5; k++)
@@ -2014,6 +2018,7 @@ for (const lm of LANDMARKS) {
     venue: false,
     group,
     body: meshes[0],
+    floorPlan,
   };
   if (lm.dorm)
     Object.assign(info, { always: true, badge: '宿舍', badgeCls: 'dorm', note: lm.dormNote || '' });
@@ -5275,7 +5280,32 @@ const PICK_LAYER = 1;
 const BATCH_TILE = 500; // 切塊邊長（公尺）
 let batchGroup = null;
 const batchedSources = new Set();
+// 原物件 → 它在合併網格裡佔的頂點範圍；選取時把這段縮成一點，只畫原物件
+const batchRanges = new Map();
 let collapsedVenue = false; // 場地收合動畫剛結束，下一幀重建合併網格
+
+// 把某個原物件在合併網格裡的三角形藏起來（頂點縮成一點）或還原。
+// 選取時同一位置只留原物件一份幾何；兩份疊畫靠 polygonOffset 分前後，在部分 GPU 上仍會互相閃爍。
+function setBatchHidden(src, hidden) {
+  const r = batchRanges.get(src);
+  if (!r) return;
+  const pos = r.obj.geometry.getAttribute('position');
+  const from = r.start * 3;
+  const to = (r.start + r.count) * 3;
+  if (hidden) {
+    if (r.backup) return;
+    r.backup = pos.array.slice(from, to);
+    pos.array.fill(0, from, to);
+  } else {
+    if (!r.backup) return;
+    pos.array.set(r.backup, from);
+    r.backup = null;
+  }
+  pos.addUpdateRange(from, to - from);
+  pos.needsUpdate = true;
+  shadowDirty = true;
+  invalidate();
+}
 
 function setHighlight(info, on) {
   if (!info) return;
@@ -5284,17 +5314,19 @@ function setHighlight(info, on) {
       if (on) {
         if (!o.userData.ownMat) {
           o.material = o.material.clone();
-          // 平常由合併網格代畫；高亮時原物件疊畫在同一位置，往前推一點避免與合併網格互相閃爍
-          o.material.polygonOffset = true;
-          o.material.polygonOffsetFactor = -1;
-          o.material.polygonOffsetUnits = -1;
           o.userData.ownMat = true;
         }
         o.material.emissive.copy(HILITE).multiplyScalar(0.35);
-        if (batchedSources.has(o)) o.layers.enable(0);
+        if (batchedSources.has(o)) {
+          o.layers.enable(0);
+          setBatchHidden(o, true);
+        }
       } else if (o.userData.ownMat) {
         o.material.emissive.setRGB(0, 0, 0);
-        if (batchedSources.has(o)) o.layers.disable(0);
+        if (batchedSources.has(o)) {
+          o.layers.disable(0);
+          setBatchHidden(o, false);
+        }
       }
     }
   });
@@ -5336,20 +5368,86 @@ function select(info) {
   badgeEl.style.display = info.venue || info.badge ? 'inline-block' : 'none';
   badgeEl.textContent = info.badge || '活動常用場地';
   badgeEl.className = 'badge ' + (info.badgeCls || '');
-  explodeBtn.style.display = info.floorMeshes ? 'inline-block' : 'none';
+  explodeBtn.style.display = info.floorMeshes || info.floorPlan ? 'inline-block' : 'none';
   explodeBtn.textContent = info.exploded ? '收合樓層' : '展開樓層';
   floorNote.textContent = roomSummary(info);
   const c = new THREE.Vector3();
   info.group.getWorldPosition(c);
   c.y = (info.h || 0) / 2;
-  flyTo(c, info.floorMeshes ? 170 : 240);
+  flyTo(c, info.floorMeshes || info.floorPlan ? 170 : 240);
+}
+
+// 一般建物（沒有樓層模型）展開時用的樓層：第一次展開才依外形 floorPlan 逐層切出樓板。
+// 原本的外觀收進 shell，展開期間藏起來，收合動畫結束才換回來（見主迴圈）。
+const builtFloorInfos = [];
+function buildFloors(info) {
+  const plan = info.floorPlan.filter((q) => q.h >= FLOOR_H * 0.8);
+  const minY = Math.min(...plan.map((q) => q.y0));
+  const maxY = Math.max(...plan.map((q) => q.y0 + q.h));
+  const count = Math.max(1, Math.round((maxY - minY) / FLOOR_H));
+  const basement = Math.max(0, Math.round(-minY / FLOOR_H));
+  const shell = new THREE.Group();
+  for (const o of [...info.group.children]) if (o !== info.label) shell.add(o);
+  const floorsGroup = new THREE.Group();
+  floorsGroup.visible = false;
+  info.group.add(shell, floorsGroup);
+  const color = info.body?.material?.color?.getHex() ?? 0xf4f1ea;
+  const slabMat = mat(color);
+  const floors = [];
+  for (let i = 0; i < count; i++) {
+    const y = minY + i * FLOOR_H;
+    // 這一層高度範圍內有的量體；退縮的高樓層只剩較小的外形
+    const polys = plan.filter((q) => q.y0 <= y + 0.5 && q.y0 + q.h >= y + FLOOR_H - 0.5);
+    if (!polys.length) continue;
+    const fg = new THREE.Group();
+    const fname = i < basement ? `B${basement - i}` : `${i - basement + 1}F`;
+    for (const { poly } of polys) {
+      const slab = prism(poly, FLOOR_H - 0.5, slabMat);
+      const plate = prism(padPoly(poly, 1.2), 0.5, WHITE);
+      plate.position.y = FLOOR_H - 0.5;
+      fg.add(slab, plate);
+    }
+    const box = bbox(polys[0].poly);
+    fg.position.y = y;
+    fg.userData.baseY = y;
+    fg.userData.fname = fname;
+    const index = floors.length;
+    const fl = makeLabel(fname, 'floor hidden', () => showFloor(info, index));
+    fl.position.set(box.x1 + 6, FLOOR_H / 2, (box.z0 + box.z1) / 2);
+    fg.add(fl);
+    fg.userData.label = fl;
+    fg.traverse((o) => {
+      if (o.isMesh) {
+        o.userData.info = info;
+        pickables.push(o);
+      }
+    });
+    floorsGroup.add(fg);
+    floors.push(fg);
+  }
+  Object.assign(info, {
+    floorMeshes: floors,
+    shell,
+    floorsGroup,
+    basement,
+    h: maxY,
+    t: 0,
+    exploded: false,
+  });
+  builtFloorInfos.push(info);
 }
 
 function toggleExplode(info) {
+  if (!info.floorMeshes) buildFloors(info);
   info.exploded = !info.exploded;
   for (const fg of info.floorMeshes)
     fg.userData.label.element.classList.toggle('hidden', !info.exploded);
   if (info.roofMesh) info.roofMesh.visible = !info.exploded;
+  // 一般建物：展開時換成樓層；收合時等動畫結束再換回原外觀
+  if (info.shell && info.exploded) {
+    info.shell.visible = false;
+    info.floorsGroup.visible = true;
+  }
   // 展開時這棟要能動，改畫原物件；收合動畫結束後在主迴圈併回合併網格
   if (info.exploded && batchGroup) buildBatches();
   if (selected === info) {
@@ -5498,6 +5596,12 @@ const editBar = document.getElementById('editBar');
 const editSel = document.getElementById('editSel');
 const editOut = document.getElementById('editOut');
 const editToggle = document.getElementById('editToggle');
+// 正式環境只給人瀏覽：編輯模式、動態、省效能的開關只在開發模式（npm run dev）顯示
+if (!import.meta.env.DEV) {
+  for (const id of ['editToggle', 'dynToggle', 'liteToggle']) {
+    document.getElementById(id).style.display = 'none';
+  }
+}
 const hintEl = document.getElementById('hint');
 
 // 可編輯物件：每個有 group 的 info 一筆，依名稱給固定 id
@@ -8776,7 +8880,7 @@ const dyn = (() => {
 // 這裡把它們跨棟合併成少數幾個網格來畫：顏色寫進頂點色，材質屬性相同的就能合成一個 draw call；
 // 再依位置切成幾塊，拉近時畫面外的塊仍會被裁掉。陰影也改由合併網格投射。
 // 原物件留在場景裡只負責點選與高度偵測：移到 PICK_LAYER，相機與陰影都不畫它，射線另外開啟這一層。
-// 選取高亮時把那一棟的原物件疊畫上去；編輯模式切回原物件，結束編輯再重建。
+// 選取高亮時把那一棟從合併網格藏起來、改畫原物件；編輯模式切回原物件，結束編輯再重建。
 // （PICK_LAYER 等狀態宣告在 setHighlight 前，網址帶 ?select= 時載入途中就會用到）
 // 材質除了顏色以外的屬性都一樣才能合併
 const matSignature = (m) =>
@@ -8812,6 +8916,7 @@ function dropBatches() {
   batchGroup = null;
   for (const o of batchedSources) o.layers.set(0);
   batchedSources.clear();
+  batchRanges.clear();
 }
 function buildBatches() {
   dropBatches();
@@ -8820,7 +8925,15 @@ function buildBatches() {
   const roots = new Set();
   for (const m of pickables) {
     const info = m.userData.info;
-    if (info?.group && !venueGroups.has(info.group) && !info.isBox) roots.add(info.group);
+    // 一般建物展開或收合動畫中時改畫原物件
+    if (
+      info?.group &&
+      !venueGroups.has(info.group) &&
+      !info.isBox &&
+      !info.exploded &&
+      !(info.t > 0)
+    )
+      roots.add(info.group);
   }
   for (const r of ROADS) for (const l of r.layers) roots.add(l.mesh);
   // 活動場地沒展開、也不在動畫中時一起合併
@@ -8863,9 +8976,19 @@ function buildBatches() {
       if (!b)
         buckets.set(
           key,
-          (b = { kind, mat: m, cast: o.castShadow, recv: o.receiveShadow, geos: [] }),
+          (b = {
+            kind,
+            mat: m,
+            cast: o.castShadow,
+            recv: o.receiveShadow,
+            geos: [],
+            srcs: [],
+            n: 0,
+          }),
         );
       b.geos.push(g);
+      b.srcs.push({ o, start: b.n, count: n });
+      b.n += n;
       batchedSources.add(o);
     });
   }
@@ -8884,9 +9007,13 @@ function buildBatches() {
     obj.matrixAutoUpdate = false;
     obj.raycast = () => {}; // 點選一律打在原物件上
     batchGroup.add(obj);
+    for (const { o, start, count } of b.srcs)
+      batchRanges.set(o, { obj, start, count, backup: null });
   }
   scene.add(batchGroup);
   for (const o of batchedSources) o.layers.set(PICK_LAYER);
+  // 重建時若有選取中的建物，照樣只畫原物件
+  if (selected) setHighlight(selected, true);
   shadowDirty = true;
   invalidate();
 }
@@ -8916,12 +9043,16 @@ renderer.setAnimationLoop(() => {
     if (anim.t >= 1) anim = null;
     moving = true;
   }
-  for (const v of venueInfos) {
+  for (const v of venueInfos.concat(builtFloorInfos)) {
     const goal = v.exploded ? 1 : 0;
     if (Math.abs(goal - v.t) < 1e-4) continue;
     v.t += (goal - v.t) * Math.min(1, dt * 6);
     if (Math.abs(goal - v.t) < 1e-4) {
       v.t = goal;
+      if (goal === 0 && v.shell) {
+        v.shell.visible = true;
+        v.floorsGroup.visible = false;
+      }
       // 收合完成：併回合併網格（編輯模式下不合併）
       if (goal === 0 && batchGroup) collapsedVenue = true;
     }
