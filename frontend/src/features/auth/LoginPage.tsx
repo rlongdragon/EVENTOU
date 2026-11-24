@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Navigate, useSearchParams } from 'react-router';
 import { ApiError, casLoginUrl, type Role } from './api';
 import { useAuth } from './AuthContext';
@@ -13,13 +13,20 @@ function safeRedirect(value: string | null): string {
 const errorStyle = { color: '#cf222e', margin: 0 } as const;
 const fieldStyle = { display: 'flex', flexDirection: 'column', gap: '0.25rem' } as const;
 
-// 開發模式（npm run dev）只有模擬登入；正式建置只有海大 CAS 登入
+// 開發模式（npm run dev）只有模擬登入；正式建置直接轉到海大 CAS，只有登入失敗回來時才停在這頁
 export function LoginPage() {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
   const [searchParams] = useSearchParams();
   const redirect = safeRedirect(searchParams.get('redirect'));
+  const casFailed = searchParams.get('error') === 'cas';
+  const goToCas = !import.meta.env.DEV && !casFailed && !loading && !user;
+
+  useEffect(() => {
+    if (goToCas) window.location.replace(casLoginUrl(redirect));
+  }, [goToCas, redirect]);
 
   if (user) return <Navigate to={redirect} replace />;
+  if (loading || goToCas) return null;
 
   return (
     <section style={{ maxWidth: 360 }}>
@@ -28,14 +35,12 @@ export function LoginPage() {
         <DevLoginForm />
       ) : (
         <>
-          {searchParams.get('error') === 'cas' && (
-            <p role="alert" style={errorStyle}>
-              海大帳號登入沒有完成，請再試一次
-            </p>
-          )}
+          <p role="alert" style={errorStyle}>
+            海大帳號登入沒有完成，請再試一次
+          </p>
           <p>
             <a className="button-primary" href={casLoginUrl(redirect)}>
-              使用海大帳號登入
+              重新登入
             </a>
           </p>
         </>

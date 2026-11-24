@@ -1,5 +1,5 @@
-import { NavLink, Outlet } from 'react-router';
-import type { Role } from '../features/auth/api';
+import { NavLink, Outlet, useLocation } from 'react-router';
+import { casLoginUrl, type Role } from '../features/auth/api';
 import { useAuth } from '../features/auth/AuthContext';
 import { useTaipeiToday } from '../shared/taipeiToday';
 
@@ -18,6 +18,7 @@ const ROLE_LABELS: Record<Role, string> = { user: '一般使用者', admin: '管
 
 export function Layout() {
   const { user, loading, logout } = useAuth();
+  const location = useLocation();
   const navItems = NAV_ITEMS.filter((item) => !item.role || item.role === user?.role);
 
   // 刊頭日期：台北時間的今天，過午夜自動換日
@@ -63,7 +64,14 @@ export function Layout() {
                 </button>
               </>
             )}
-            {!loading && !user && <NavLink to="/login">登入</NavLink>}
+            {!loading &&
+              !user &&
+              // 正式環境直接前往海大 CAS，登入後回到目前頁面；開發模式到模擬登入頁
+              (import.meta.env.DEV ? (
+                <NavLink to="/login">登入</NavLink>
+              ) : (
+                <a href={casLoginUrl(location.pathname + location.search)}>登入</a>
+              ))}
           </span>
         </nav>
       </header>
