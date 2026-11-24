@@ -25,7 +25,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       loading,
       devLogin: async (studentId, role) => setUser(await authApi.devLogin(studentId, role)),
-      updateProfile: async (input) => setUser(await authApi.updateProfile(input)),
+      updateProfile: async (input) => {
+        const updated = await authApi.updateProfile(input);
+        setUser(updated);
+        return updated;
+      },
+      resendEmailVerification: async () => setUser(await authApi.resendEmailVerification()),
+      cancelEmailVerification: async () => setUser(await authApi.cancelEmailVerification()),
+      refreshUser: async () => setUser(await authApi.fetchCurrentUser()),
       logout: async (cas = false) => {
         const casLogoutUrl = await authApi.logout(cas);
         setUser(null);
