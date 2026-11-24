@@ -78,6 +78,12 @@
   font-weight: 700;
 }
 
+/* #100 管理員的留言左側加一條金線，長串留言中也一眼看得出來 */
+.comment-body--admin {
+  padding-left: 0.6rem;
+  border-left: 2px solid #d4a84b;
+}
+
 .comment-badge {
   padding: 0 0.35rem;
   border: 1px solid var(--color-line);

@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { getDb } from '../../db/index.js';
 import { profileFromStudentId } from '../events/events.relevance.js';
 import { isEventTopic, type Department, type EventTopic } from '../events/events.types.js';
+import { defaultDisplayName } from './auth.displayName.js';
 import type { Role } from './roles.js';
 
 export interface User {
@@ -79,32 +80,49 @@ export function defaultSchoolEmail(studentId: string): string | null {
   return domain ? `${studentId.toLowerCase()}@${domain}` : null;
 }
 
-/** 以 CAS 驗證過的學號取得會員資料，第一次登入時自動建立。 */
+/**
+ * 以 CAS 驗證過的學號取得會員資料，第一次登入時自動建立。
+ * 預設顯示名稱需要 id 才能產生短代碼（#100），所以建立後再補上。
+ */
 export function findOrCreateUserByStudentId(studentId: string): User {
   const db = getDb();
+  const masked = maskStudentId(studentId);
+  // #88 第一次登入時由學號推系所與入學學年
   const profile = profileFromStudentId(studentId);
-  db.prepare(
-    `INSERT INTO users (student_id, email, display_name, department, admission_year)
-    VALUES (?, ?, ?, ?, ?)
-    ON CONFLICT (student_id) DO NOTHING`,
-  ).run(
-    studentId,
-    defaultSchoolEmail(studentId),
-    maskStudentId(studentId),
-    profile?.department ?? null,
-    profile?.admissionYear ?? null,
-  );
+  const inserted = db
+    .prepare(
+      `INSERT INTO users (student_id, email, display_name, department, admission_year)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT (student_id) DO NOTHING
+      RETURNING id`,
+    )
+    .get(
+      studentId,
+      defaultSchoolEmail(studentId),
+      masked,
+      profile?.department ?? null,
+      profile?.admissionYear ?? null,
+    );
+  if (inserted) {
+    const id = Number(inserted.id);
+    db.prepare('UPDATE users SET display_name = ? WHERE id = ?').run(
+      defaultDisplayName(masked, id),
+      id,
+    );
+  }
   return toUser(
     db.prepare('SELECT * FROM users WHERE student_id = ?').get(studentId) as unknown as UserRow,
   );
 }
 
-/** 更新本人的顯示名稱與通知信箱；欄位須先驗證，undefined 表示不變。 */
+/**
+ * 更新本人的顯示名稱與個人化設定（須先驗證），undefined 表示不變；回傳最新的會員資料。
+ * 通知信箱須經驗證才能變更，見 auth.emailVerification.ts（#99）。
+ */
 export function updateUserProfile(
   userId: number,
   input: {
     displayName?: string;
-    email?: string | null;
     department?: Department | null;
     admissionYear?: number | null;
     personalize?: boolean;
@@ -134,9 +152,6 @@ export function updateUserProfile(
     );
   if (input.displayName !== undefined) {
     db.prepare('UPDATE users SET display_name = ? WHERE id = ?').run(input.displayName, userId);
-  }
-  if (input.email !== undefined) {
-    db.prepare('UPDATE users SET email = ? WHERE id = ?').run(input.email, userId);
   }
   return toUser(db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as unknown as UserRow);
 }

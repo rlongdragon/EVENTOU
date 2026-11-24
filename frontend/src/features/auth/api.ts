@@ -5,8 +5,10 @@ export interface User {
   id: number;
   /** 海大 CAS 回傳的學號；只有本人看得到 */
   studentId: string | null;
-  /** 新活動通知信箱，null 表示不寄 */
+  /** 已驗證的新活動通知信箱，null 表示不寄 */
   email: string | null;
+  /** #99 等待驗證的新信箱；驗證前通知仍寄到 email */
+  pendingEmail?: string | null;
   displayName: string;
   role: Role;
   createdAt: string;
@@ -107,6 +109,27 @@ export async function suggestInterests(description: string): Promise<string[] | 
     if (error instanceof ApiError && (error.status === 503 || error.status === 429)) return null;
     throw error;
   }
+}
+
+/** #99 重寄驗證信 */
+export async function resendEmailVerification(): Promise<User> {
+  const { user } = await request<{ user: User }>('/api/auth/me/email-verification', {
+    method: 'POST',
+  });
+  return user;
+}
+
+/** #99 取消修改信箱，繼續使用原本的通知信箱 */
+export async function cancelEmailVerification(): Promise<User> {
+  const { user } = await request<{ user: User }>('/api/auth/me/email-verification', {
+    method: 'DELETE',
+  });
+  return user;
+}
+
+/** #99 以驗證信中的 token 完成驗證；不需登入 */
+export async function verifyEmail(token: string): Promise<void> {
+  await request('/api/auth/verify-email', { method: 'POST', body: JSON.stringify({ token }) });
 }
 
 /** 登出本站；cas 為 true 時回傳海大 CAS 的登出網址，由呼叫端導過去 */

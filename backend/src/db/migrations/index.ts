@@ -479,6 +479,42 @@ export const migrations: Migration[] = [
   },
   {
     id: 18,
+    name: 'create_email_verifications',
+    // #99 修改通知信箱須寄驗證信確認：驗證前 users.email 不變，通知仍寄到原本已驗證的信箱。
+    // 每次寄驗證信新增一筆（重寄也是），以便計算寄送頻率；token 只存 SHA-256。
+    up: `
+      CREATE TABLE email_verifications (
+        id INTEGER PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+        email TEXT NOT NULL COLLATE NOCASE,
+        token_hash TEXT NOT NULL UNIQUE,
+        status TEXT NOT NULL DEFAULT 'pending'
+          CHECK (status IN ('pending', 'verified', 'cancelled')),
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        verified_at TEXT
+      );
+
+      CREATE INDEX email_verifications_user ON email_verifications (user_id, created_at);
+    `,
+  },
+  {
+    id: 19,
+    name: 'unique_default_display_names',
+    // #100 預設顯示名稱加上由 id 產生的短代碼（01357* → 01357*-3F2A1），同系同屆的人不再同名。
+    // 算式與 auth.displayName.ts 的 displayNameCode 相同；只更新仍在用預設名稱的帳號。
+    up: `
+      UPDATE users
+      SET display_name = display_name || '-' || printf('%05X', (id * 40503) % 1048576)
+      WHERE student_id IS NOT NULL
+        AND display_name = CASE
+          WHEN length(student_id) > 5 THEN substr(student_id, 1, 5) || '*'
+          ELSE substr(student_id, 1, max(0, length(student_id) - 2)) || '*'
+        END;
+    `,
+  },
+  {
+    id: 20,
     name: 'add_llm_extraction_topics_and_personalization',
     // #69 LLM 整理公告與細分類：
     // - events.topics：主題（可多選，值域見 EVENT_TOPICS），和 category（形式）組合篩選。
@@ -547,11 +583,11 @@ export const migrations: Migration[] = [
     `,
   },
   {
-    id: 19,
+    id: 21,
     name: 'add_event_audiences_and_user_interests',
     // 分類改成三個維度：資訊類別（category）、內容領域（topics）、資訊受眾（audiences，值域見 EVENT_AUDIENCES）。
     // #98 使用者用一段話描述自己，AI 建議偏好領域，使用者確認後存在 interest_topics；描述只存在後端。
-    // published_events 的欄位清單與 migration 18 相同，只多加上 audiences。
+    // published_events 的欄位清單與 migration 20 相同，只多加上 audiences。
     up: `
       DROP VIEW published_events;
 

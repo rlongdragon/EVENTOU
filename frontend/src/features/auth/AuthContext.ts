@@ -8,7 +8,13 @@ export interface AuthContextValue {
   loading: boolean;
   /** 開發模式的模擬登入 */
   devLogin: (studentId: string, role: Role) => Promise<void>;
-  updateProfile: (input: ProfileInput) => Promise<void>;
+  /** 回傳更新後的會員資料 */
+  updateProfile: (input: ProfileInput) => Promise<User>;
+  /** #99 重寄或取消等待驗證的通知信箱 */
+  resendEmailVerification: () => Promise<void>;
+  cancelEmailVerification: () => Promise<void>;
+  /** 重新向後端取得登入狀態（例如完成信箱驗證後） */
+  refreshUser: () => Promise<void>;
   /** cas 為 true 時一併登出海大 CAS（會離開本站） */
   logout: (cas?: boolean) => Promise<void>;
 }

@@ -13,6 +13,7 @@ process.env.DATABASE_PATH = ':memory:';
 process.env.PUBLIC_BASE_URL = 'https://eventou.example.ntou.edu.tw';
 delete process.env.SCHOOL_EMAIL_DOMAIN;
 delete process.env.AUTH_DEV_LOGIN;
+delete process.env.SMTP_HOST;
 
 let server: Server;
 let baseUrl: string;
@@ -139,7 +140,7 @@ describe('CAS 登入', () => {
     assert.ok(result.cookies.get('eventou_cas_state'));
   });
 
-  test('第一次登入自動建立會員：學號前 5 碼當顯示名稱、學校信箱當通知信箱，並回到原頁面', async () => {
+  test('第一次登入自動建立會員：學號前 5 碼加短代碼當顯示名稱、學校信箱當通知信箱，並回到原頁面', async () => {
     const result = await casLogin('01357107', '/events/3?tab=info');
     assert.equal(result.status, 302);
     assert.equal(result.location, '/events/3?tab=info');
@@ -147,7 +148,7 @@ describe('CAS 登入', () => {
     const me = await request('GET', '/api/auth/me', { cookie: sessionCookie(result) });
     assert.equal(me.status, 200);
     assert.equal(me.body.user.studentId, '01357107');
-    assert.equal(me.body.user.displayName, '01357*');
+    assert.match(me.body.user.displayName, /^01357\*-[0-9A-F]{5}$/);
     assert.equal(me.body.user.email, '01357107@mail.ntou.edu.tw');
     assert.equal(me.body.user.role, 'user');
     assert.equal(me.body.user.passwordHash, undefined);
@@ -257,18 +258,24 @@ describe('CAS 登入', () => {
 });
 
 describe('會員資料', () => {
-  test('可修改顯示名稱與通知信箱，清空信箱表示不寄通知', async () => {
-    const { cookie } = createTestUser();
+  test('可修改顯示名稱；新信箱要驗證後才生效（#99），清空信箱表示不寄通知', async () => {
+    const { cookie, studentId } = createTestUser();
+    const original = `${studentId.toLowerCase()}@example.com`;
     const updated = await request('PATCH', '/api/auth/me', {
       cookie,
       body: { displayName: '  阿華  ', email: 'Hua@Example.com' },
     });
     assert.equal(updated.status, 200);
     assert.equal(updated.body.user.displayName, '阿華');
-    assert.equal(updated.body.user.email, 'hua@example.com');
+    assert.equal(updated.body.user.email, original);
+    assert.equal(updated.body.user.pendingEmail, 'hua@example.com');
+
+    const me = await request('GET', '/api/auth/me', { cookie });
+    assert.equal(me.body.user.pendingEmail, 'hua@example.com');
 
     const cleared = await request('PATCH', '/api/auth/me', { cookie, body: { email: '' } });
     assert.equal(cleared.body.user.email, null);
+    assert.equal(cleared.body.user.pendingEmail, null);
     assert.equal(cleared.body.user.displayName, '阿華');
   });
 

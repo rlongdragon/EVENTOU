@@ -2,6 +2,7 @@ import { Navigate, createBrowserRouter } from 'react-router';
 import { AccountPage } from '../features/auth/AccountPage';
 import { LoginPage } from '../features/auth/LoginPage';
 import { RequireAuth } from '../features/auth/RequireAuth';
+import { VerifyEmailPage } from '../features/auth/VerifyEmailPage';
 import { CalendarPage } from '../features/calendars/CalendarPage';
 import { AdminDuplicatesPage } from '../features/events/AdminDuplicatesPage';
 import { AdminCommentReportsPage } from '../features/events/AdminCommentReportsPage';
@@ -25,6 +26,8 @@ export const router = createBrowserRouter([
         }),
       },
       { path: 'login', element: <LoginPage /> },
+      // #99 驗證信中的連結；不需登入
+      { path: 'verify-email', element: <VerifyEmailPage /> },
       {
         path: 'account',
         element: (
