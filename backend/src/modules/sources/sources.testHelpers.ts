@@ -6,7 +6,7 @@ import type { DatabaseSync } from 'node:sqlite';
  */
 export function seedSources(db: DatabaseSync, count = 1): void {
   db.prepare(
-    "INSERT INTO users (email, password_hash, display_name) VALUES ('seed@example.com', 'x', 'seed')",
+    "INSERT INTO users (student_id, email, display_name) VALUES ('S0000001', 'seed@example.com', 'seed')",
   ).run();
   const insert = db.prepare(
     "INSERT INTO sources (name, url, type, submitted_by) VALUES (?, ?, 'other', 1)",

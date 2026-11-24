@@ -38,8 +38,15 @@ function insertEvent(
 }
 
 function seedUserAndSource(db: DatabaseSync) {
+  // migration 16（#90）之後 users 沒有 password_hash，這裡在兩種 schema 都可能用到
+  const hasPassword = db
+    .prepare('PRAGMA table_info(users)')
+    .all()
+    .some((column) => column.name === 'password_hash');
   db.prepare(
-    "INSERT INTO users (email, password_hash, display_name) VALUES ('a@example.com', 'x', 'a')",
+    hasPassword
+      ? "INSERT INTO users (email, password_hash, display_name) VALUES ('a@example.com', 'x', 'a')"
+      : "INSERT INTO users (email, display_name) VALUES ('a@example.com', 'a')",
   ).run();
   db.prepare(
     "INSERT INTO sources (name, url, type, submitted_by) VALUES ('來源', 'https://example.com', 'other', 1)",

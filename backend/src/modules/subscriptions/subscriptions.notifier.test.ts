@@ -44,10 +44,13 @@ function createFakeMailer() {
   return { sent, mailer };
 }
 
-function createUser(email: string): number {
+let nextStudentId = 1;
+
+/** email 為 null 表示使用者沒有通知信箱（#90 改為選填） */
+function createUser(email: string | null, displayName = email?.split('@')[0] ?? 'nomail'): number {
   const result = getDb()
-    .prepare("INSERT INTO users (email, password_hash, display_name) VALUES (?, 'x', ?)")
-    .run(email, email.split('@')[0]);
+    .prepare('INSERT INTO users (student_id, email, display_name) VALUES (?, ?, ?)')
+    .run(`N${String(nextStudentId++).padStart(7, '0')}`, email, displayName);
   return Number(result.lastInsertRowid);
 }
 
@@ -264,6 +267,31 @@ describe('新活動 Email 通知（US-08）', () => {
     assert.equal(result.skipped, 1);
     assert.equal(sent.length, 0);
     assert.equal(notifications()[0].status, 'skipped');
+  });
+
+  test('沒有通知信箱的使用者不排入通知；寄出前才清空信箱的待寄通知改為 skipped', async () => {
+    const carol = createUser(null);
+    subscribeCategory(carol, 'lecture');
+    subscribeCategory(alice, 'lecture');
+    const { sent, mailer } = createFakeMailer();
+    mailer.failing = true;
+    createEvent('lecture');
+    await runNotificationCycle(mailer, BASE_URL, now);
+    assert.deepEqual(
+      notifications().map((record) => record.user_id),
+      [alice],
+    );
+
+    getDb().prepare('UPDATE users SET email = NULL WHERE id = ?').run(alice);
+    try {
+      mailer.failing = false;
+      const result = await runNotificationCycle(mailer, BASE_URL, now);
+      assert.equal(result.skipped, 1);
+      assert.equal(sent.length, 0);
+      assert.equal(notifications()[0].status, 'skipped');
+    } finally {
+      getDb().prepare("UPDATE users SET email = 'alice@example.com' WHERE id = ?").run(alice);
+    }
   });
 
   test('追蹤來源的使用者會收到該來源的新活動，信中說明是因為追蹤來源', async () => {

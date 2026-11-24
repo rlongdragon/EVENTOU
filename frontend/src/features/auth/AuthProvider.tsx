@@ -24,11 +24,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       user,
       loading,
-      login: async (input) => setUser(await authApi.login(input)),
-      register: async (input) => setUser(await authApi.register(input)),
-      logout: async () => {
-        await authApi.logout();
+      devLogin: async (studentId, role) => setUser(await authApi.devLogin(studentId, role)),
+      updateProfile: async (input) => setUser(await authApi.updateProfile(input)),
+      logout: async (cas = false) => {
+        const casLogoutUrl = await authApi.logout(cas);
         setUser(null);
+        if (casLogoutUrl) window.location.assign(casLogoutUrl);
       },
     }),
     [user, loading],

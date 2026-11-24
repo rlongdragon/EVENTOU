@@ -104,7 +104,7 @@ export function dispatchNewEvents(now = new Date()): number {
 
 /**
  * 寄出所有 pending 的通知。寄出前會再確認一次：使用者已不再追蹤該類別與來源、
- * 已關閉 Email 通知，或活動已不是已發布狀態時不寄，標記為 skipped。
+ * 已關閉 Email 通知、沒有通知信箱，或活動已不是已發布狀態時不寄，標記為 skipped。
  */
 export async function sendPendingNotifications(
   mailer: Mailer,
@@ -145,6 +145,7 @@ export async function sendPendingNotifications(
       row.followed_source_name === null ? null : String(row.followed_source_name);
     if (
       row.event_id === null ||
+      row.email === null ||
       Number(row.notifications_enabled) !== 1 ||
       (!followsCategory && followedSourceName === null)
     ) {

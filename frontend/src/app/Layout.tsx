@@ -48,15 +48,22 @@ export function Layout() {
           <span className="site-nav-user">
             {!loading && user && (
               <>
-                <span>
+                <NavLink to="/account">
                   {user.displayName}（{ROLE_LABELS[user.role]}）
-                </span>
+                </NavLink>
                 <button type="button" onClick={() => void logout()}>
                   登出
                 </button>
+                <button
+                  type="button"
+                  className="site-nav-cas-logout"
+                  onClick={() => void logout(true)}
+                >
+                  同時登出海大 CAS
+                </button>
               </>
             )}
-            {!loading && !user && <NavLink to="/login">登入／註冊</NavLink>}
+            {!loading && !user && <NavLink to="/login">登入</NavLink>}
           </span>
         </nav>
       </header>

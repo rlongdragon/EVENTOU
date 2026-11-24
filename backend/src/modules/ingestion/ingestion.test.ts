@@ -207,6 +207,7 @@ test('手動入口與紀錄只允許管理員，並驗證來源識別碼', async
     if (req.headers['x-test-role'])
       req.user = {
         id: 1,
+        studentId: 'T0000001',
         email: 'test@example.com',
         displayName: '測試',
         createdAt: '2026-10-13T00:00:00Z',

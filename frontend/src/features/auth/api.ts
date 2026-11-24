@@ -3,19 +3,18 @@ export type Role = 'user' | 'admin';
 
 export interface User {
   id: number;
-  email: string;
+  /** 海大 CAS 回傳的學號；只有本人看得到 */
+  studentId: string | null;
+  /** 新活動通知信箱，null 表示不寄 */
+  email: string | null;
   displayName: string;
   role: Role;
   createdAt: string;
 }
 
-export interface LoginInput {
-  email: string;
-  password: string;
-}
-
-export interface RegisterInput extends LoginInput {
-  displayName: string;
+export interface ProfileInput {
+  displayName?: string;
+  email?: string;
 }
 
 /** 後端回傳的錯誤，fields 為各欄位的錯誤訊息。 */
@@ -61,22 +60,33 @@ export async function fetchCurrentUser(signal?: AbortSignal): Promise<User | nul
   }
 }
 
-export async function login(input: LoginInput): Promise<User> {
-  const { user } = await request<{ user: User }>('/api/auth/login', {
+/** 以海大 CAS 登入的網址，登入完成後回到 redirect（站內路徑） */
+export function casLoginUrl(redirect = '/'): string {
+  return `/api/auth/cas/login?redirect=${encodeURIComponent(redirect)}`;
+}
+
+/** 開發模式的模擬登入（npm run dev 才開啟，正式環境停用） */
+export async function devLogin(studentId: string, role: Role): Promise<User> {
+  const { user } = await request<{ user: User }>('/api/auth/dev-login', {
     method: 'POST',
+    body: JSON.stringify({ studentId, role }),
+  });
+  return user;
+}
+
+export async function updateProfile(input: ProfileInput): Promise<User> {
+  const { user } = await request<{ user: User }>('/api/auth/me', {
+    method: 'PATCH',
     body: JSON.stringify(input),
   });
   return user;
 }
 
-export async function register(input: RegisterInput): Promise<User> {
-  const { user } = await request<{ user: User }>('/api/auth/register', {
+/** 登出本站；cas 為 true 時回傳海大 CAS 的登出網址，由呼叫端導過去 */
+export async function logout(cas = false): Promise<string | null> {
+  const { casLogoutUrl } = await request<{ casLogoutUrl: string | null }>('/api/auth/logout', {
     method: 'POST',
-    body: JSON.stringify(input),
+    body: JSON.stringify({ cas }),
   });
-  return user;
-}
-
-export async function logout(): Promise<void> {
-  await request<void>('/api/auth/logout', { method: 'POST' });
+  return casLogoutUrl;
 }

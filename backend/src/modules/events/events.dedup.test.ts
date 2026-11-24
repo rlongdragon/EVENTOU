@@ -5,7 +5,7 @@ import type { AddressInfo } from 'node:net';
 import { after, before, beforeEach, describe, test } from 'node:test';
 import { createApp } from '../../app.js';
 import { closeDb, getDb, migrate } from '../../db/index.js';
-import { setUserRole } from '../auth/auth.service.js';
+import { createTestUser } from '../auth/auth.testHelpers.js';
 import { seedSources } from '../sources/sources.testHelpers.js';
 import {
   classifyScore,
@@ -134,17 +134,6 @@ let baseUrl: string;
 let adminCookie: string;
 let userCookie: string;
 
-async function register(email: string): Promise<string> {
-  const response = await fetch(`${baseUrl}/api/auth/register`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password: 'password123', displayName: email.split('@')[0] }),
-  });
-  const cookie = response.headers.getSetCookie()[0]?.split(';')[0];
-  assert.ok(cookie);
-  return cookie;
-}
-
 async function request(method: string, path: string, cookie?: string) {
   const response = await fetch(`${baseUrl}${path}`, {
     method,
@@ -162,9 +151,8 @@ before(async () => {
   server = createApp().listen(0);
   await new Promise((resolve) => server.once('listening', resolve));
   baseUrl = `http://localhost:${(server.address() as AddressInfo).port}`;
-  adminCookie = await register('dedup-admin@example.com');
-  assert.equal(setUserRole('dedup-admin@example.com', 'admin'), true);
-  userCookie = await register('dedup-user@example.com');
+  adminCookie = createTestUser({ displayName: 'dedup-admin', role: 'admin' }).cookie;
+  userCookie = createTestUser({ displayName: 'dedup-user' }).cookie;
 });
 
 after(() => {

@@ -432,4 +432,32 @@ export const migrations: Migration[] = [
       CREATE INDEX comment_likes_user ON comment_likes (user_id);
     `,
   },
+  {
+    id: 16,
+    name: 'switch_users_to_ntou_cas',
+    // #90 登入改用海大 CAS，不再保存密碼：
+    // - student_id：CAS 驗證後回傳的學號（cas:user），唯一；改版前的帳號沒有學號，保留資料但無法再登入。
+    // - email：改為選填的通知信箱（US-08），不再唯一，也不再當登入帳號。
+    // - 移除 password_hash；清空 sessions，所有人重新以 CAS 登入。
+    // 15 個資料表以外鍵參照 users，SQLite 無法直接改欄位限制，所以重建整張表（見 migrate.ts）。
+    rebuildsReferencedTable: true,
+    up: `
+      CREATE TABLE users_new (
+        id INTEGER PRIMARY KEY,
+        student_id TEXT UNIQUE,
+        email TEXT COLLATE NOCASE,
+        display_name TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'admin')),
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      INSERT INTO users_new (id, email, display_name, role, created_at)
+        SELECT id, email, display_name, role, created_at FROM users;
+
+      DROP TABLE users;
+      ALTER TABLE users_new RENAME TO users;
+
+      DELETE FROM sessions;
+    `,
+  },
 ];

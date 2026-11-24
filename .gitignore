@@ -9,6 +9,7 @@ dist/
 .env
 .env.*
 !.env.example
+!backend/.env.development
 
 # logs
 *.log
