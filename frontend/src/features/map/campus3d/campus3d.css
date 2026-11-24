@@ -197,6 +197,18 @@ button.primary {
     max-width: none;
   }
 }
+header .card button {
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  header .card[style] {
+    flex-wrap: wrap;
+  }
+  header .card button {
+    font-size: 12px;
+    padding: 5px 9px;
+  }
+}
 #editBar {
   position: fixed;
   left: 16px;
