@@ -63,17 +63,14 @@ export function findOrCreateUserByStudentId(studentId: string): User {
   );
 }
 
-/** 更新本人的顯示名稱與通知信箱；欄位須先驗證，undefined 表示不變。 */
-export function updateUserProfile(
-  userId: number,
-  input: { displayName?: string; email?: string | null },
-): User {
+/**
+ * 更新本人的顯示名稱（須先驗證），undefined 表示不變；回傳最新的會員資料。
+ * 通知信箱須經驗證才能變更，見 auth.emailVerification.ts（#99）。
+ */
+export function updateUserProfile(userId: number, input: { displayName?: string }): User {
   const db = getDb();
   if (input.displayName !== undefined) {
     db.prepare('UPDATE users SET display_name = ? WHERE id = ?').run(input.displayName, userId);
-  }
-  if (input.email !== undefined) {
-    db.prepare('UPDATE users SET email = ? WHERE id = ?').run(input.email, userId);
   }
   return toUser(db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as unknown as UserRow);
 }

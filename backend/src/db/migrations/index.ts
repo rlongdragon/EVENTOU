@@ -477,4 +477,25 @@ export const migrations: Migration[] = [
             max(4, length(student_id) - min(4, max(0, length(student_id) - 4))));
     `,
   },
+  {
+    id: 18,
+    name: 'create_email_verifications',
+    // #99 修改通知信箱須寄驗證信確認：驗證前 users.email 不變，通知仍寄到原本已驗證的信箱。
+    // 每次寄驗證信新增一筆（重寄也是），以便計算寄送頻率；token 只存 SHA-256。
+    up: `
+      CREATE TABLE email_verifications (
+        id INTEGER PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+        email TEXT NOT NULL COLLATE NOCASE,
+        token_hash TEXT NOT NULL UNIQUE,
+        status TEXT NOT NULL DEFAULT 'pending'
+          CHECK (status IN ('pending', 'verified', 'cancelled')),
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        verified_at TEXT
+      );
+
+      CREATE INDEX email_verifications_user ON email_verifications (user_id, created_at);
+    `,
+  },
 ];
