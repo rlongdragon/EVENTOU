@@ -92,10 +92,14 @@ backend/src/
 - 後端 API：
   - `GET /api/auth/cas/login?redirect=/站內路徑`：導向 CAS 登入頁；`redirect` 只接受站內路徑。
   - `GET /api/auth/cas/callback`：CAS 登入完成後回到這裡，後端以 `serviceValidate` 向 CAS 驗證票證，通過才採用學號；第一次登入自動建立會員資料，之後登入對應到同一筆。失敗時導回 `/login?error=cas`。登入須從同一個瀏覽器發起（`state` 寫在 service 網址與短效 cookie 中），別人取得的票證無法塞進來。
-  - `GET /api/auth/me`（需登入）：回傳 `{ user: { id, studentId, email, displayName, role, createdAt } }`，學號只有本人看得到。
+  - `GET /api/auth/me`（需登入）：回傳 `{ user: { id, studentId, email, pendingEmail, displayName, role, createdAt } }`，學號只有本人看得到；`email` 是已驗證的通知信箱，`pendingEmail` 是等待驗證的新信箱。
   - `PATCH /api/auth/me`（需登入）：body 為 `{ "displayName"?: string, "email"?: string }`，修改顯示名稱（1–50 字）與通知信箱；信箱傳空字串表示不寄通知。
+    - #99 新信箱要驗證：改成其他信箱時寄出驗證信，驗證前通知仍寄到原本的信箱；清空、改回原信箱或改成本人學校信箱時直接生效。驗證信每小時最多寄 3 封，超過回 429 `too_many_requests`；寄送失敗回 502 `mail_failed`。
+  - `POST /api/auth/me/email-verification`（需登入）：重寄驗證信；沒有等待驗證的信箱時回 404。
+  - `DELETE /api/auth/me/email-verification`（需登入）：取消修改，繼續使用原本的信箱。
+  - `POST /api/auth/verify-email`：body 為 `{ "token": string }`，完成驗證（不需登入）。驗證信的連結開啟前端 `/verify-email?token=…`，由頁面送出 token，避免信箱的連結掃描程式開啟網址就完成驗證；token 24 小時有效、只能用一次，無效時回 400 `invalid_token`。
   - `POST /api/auth/logout`：清除站內 session，回傳 `{ casLogoutUrl }`。body 帶 `{ "cas": true }` 時 `casLogoutUrl` 為海大 CAS 的登出網址，前端導過去一併登出 CAS（TronClass 等校內系統也會一起登出），否則為 `null`。
-- 預設值：顯示名稱為學號前 5 碼加 `*`，再加上由會員 id 產生的 5 碼短代碼（例如 `01357*-3F2A1`，看得出入學年度與系所，但不露出完整學號；短代碼讓同系同屆的人不會同名，#100），本人在帳號頁看得到完整學號；通知信箱為 `學號@mail.ntou.edu.tw`（`SCHOOL_EMAIL_DOMAIN` 可調整，設為空字串則不預設）。兩者都可在「帳號」頁修改。
+- 預設值：顯示名稱為學號前 5 碼加 `*`，再加上由會員 id 產生的 5 碼短代碼（例如 `01357*-3F2A1`，看得出入學年度與系所，但不露出完整學號；短代碼讓同系同屆的人不會同名，#100），本人在帳號頁看得到完整學號；通知信箱為 `學號@mail.ntou.edu.tw`（`SCHOOL_EMAIL_DOMAIN` 可調整，設為空字串則不預設）。兩者都可在「帳號」頁修改，通知信箱改成學校信箱以外的地址時需先驗證（#99）。
 - 顯示名稱保留字（#100）：一般使用者的名稱不可包含「管理員」「官方」「站長」「客服」「admin」「moderator」「official」「eventou」等保留字（比對前統一全半形、大小寫並忽略空白與符號）；管理員不受限制。管理員身分改以留言旁的「管理員」徽章表示，徽章依 `users.role` 顯示，不依名稱判斷。
 - CAS 只接受 `*.ntou.edu.tw` 的 service 網址，所以 `PUBLIC_BASE_URL` 必須是海大子網域（正式環境為 `https://eventou.ind.ntou.edu.tw`），回呼網址為 `PUBLIC_BASE_URL` + `/api/auth/cas/callback`。
 - 開發模式與正式環境的登入頁不同：`npm run dev` 時登入頁是「模擬登入」，輸入任意學號並選角色即可登入，不經 CAS（`POST /api/auth/dev-login`，由 `backend/.env.development` 的 `AUTH_DEV_LOGIN=1` 開啟）；正式建置只有「使用海大帳號登入」。後端在 `NODE_ENV=production` 時一律停用模擬登入。
